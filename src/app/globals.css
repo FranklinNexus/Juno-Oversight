@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --bg-base: #0b0c0e;
+  --bg-panel: #111318;
+  --bg-elevated: #161a22;
+  --bg-hover: #1a1f28;
+  --border-dim: #242a33;
+  --border-strong: #3a424f;
+  --text-porcelain: #ddd9d0;
+  --text-muted: #7a808a;
+  --accent-gold: #c9a227;
+  --status-ok: #4f6b57;
+  --status-warn: #8a4a42;
+  --up: #6f8f78;
+  --down: #9a6d6d;
+  --bid: #6f8f78;
+  --ask: #9a6d6d;
+  --depth-bid: #3f5748;
+  --depth-ask: #6a4545;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-porcelain);
+  font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.font-mono-numeric {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-viewport {
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.hud-scale-stage {
+  transform-origin: top left;
+}
+
+.hud-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  grid-template-rows: 40px 1fr 1fr;
+  grid-template-areas:
+    "header header"
+    "market github"
+    "infra appslot";
+  gap: 1px;
+  height: 100%;
+  padding: 1px;
+  background: var(--border-dim);
+}
+
+.hud-grid > * {
+  min-height: 0;
+}
+
+@media (max-width: 1024px) {
+  .hud-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 40px repeat(4, minmax(180px, auto));
+    grid-template-areas:
+      "header"
+      "market"
+      "github"
+      "infra"
+      "appslot";
+    height: auto;
+    min-height: 100%;
+  }
 }
