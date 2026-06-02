@@ -1,77 +1,71 @@
 "use client";
 
+import { LayoutToolbar } from "@/components/dashboard/LayoutToolbar";
+import { ConnectionBadge, HudButton, HudSegment } from "@/components/ui";
 import { useRuntimeHudMetrics } from "@/hooks/useRuntimeHudMetrics";
+import { formatRam } from "@/lib/format";
 import { useHudStore, type HudMode } from "@/store/hud-store";
-
-function ModeButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-2 h-7 text-[10px] tracking-[0.12em] uppercase border ${
-        active
-          ? "border-[var(--accent-gold)] text-[var(--accent-gold)]"
-          : "border-[var(--border-dim)] text-[var(--text-muted)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+import { useLayoutStore } from "@/store/layout-store";
 
 export function GlobalControlHeader() {
   const mode = useHudStore((state) => state.mode);
   const setMode = useHudStore((state) => state.setMode);
   const wsConnected = useHudStore((state) => state.wsConnected);
   const wsLatencyMs = useHudStore((state) => state.wsLatencyMs);
-  const { cpuPct, ramMb, source } = useRuntimeHudMetrics();
-
-  const onModeChange = (nextMode: HudMode) => setMode(nextMode);
+  const uiScale = useHudStore((state) => state.uiScale);
+  const autoFit = useHudStore((state) => state.autoFit);
+  const bumpUiScale = useHudStore((state) => state.bumpUiScale);
+  const setAutoFit = useHudStore((state) => state.setAutoFit);
+  const addPanel = useLayoutStore((state) => state.addPanel);
+  const { cpuPct, ramMb, ramTotalMb, source } = useRuntimeHudMetrics();
 
   return (
-    <header
-      style={{ gridArea: "header" }}
-      className="border border-[var(--border-dim)] bg-[var(--bg-panel)] px-2 flex items-center justify-between gap-2"
-    >
+    <header className="h-10 shrink-0 border-b border-[var(--border-dim)] bg-[var(--bg-panel)] px-2 flex items-center justify-between gap-2">
       <div className="flex items-center gap-1">
-        <ModeButton
-          active={mode === "surveillance"}
-          label="Omni-Surveillance"
-          onClick={() => onModeChange("surveillance")}
+        <HudSegment<HudMode>
+          value={mode}
+          onChange={setMode}
+          options={[
+            { id: "surveillance", label: "Omni-Surveillance" },
+            { id: "focus", label: "Deep Focus" },
+          ]}
         />
-        <ModeButton
-          active={mode === "focus"}
-          label="Deep Focus"
-          onClick={() => onModeChange("focus")}
-        />
+        <HudButton onClick={() => addPanel("market")}>+ Window</HudButton>
+        <LayoutToolbar />
       </div>
 
-      <div className="font-mono-numeric text-xs text-[var(--text-porcelain)] flex items-center gap-2">
-        <span
-          className={`inline-block size-2 rounded-full ${
-            wsConnected ? "bg-[var(--status-ok)]" : "bg-[var(--status-warn)]"
-          }`}
-        />
-        <span>{wsConnected ? "WS" : "DISCONNECTED"}</span>
-        <span className="text-[var(--text-muted)]">LAT</span>
-        <span>{wsLatencyMs}ms</span>
-      </div>
+      <ConnectionBadge connected={wsConnected} latencyMs={wsLatencyMs} />
 
-      <div className="font-mono-numeric text-xs flex items-center gap-3">
+      <div className="font-mono-numeric text-xs flex items-center gap-2">
         <span>
           <span className="text-[var(--text-muted)]">CPU</span> {cpuPct}%
         </span>
         <span>
-          <span className="text-[var(--text-muted)]">RAM</span> {ramMb}MB
+          <span className="text-[var(--text-muted)]">RAM</span> {formatRam(ramMb)}
+          {ramTotalMb != null && (
+            <span className="text-[var(--text-muted)]"> / {formatRam(ramTotalMb)}</span>
+          )}
         </span>
+
+        <div className="flex items-center gap-1 border border-[var(--border-dim)] px-1 h-6">
+          <HudButton variant="ghost" onClick={() => bumpUiScale(-0.05)} aria-label="Zoom out">
+            -
+          </HudButton>
+          <span className="text-[10px] text-[var(--text-muted)] w-10 text-center">
+            {Math.round(uiScale * 100)}%
+          </span>
+          <HudButton variant="ghost" onClick={() => bumpUiScale(0.05)} aria-label="Zoom in">
+            +
+          </HudButton>
+          <HudButton
+            variant="ghost"
+            active={autoFit}
+            onClick={() => setAutoFit(!autoFit)}
+          >
+            FIT
+          </HudButton>
+        </div>
+
         <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-[0.08em]">
           {source}
         </span>

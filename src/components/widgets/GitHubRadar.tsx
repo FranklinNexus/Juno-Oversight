@@ -2,31 +2,28 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { WidgetShell } from "@/components/dashboard/WidgetShell";
+import { EmptyState, FeedItem, LoadingRows, ScrollFeed, TagChip } from "@/components/ui";
 import { useMockWebSocket } from "@/hooks/useMockWebSocket";
+import { formatRelativeTime } from "@/lib/time";
 import { generateGitHubEvent, type GitHubEvent } from "@/mocks/generators/github-feed";
-import { useHudStore } from "@/store/hud-store";
+import { useHudStore, type HudMode } from "@/store/hud-store";
 
-function relativeTime(timestamp: number) {
-  const sec = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  return `${Math.floor(sec / 3600)}h ago`;
-}
-
-const typeTone: Record<GitHubEvent["type"], string> = {
-  commit: "text-cyan-300",
-  pr: "text-[var(--accent-gold)]",
-  issue: "text-rose-300",
+const tagTone: Record<GitHubEvent["type"], "muted" | "gold" | "down"> = {
+  commit: "muted",
+  pr: "gold",
+  issue: "down",
 };
 
-export function GitHubRadar() {
-  const mode = useHudStore((state) => state.mode);
+function GitHubFeed({ mode }: { mode: HudMode }) {
+  const wsConnected = useHudStore((state) => state.wsConnected);
   const generate = useCallback(() => generateGitHubEvent(), []);
   const [events, setEvents] = useState<GitHubEvent[]>([]);
-  useMockWebSocket<GitHubEvent>({
+  const feedReady = useMockWebSocket<GitHubEvent>({
+    feedId: "github",
     mode,
     generate,
     onMessage: (payload) => {
+      if (mode === "focus" && payload.type === "commit") return;
       setEvents((prev) => [payload, ...prev].slice(0, 50));
     },
   });
@@ -39,30 +36,33 @@ export function GitHubRadar() {
   }, [events, mode]);
 
   return (
-    <div style={{ gridArea: "github" }}>
-      <WidgetShell title="GitHub Radar" code="WIDGET-B">
-        <div className="h-full p-2 overflow-y-auto space-y-1">
+    <WidgetShell title="GitHub Radar" code="WIDGET-B" live={wsConnected}>
+      <div className="h-full p-2 min-h-0">
+        <ScrollFeed>
+          {feedReady === null && <LoadingRows rows={6} />}
           {visibleEvents.map((event) => (
-            <div key={event.id} className="border border-[var(--border-dim)] px-2 py-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-[10px] uppercase tracking-[0.12em] ${typeTone[event.type]}`}>
-                  {event.type}
-                </span>
-                <span className="font-mono-numeric text-[10px] text-[var(--text-muted)]">
-                  {relativeTime(event.timestamp)}
-                </span>
-              </div>
-              <div className="text-xs mt-1">{event.title}</div>
-              <div className="text-[10px] text-[var(--text-muted)] mt-1">
-                {event.repo} / {event.author}
-              </div>
-            </div>
+            <FeedItem
+              key={event.id}
+              tag={<TagChip tone={tagTone[event.type]}>{event.type}</TagChip>}
+              title={event.title}
+              meta={`${event.repo} / ${event.author}`}
+              time={formatRelativeTime(event.timestamp)}
+            />
           ))}
-          {visibleEvents.length === 0 && (
-            <div className="text-xs text-[var(--text-muted)]">Waiting for repository events...</div>
+          {feedReady && visibleEvents.length === 0 && (
+            <EmptyState message="Waiting for repository events..." />
           )}
-        </div>
-      </WidgetShell>
+        </ScrollFeed>
+      </div>
+    </WidgetShell>
+  );
+}
+
+export function GitHubRadar() {
+  const mode = useHudStore((state) => state.mode);
+  return (
+    <div className="h-full min-h-0" key={mode}>
+      <GitHubFeed mode={mode} />
     </div>
   );
 }

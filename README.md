@@ -1,28 +1,34 @@
-# Juno Oversight HUD (Phase 1)
+# Juno Oversight HUD
 
-High-density tactical dashboard scaffold built with Next.js + Tailwind + Zustand.
+高信息密度、机构终端风格的战术看板（Next.js 16 + Tauri 2）。
 
-## Run
+## 文档
+
+- **[Wiki 索引](./wiki/README.md)**
+- [产品白皮书](./wiki/whitepaper.md)
+- [维护手册](./wiki/maintenance.md)
+
+## 运行
 
 ```bash
 pnpm install
-pnpm dev          # browser-only
-pnpm tauri:dev    # desktop shell + Next.js
+pnpm dev          # 浏览器（mock 数据）
+pnpm tauri:dev    # 桌面壳 + 真实系统指标
+pnpm test         # 单元测试
+pnpm lint
+pnpm build        # 静态导出到 out/（Tauri 打包前置）
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for browser mode.
+桌面发布：`pnpm build` 后于 `src-tauri` 执行 `pnpm tauri build`（见 [维护手册](./wiki/maintenance.md)）。
 
-## Implemented in Phase 1
+- 主界面：http://localhost:3000  
+- 组件目录（仅开发）：http://localhost:3000/dev/components  
 
-- Tactical dark design system with White Porcelain and Pizza Gold accents
-- Bento CSS Grid dashboard layout
-- Global mode switch (`Omni-Surveillance` / `Deep Focus`)
-- Mock websocket-driven `Alpha Market Ingestor` (Widget A)
-- Mock websocket-driven `GitHub Radar` (Widget B)
-- Placeholder shells for `Infrastructure Telemetry` (Widget C) and `Application Integration Slot` (Widget D)
+## 能力概览
 
-## Next Phase
+- 多窗可拖拽网格、`Omni-Surveillance` / `Deep Focus` 模式
+- Widget：行情、GitHub 雷达、基础设施遥测、应用嵌入位
+- 多市场自选（Crypto / US / HK / A股）、布局预设与本地保存
+- HUD UI Kit、`/dev/components` 预览
 
-- Tauri integration via `src-tauri/`
-- Real market and GitHub websocket feeds
-- Real edge-node telemetry (Jupiter) and iframe embed hardening
+详见 [wiki/whitepaper.md](./wiki/whitepaper.md)。

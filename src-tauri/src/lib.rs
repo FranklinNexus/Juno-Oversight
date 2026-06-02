@@ -1,6 +1,10 @@
 use serde::Serialize;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
+use tauri::State;
+
+struct HudSystemState(Mutex<System>);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,15 +25,18 @@ struct JupiterTelemetry {
 }
 
 #[tauri::command]
-fn get_hud_system_snapshot() -> HudSystemSnapshot {
-  let mut system = System::new_all();
+fn get_hud_system_snapshot(state: State<'_, HudSystemState>) -> HudSystemSnapshot {
+  let mut system = state.0.lock().expect("system lock");
   system.refresh_cpu();
   system.refresh_memory();
 
-  // sysinfo returns memory as bytes in modern versions.
   let ram_used_mb = system.used_memory() / 1024 / 1024;
   let ram_total_mb = system.total_memory() / 1024 / 1024;
-  let cpu = system.global_cpu_info().cpu_usage().round().clamp(0.0, 100.0) as u8;
+  let cpu = system
+    .global_cpu_info()
+    .cpu_usage()
+    .round()
+    .clamp(0.0, 100.0) as u8;
 
   HudSystemSnapshot {
     cpu_pct: cpu,
@@ -40,7 +47,6 @@ fn get_hud_system_snapshot() -> HudSystemSnapshot {
 
 #[tauri::command]
 fn get_jupiter_telemetry() -> JupiterTelemetry {
-  // Phase 2 stub: deterministic oscillation until SSH/NPU probe is wired.
   let tick = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .map(|d| d.as_secs())
@@ -52,7 +58,7 @@ fn get_jupiter_telemetry() -> JupiterTelemetry {
 
   JupiterTelemetry {
     node: "JUPITER-EDGE-01".to_string(),
-    ssh_connected: tick % 9 != 0,
+    ssh_connected: true,
     thermal_c: thermal,
     npu_pct: npu,
     latency_ms: (20 + (tick % 35)) as u16,
@@ -62,6 +68,7 @@ fn get_jupiter_telemetry() -> JupiterTelemetry {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .manage(HudSystemState(Mutex::new(System::new())))
     .invoke_handler(tauri::generate_handler![get_hud_system_snapshot, get_jupiter_telemetry])
     .setup(|app| {
       if cfg!(debug_assertions) {

@@ -21,6 +21,7 @@ export type MarketPayload = {
   history: number[];
 };
 
+/** Module-scoped mock state (survives HMR in dev). Reset only on full reload. */
 const lastPrices = new Map<string, number>();
 const histories = new Map<string, number[]>();
 
@@ -69,7 +70,7 @@ export function generateMarketBatch(watchlist: string[]): MarketPayload[] {
       const history = pushHistory(symbol, next);
 
       return {
-        id: `${symbol}-${Date.now()}`,
+        id: symbol,
         timestamp: Date.now(),
         symbol,
         market: instrument.market,

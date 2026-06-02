@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "clean": "node -e \"const fs=require('fs');['out','.next'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch{}})\"",
+    "build": "pnpm clean && next build",
+    "build:desktop": "pnpm build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "tauri": "tauri",
     "tauri:dev": "tauri dev"
   },
@@ -16,6 +19,7 @@
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-grid-layout": "^2.2.3",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"
   },
@@ -28,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

@@ -1,21 +1,21 @@
 "use client";
 
-type MiniSparklineProps = {
+type SparklineProps = {
   values: number[];
   width?: number;
   height?: number;
   alert?: boolean;
 };
 
-export function MiniSparkline({
+export function Sparkline({
   values,
   width = 88,
   height = 22,
   alert = false,
-}: MiniSparklineProps) {
+}: SparklineProps) {
   if (values.length < 2) {
     return (
-      <svg width={width} height={height} className="opacity-40">
+      <svg width={width} height={height} className="opacity-40" aria-hidden>
         <line
           x1={0}
           y1={height / 2}
@@ -39,16 +39,13 @@ export function MiniSparkline({
     })
     .join(" ");
 
-  const stroke = alert ? "var(--accent-gold)" : "var(--text-porcelain)";
-
   return (
-    <svg width={width} height={height} className="block">
+    <svg width={width} height={height} className="block" aria-hidden>
       <polyline
         fill="none"
-        stroke={stroke}
+        stroke={alert ? "var(--accent-gold)" : "var(--text-porcelain)"}
         strokeWidth={1.2}
         points={points}
-        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

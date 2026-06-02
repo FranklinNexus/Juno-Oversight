@@ -6,6 +6,10 @@ import {
   DEFAULT_WATCHLIST,
   type MarketClass,
 } from "@/lib/market/catalog";
+import {
+  sanitizeSelectedSymbol,
+  sanitizeWatchlist,
+} from "@/lib/market/sanitize-watchlist";
 
 type MarketStore = {
   watchlist: string[];
@@ -17,6 +21,21 @@ type MarketStore = {
   toggleWatchlist: (symbol: string) => void;
   setPickerOpen: (open: boolean) => void;
 };
+
+const MARKET_FILTERS = new Set<MarketClass | "all">([
+  "all",
+  "crypto",
+  "us",
+  "hk",
+  "cn_a",
+]);
+
+function sanitizeMarketFilter(value: unknown): MarketClass | "all" {
+  if (typeof value === "string" && MARKET_FILTERS.has(value as MarketClass | "all")) {
+    return value as MarketClass | "all";
+  }
+  return "all";
+}
 
 export const useMarketStore = create<MarketStore>()(
   persist(
@@ -45,6 +64,42 @@ export const useMarketStore = create<MarketStore>()(
     }),
     {
       name: "juno-market-store",
+      version: 1,
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== "object") {
+          return {
+            watchlist: [...DEFAULT_WATCHLIST],
+            marketFilter: "all" as const,
+            selectedSymbol: DEFAULT_WATCHLIST[0],
+          };
+        }
+        const state = persisted as {
+          watchlist?: unknown;
+          marketFilter?: unknown;
+          selectedSymbol?: unknown;
+        };
+        const watchlist = sanitizeWatchlist(state.watchlist);
+        return {
+          watchlist,
+          marketFilter: sanitizeMarketFilter(state.marketFilter),
+          selectedSymbol: sanitizeSelectedSymbol(state.selectedSymbol, watchlist),
+        };
+      },
+      merge: (persisted, current) => {
+        if (!persisted || typeof persisted !== "object") return current;
+        const state = persisted as {
+          watchlist?: unknown;
+          marketFilter?: unknown;
+          selectedSymbol?: unknown;
+        };
+        const watchlist = sanitizeWatchlist(state.watchlist);
+        return {
+          ...current,
+          watchlist,
+          marketFilter: sanitizeMarketFilter(state.marketFilter),
+          selectedSymbol: sanitizeSelectedSymbol(state.selectedSymbol, watchlist),
+        };
+      },
       partialize: (state) => ({
         watchlist: state.watchlist,
         marketFilter: state.marketFilter,

@@ -2,21 +2,15 @@
 
 import { HudViewport } from "@/components/dashboard/HudViewport";
 import { GlobalControlHeader } from "@/components/dashboard/GlobalControlHeader";
-import { AlphaMarketIngestor } from "@/components/widgets/AlphaMarketIngestor";
-import { AppIntegrationSlot } from "@/components/widgets/AppIntegrationSlot";
-import { GitHubRadar } from "@/components/widgets/GitHubRadar";
-import { InfraTelemetry } from "@/components/widgets/InfraTelemetry";
+import { LayoutCanvas } from "@/components/dashboard/LayoutCanvas";
 
 export function DashboardGrid() {
   return (
     <HudViewport>
-      <main className="hud-grid">
+      <div className="hud-shell flex flex-col h-full">
         <GlobalControlHeader />
-        <AlphaMarketIngestor />
-        <GitHubRadar />
-        <InfraTelemetry />
-        <AppIntegrationSlot />
-      </main>
+        <LayoutCanvas />
+      </div>
     </HudViewport>
   );
 }

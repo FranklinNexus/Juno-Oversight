@@ -1,13 +1,14 @@
 "use client";
 
 import { memo, useCallback, useMemo } from "react";
-import { MiniSparkline } from "@/components/market/MiniSparkline";
 import { OrderBookPanel } from "@/components/market/OrderBookPanel";
 import { WatchlistPicker } from "@/components/market/WatchlistPicker";
 import { WidgetShell } from "@/components/dashboard/WidgetShell";
+import { EmptyState, HudButton, HudSegment, LoadingRows, Sparkline } from "@/components/ui";
 import { useMockWebSocket } from "@/hooks/useMockWebSocket";
+import { cn } from "@/lib/cn";
 import { formatPct, formatPrice } from "@/lib/format";
-import { MARKET_LABELS } from "@/lib/market/catalog";
+import { MARKET_LABELS, type MarketClass } from "@/lib/market/catalog";
 import {
   generateMarketBatch,
   type MarketPayload,
@@ -30,13 +31,15 @@ const TickerRow = memo(function TickerRow({
     <button
       type="button"
       onClick={() => onSelect(row.symbol)}
-      className={`text-left min-w-[168px] border px-2 py-1 ${
+      className={cn(
+        "text-left min-w-[168px] border px-2 py-1",
         row.alert
           ? "border-[var(--accent-gold)]"
           : selected
             ? "border-[var(--border-strong)]"
-            : "border-[var(--border-dim)]"
-      } ${selected ? "bg-[var(--bg-hover)]" : "bg-transparent"}`}
+            : "border-[var(--border-dim)]",
+        selected ? "bg-[var(--bg-hover)]" : "bg-transparent",
+      )}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono-numeric text-[11px]">{row.symbol}</span>
@@ -50,14 +53,19 @@ const TickerRow = memo(function TickerRow({
             {formatPrice(row.last, row.market)} {row.currency}
           </div>
           <div
-            className={`font-mono-numeric text-[10px] ${
-              up ? "text-[var(--up)]" : "text-[var(--down)]"
-            } ${row.alert ? "text-[var(--accent-gold)]" : ""}`}
+            className={cn(
+              "font-mono-numeric text-[10px]",
+              row.alert
+                ? "text-[var(--accent-gold)]"
+                : up
+                  ? "text-[var(--up)]"
+                  : "text-[var(--down)]",
+            )}
           >
             {formatPct(row.changePct)}
           </div>
         </div>
-        <MiniSparkline values={row.history} alert={row.alert} />
+        <Sparkline values={row.history} alert={row.alert} />
       </div>
     </button>
   );
@@ -65,18 +73,35 @@ const TickerRow = memo(function TickerRow({
 
 export function AlphaMarketIngestor() {
   const mode = useHudStore((state) => state.mode);
-  const watchlist = useMarketStore((state) => state.watchlist);
+  const wsConnected = useHudStore((state) => state.wsConnected);
   const marketFilter = useMarketStore((state) => state.marketFilter);
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
   const setSelectedSymbol = useMarketStore((state) => state.setSelectedSymbol);
   const setPickerOpen = useMarketStore((state) => state.setPickerOpen);
+  const setMarketFilter = useMarketStore((state) => state.setMarketFilter);
+
+  const marketTabs = useMemo(
+    () =>
+      [
+        { id: "all" as const, label: "ALL" },
+        { id: "crypto" as const, label: MARKET_LABELS.crypto },
+        { id: "us" as const, label: MARKET_LABELS.us },
+        { id: "hk" as const, label: MARKET_LABELS.hk },
+        { id: "cn_a" as const, label: MARKET_LABELS.cn_a },
+      ] satisfies Array<{ id: MarketClass | "all"; label: string }>,
+    [],
+  );
 
   const generate = useCallback(
     () => generateMarketBatch(useMarketStore.getState().watchlist),
     [],
   );
 
-  const incoming = useMockWebSocket<MarketPayload[]>({ mode, generate });
+  const incoming = useMockWebSocket<MarketPayload[]>({
+    feedId: "market",
+    mode,
+    generate,
+  });
 
   const visibleRows = useMemo(() => {
     const rows = incoming ?? [];
@@ -93,47 +118,46 @@ export function AlphaMarketIngestor() {
   const asks = active ? (mode === "focus" ? active.asks.slice(0, 3) : active.asks.slice(0, 5)) : [];
 
   return (
-    <div style={{ gridArea: "market" }} className="relative min-h-0">
+    <div className="relative h-full min-h-0">
       <WidgetShell
         title="Alpha Market Ingestor"
         code="WIDGET-A"
+        live={wsConnected}
         actions={
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="text-[10px] uppercase tracking-[0.1em] border border-[var(--border-dim)] px-1.5 h-5 text-[var(--text-muted)] hover:text-[var(--text-porcelain)]"
-          >
-            Watchlist
-          </button>
+          <HudButton onClick={() => setPickerOpen(true)}>Watchlist</HudButton>
         }
       >
         <div className="h-full p-2 flex flex-col gap-2 min-h-0">
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {visibleRows.map((row) => (
-              <TickerRow
-                key={row.id}
-                row={row}
-                selected={active?.symbol === row.symbol}
-                onSelect={setSelectedSymbol}
-              />
-            ))}
-            {visibleRows.length === 0 && (
-              <div className="text-xs text-[var(--text-muted)] px-1">
-                No symbols in watchlist for this market filter.
-              </div>
+          <HudSegment value={marketFilter} options={marketTabs} onChange={setMarketFilter} />
+
+          <div className="flex gap-1 overflow-x-auto pb-1 hud-scroll min-h-[52px]">
+            {!incoming && <LoadingRows rows={2} className="w-full" />}
+            {incoming &&
+              visibleRows.map((row) => (
+                <TickerRow
+                  key={row.symbol}
+                  row={row}
+                  selected={active?.symbol === row.symbol}
+                  onSelect={setSelectedSymbol}
+                />
+              ))}
+            {incoming && visibleRows.length === 0 && (
+              <EmptyState message="No symbols in watchlist for this market filter." />
             )}
           </div>
 
           <div className="flex-1 border border-[var(--border-dim)] p-2 min-h-0">
-            {active ? (
+            {!incoming && <LoadingRows rows={5} />}
+            {incoming && active && (
               <OrderBookPanel
                 symbol={active.symbol}
                 market={active.market}
                 bids={bids}
                 asks={asks}
               />
-            ) : (
-              <div className="text-xs text-[var(--text-muted)]">Waiting for market feed...</div>
+            )}
+            {incoming && !active && (
+              <EmptyState message="Waiting for market feed..." />
             )}
           </div>
         </div>
