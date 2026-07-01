@@ -2,8 +2,22 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadProjectEnv, nowIso, workbenchRoot, junoProjectRoot } from "./env.js";
-import { mergeOrchestratorState } from "./idempotency.js";
+import {
+  mergeOrchestratorState,
+  readOrchestratorState,
+  shouldSkipSpawn,
+  type OrchestratorState,
+} from "./idempotency.js";
 import { materializeQueueRun, readJsonFile, writeJsonFile } from "./manifest.js";
+import {
+  buildReviseImplementItem,
+  evaluateCompletedRun,
+  isReviewPass,
+  markMissionPhaseDone,
+  readCheckpoint,
+  readRunKind,
+} from "./mission-progress.js";
+import type { QueueAdvanceAction } from "./review-loop.js";
 import type { QueueItem, RunState, SchedulerState } from "./types.js";
 
 const TICK_MS = 5_000;
@@ -25,10 +39,6 @@ function schedulerStatePath(): string {
   return path.join(workbench, "state/scheduler.json");
 }
 
-function orchestratorPath(): string {
-  return path.join(workbench, "state/orchestrator.json");
-}
-
 function loadSchedulerState(): SchedulerState {
   try {
     return readJsonFile<SchedulerState>(schedulerStatePath());
@@ -42,23 +52,66 @@ function saveSchedulerState(state: SchedulerState): void {
   writeJsonFile(schedulerStatePath(), state);
 }
 
-function readOrchestrator(): { activeRunId?: string | null; activeRunStatus?: string } {
-  try {
-    return readJsonFile(orchestratorPath());
-  } catch {
-    return {};
-  }
+function readOrchestrator(): OrchestratorState {
+  return readOrchestratorState(workbench);
 }
 
 function writeOrchestrator(status: string, runId?: string | null): void {
-  const current = readOrchestrator() as Record<string, unknown>;
-  writeJsonFile(orchestratorPath(), {
-    ...current,
-    activeRunId: runId ?? current.activeRunId ?? null,
-    activeRunStatus: status,
-    lastRunId: runId ?? current.lastRunId ?? null,
-    updatedAt: nowIso(),
-  });
+  const patch: Partial<OrchestratorState> = { activeRunStatus: status };
+  if (runId === null) {
+    patch.activeRunId = null;
+  } else if (runId !== undefined) {
+    patch.activeRunId = runId;
+    patch.lastRunId = runId;
+  }
+  mergeOrchestratorState(workbench, patch);
+}
+
+function yamlQuote(value: string | number | undefined): string {
+  if (value == null || value === "") return '""';
+  const s = String(value);
+  if (/^[a-zA-Z0-9_./+-]+$/.test(s)) return s;
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function formatQueueItem(item: QueueItem): string {
+  const lines = [`  - id: ${yamlQuote(item.id)}`];
+  const fields: Array<[keyof QueueItem, string]> = [
+    ["horizon", "horizon"],
+    ["kind", "kind"],
+    ["run_kind", "run_kind"],
+    ["repo_target", "repo_target"],
+    ["mission_id", "mission_id"],
+    ["phase_id", "phase_id"],
+    ["prompt", "prompt"],
+    ["provider", "provider"],
+    ["success_criteria", "success_criteria"],
+  ];
+  for (const [key, label] of fields) {
+    const val = item[key];
+    if (val == null || val === "") continue;
+    lines.push(`    ${label}: ${yamlQuote(String(val))}`);
+  }
+  if (item.max_minutes != null) {
+    lines.push(`    max_minutes: ${item.max_minutes}`);
+  }
+  return lines.join("\n");
+}
+
+function saveNowQueue(now: QueueItem[], backlog: QueueItem[] = []): void {
+  const lines = [`updated: ${nowIso()}`, "now:"];
+  if (now.length === 0) {
+    lines.push("  []");
+  } else {
+    for (const item of now) lines.push(formatQueueItem(item));
+  }
+  lines.push("backlog:");
+  if (backlog.length === 0) {
+    lines.push("  []");
+  } else {
+    for (const item of backlog) lines.push(formatQueueItem(item));
+  }
+  writeFileSync(path.join(workbench, "queue/now.yaml"), `${lines.join("\n")}\n`, "utf8");
 }
 
 function parseNowYaml(): { now: QueueItem[]; backlog: QueueItem[] } {
@@ -192,24 +245,59 @@ function isTaskComplete(runId: string): boolean {
 }
 
 function dequeueNowHead(): void {
-  const file = path.join(workbench, "queue/now.yaml");
-  if (!existsSync(file)) return;
-  const { now } = parseNowYaml();
+  const { now, backlog } = parseNowYaml();
   if (now.length === 0) return;
-  const rest = now.slice(1);
-  const lines: string[] = [`updated: ${nowIso()}`, "now:"];
-  for (const item of rest) {
-    lines.push(`  - id: ${item.id}`);
-    lines.push(`    horizon: ${item.horizon}`);
-    lines.push(`    kind: ${item.kind}`);
-    lines.push(`    prompt: ${item.prompt}`);
-    if (item.provider) lines.push(`    provider: ${item.provider}`);
-    if (item.max_minutes) lines.push(`    max_minutes: ${item.max_minutes}`);
-    if (item.mission_id) lines.push(`    mission_id: ${item.mission_id}`);
-    if (item.phase_id) lines.push(`    phase_id: ${item.phase_id}`);
+  saveNowQueue(now.slice(1), backlog);
+}
+
+function prependNowItem(item: QueueItem): void {
+  const { now, backlog } = parseNowYaml();
+  saveNowQueue([item, ...now], backlog);
+}
+
+function handleCompletedRun(runId: string): void {
+  const sched = loadSchedulerState();
+  const action: QueueAdvanceAction = evaluateCompletedRun(workbench, runId);
+  const { now } = parseNowYaml();
+  const head = now[0];
+  const checkpoint = readCheckpoint(workbench, runId);
+
+  switch (action.action) {
+    case "dequeue": {
+      const runKind = readRunKind(workbench, runId);
+      const ready = runKind === "implement" ? isTaskComplete(runId) : true;
+      if (ready) {
+        dequeueNowHead();
+        if (
+          head?.mission_id &&
+          head.phase_id &&
+          isReviewPass(checkpoint)
+        ) {
+          markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
+        }
+        sched.lastAction = "task_complete";
+      } else {
+        sched.lastAction = "await_complete";
+      }
+      break;
+    }
+    case "hold":
+      sched.lastAction = action.reason;
+      break;
+    case "block":
+      sched.lastAction = "blocked";
+      break;
+    case "revise":
+      if (head) {
+        dequeueNowHead();
+        prependNowItem(buildReviseImplementItem(head, Date.now()));
+      }
+      sched.lastAction = "review_revise";
+      break;
   }
-  lines.push("backlog: []");
-  writeFileSync(file, lines.join("\n") + "\n", "utf8");
+
+  saveSchedulerState(sched);
+  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
 }
 
 async function tick(): Promise<void> {
@@ -237,15 +325,12 @@ async function tick(): Promise<void> {
 
   if (status === "done") {
     const runId = orch.activeRunId ?? undefined;
-    if (runId && isTaskComplete(runId)) {
-      dequeueNowHead();
-      sched.lastAction = "task_complete";
-      saveSchedulerState(sched);
+    if (runId) {
+      handleCompletedRun(runId);
+    } else {
+      writeOrchestrator("idle", null);
     }
-    writeOrchestrator("idle", null);
-  }
-
-  if (status === "stall" || status === "failed") {
+  } else if (status === "stall" || status === "failed") {
     const runId = orch.activeRunId ?? undefined;
     if (runId) {
       const runDir = path.join(workbench, "runs", runId);
@@ -277,6 +362,13 @@ async function tick(): Promise<void> {
     return;
   }
 
+  const skip = shouldSkipSpawn(next.id, readOrchestratorState(workbench));
+  if (skip) {
+    sched.lastAction = skip;
+    saveSchedulerState(sched);
+    return;
+  }
+
   const manifestPath = materializeQueueRun(next);
   const manifest = readJsonFile<{ maxMinutes: number; runId: string }>(manifestPath);
   spawnSlot(manifestPath, manifest.maxMinutes ?? 25);
@@ -287,7 +379,6 @@ async function tick(): Promise<void> {
 }
 
 const schedInit = loadSchedulerState();
-schedInit.enabled = true;
 schedInit.daemonStartedAt = schedInit.daemonStartedAt ?? nowIso();
 saveSchedulerState(schedInit);
 

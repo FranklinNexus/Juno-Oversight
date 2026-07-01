@@ -1,6 +1,6 @@
 # Juno Oversight — 维护手册
 
-**最后更新**：2026-06-02（第五轮）
+**最后更新**：2026-07-01（第六轮 — Overseer 对齐）
 
 ---
 
@@ -8,9 +8,10 @@
 
 | 工具 | 版本建议 |
 |------|----------|
-| Node.js | 20+ |
-| pnpm | 9+ |
-| Rust | 1.77+（仅 `tauri:dev` / 打包） |
+| Node.js | **22.13+**（orchestrator / `pnpm tauri:dev` 门禁） |
+| pnpm | 10+ |
+| Rust | 1.77+（`tauri:dev` / 打包） |
+| CURSOR_API_KEY | Orchestrator Live spawn（`.env.local`） |
 
 ---
 
@@ -25,11 +26,13 @@ pnpm build            # clean + 静态导出到 out/（仅 production 启用 exp
 pnpm preview          # 静态 out/ 本地预览（原 start）
 pnpm lint             # ESLint
 pnpm test             # Vitest 单元测试
+pnpm orchestrator:build
+pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
+pnpm ui:smoke         # HTTP 冒烟（需 dev server）
+node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 ```
 
-复制 `.env.example` 为 `.env.local`（可选；LIVE 行情在 dev 下默认即可用）。
-
-复制 `.env.example` 为 `.env.local`（可选；LIVE 行情在 dev 下默认即可用）。
+复制 `.env.example` 为 `.env.local`（`CURSOR_API_KEY`、`JUNO_OVERSIGHT_ROOT` 等）。
 
 ### 开发地址
 
@@ -91,9 +94,11 @@ src/
   app/                 # Next 路由、globals.css（网格/画布样式）
   components/
     dashboard/         # HudViewport、LayoutCanvas、PanelWindow、顶栏
-    widgets/           # Widget A–D
-    market/            # 行情 Hub、详情、图表、盘口
-  app/api/market/    # LIVE 行情代理（仅 pnpm dev，export 构建不含）
+    widgets/           # Overseer + 经典 Widget（见 widget-registry）
+    market/            # 行情 Hub、详情、图表
+  lib/
+    workbench/         # orchestrator-client、types、测试
+  app/api/market/      # （已移除）静态 export 不含 API 路由；LIVE 走 lib/market/live
     ui/                # HUD UI Kit
   hooks/
   lib/
@@ -200,8 +205,11 @@ pnpm test
 | `sanitize-watchlist.test.ts` | 自选清洗 |
 | `symbol-popout-layout.test.ts` | 弹出定位、去重 |
 | `indicators.test.ts` | EMA/MACD |
-| `symbol-popout-layout.test.ts` | 弹出定位、去重 |
-| `indicators.test.ts` | EMA/MACD |
+| `review-loop.test.ts` | REVIEW/VERIFY 出队逻辑 |
+| `safety-doctrine.test.ts` | destructive shell 分类 |
+| `spawn-idempotency.test.ts` | shouldSkipSpawn |
+| `manifest-prompt.test.ts` | prompt 注入含 §11 |
+| `orchestrator-isolation.test.ts` | Workbench/Vault 隔离 |
 
 ---
 
@@ -228,6 +236,13 @@ pnpm test
 ---
 
 ## 10. 变更记录
+
+### 2026-07-01（第六轮 — Wiki/代码对齐 + 安全）
+
+- **Scheduler** 接入 `evaluateCompletedRun`、`shouldSkipSpawn`；不再启动时强制 `enabled: true`
+- **Hooks**：`destructive-ops-gate.mjs`；`sync-workbench-hooks.mjs`
+- **Wiki**：`overseer-quality.md` §7–§11；README 去重；移除 `/api/market`（静态 export）
+- **默认布局**：Overseer Quad（runqueue / daily / daemon / activerun / mission / promote）
 
 ### 2026-06-02（第五轮 c — 主动 code review 修补）
 

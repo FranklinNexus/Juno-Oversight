@@ -57,7 +57,7 @@ Review slot 结束时在 `checkpoint.md` 写入：
 2. 是否新增了 Plan 未列的「顺手」功能？  
 3. checkpoint 进度是否与 events.jsonl 一致？  
 4. `pnpm test` / `pnpm lint` / `cargo check`（verify phase）  
-5. 对照 `overseer-review.md` R1–R9：本轮是否引入新缺口？  
+5. 对照本文件 **§4、§11**：本轮是否引入漂移或 destructive shell？  
 6. Promote/Vault：是否误触 Obsidian？（应被 hook 拦截）
 
 ---
@@ -131,13 +131,14 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 
 ## 10. 隐性 Bug 复查清单
 
-| 项 | 严重度 | 说明 |
-|----|--------|------|
-| verify BLOCK 仍 dequeue | 高 | `resolveQueueAdvance` 必须 block |
-| `writeOrchestrator("idle", null)` 不清 activeRunId | 高 | 显式置空 |
-| orchestrator `juno-hud: file:..` | 高 | 用 `install-orchestrator.mjs` |
-| **硬链接双路径** | **致命** | C: 与 D: 可能是同一目录；**禁止** 对任一路径 `rmdir /s /q` |
-| **无 destructive hook** | **致命** | `.cursor/hooks/destructive-ops-gate.mjs` 必须启用 |
+| 项 | 严重度 | 状态 | 说明 |
+|----|--------|------|------|
+| verify BLOCK 仍 dequeue | 高 | **已修** | `resolveQueueAdvance` + scheduler `handleCompletedRun` |
+| `writeOrchestrator("idle", null)` 不清 activeRunId | 高 | **已修** | `mergeOrchestratorState` 显式置空 |
+| orchestrator `juno-hud: file:..` | 高 | **已修** | `install-orchestrator.mjs` + preinstall |
+| scheduler 未接 review 门禁 | 高 | **已修** | `evaluateCompletedRun` / `shouldSkipSpawn` |
+| **硬链接双路径** | **致命** | **文档+hook** | §11；禁止对 C:/D: 任一路径递归删 |
+| **无 destructive hook** | **致命** | **已修** | `destructive-ops-gate.mjs` + prompt 注入 |
 
 ---
 

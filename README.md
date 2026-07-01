@@ -1,93 +1,71 @@
 # Juno Oversight HUD
 
-高信息密度、机构终端风格的战术看板（Next.js 16 + Tauri 2）。
+高信息密度、机构终端风格的战术看板（Next.js 16 + Tauri 2 + Juno Overseer 编排）。
 
 ## 文档
 
 - **[Wiki 索引](./wiki/README.md)**
 - [产品白皮书](./wiki/whitepaper.md)
 - [维护手册](./wiki/maintenance.md)
+- [Overseer 质量门禁](./wiki/overseer-quality.md)（**长任务 / Review 权威**）
 
 ## 运行
 
 ```bash
 pnpm install
-pnpm dev          # 浏览器（mock 数据）
-pnpm tauri:dev    # 桌面壳 + 真实 Workbench 快照
-pnpm test         # 单元测试
+pnpm dev              # 浏览器 HUD
+pnpm tauri:dev        # 桌面壳 + Workbench 快照（需 Node ≥ 22.13）
+pnpm test
 pnpm lint
-pnpm build        # 静态导出到 out/（Tauri 打包前置）
+pnpm build            # 静态 export → out/（Tauri 打包前置）
+pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
 ```
 
-初始化 Workbench 目录（仅需一次）：
+初始化 Workbench（仅需一次）：
 
 ```powershell
 .\scripts\scaffold-workbench.ps1
+node scripts/sync-workbench-hooks.mjs   # 同步 Vault / destructive 防火墙 hooks
 ```
 
-Orchestrator（Cursor SDK 子进程，需 **Node ≥ 22.13** + `CURSOR_API_KEY`）：
+Orchestrator（Cursor SDK，需 `CURSOR_API_KEY`）：
 
 ```powershell
-# 1) Node 22
 .\scripts\use-node22.ps1
-
-# 2) API Key — Cursor Dashboard → Integrations → 复制到 .env.local
-#    CURSOR_API_KEY=cursor_...
-
 pnpm orchestrator:build
 pnpm tauri:dev
-# Active Run → Spawn Dry（无 Key）或 Spawn Live（需 Key）
+# Active Run → Spawn Dry / Spawn Live
+```
 
 ## 长任务 / 24/7 无人值守
 
 ```text
 queue/now.yaml → Scheduler Daemon → spawn-run（≤25min/slot）
       ↓                              ↓
- checkpoint.md  ←──────────  events.jsonl（流式输出）
+ checkpoint.md  ←──────────  events.jsonl
       ↓
- STATUS: COMPLETE → 出队 → Promote → Vault
-```
-
-1. `pnpm tauri:dev`
-2. **24/7 Scheduler** 面板 → **Start Daemon**
-3. 任务写在 `E:\AgentWorkbench\queue\now.yaml`
-4. 跨 slot 续跑：Agent 更新 `runs/<id>/checkpoint.md`；完成后加一行 `STATUS: COMPLETE`
-5. **Promote** 面板把 `staging/` 复制进 Obsidian Vault
-
-可选 `api_token`：queue 项设 `provider: api_token`，`.env.local` 配 `OPENAI_API_KEY`。
-
-## 长任务 / 24/7 无人值守
-
-```text
-queue/now.yaml → Scheduler Daemon → spawn-run（≤25min/slot）
-      ↓                              ↓
- checkpoint.md  ←──────────  events.jsonl（流式输出）
+ REVIEW_VERDICT / VERIFY_REPORT → resolveQueueAdvance → 出队
       ↓
- STATUS: COMPLETE → 出队 → Promote → Vault
+ Promote → Vault（人工门禁）
 ```
 
-1. `pnpm tauri:dev`
-2. **24/7 Scheduler** 面板 → **Start Daemon**
-3. 任务写在 `E:\AgentWorkbench\queue\now.yaml`
-4. 跨 slot 续跑：Agent 更新 `runs/<id>/checkpoint.md`；完成后加一行 `STATUS: COMPLETE`
-5. **Promote** 面板把 `staging/` 复制进 Obsidian Vault
+1. 任务写在 `E:\AgentWorkbench\queue\now.yaml`（implement ↔ review ↔ verify 交替）
+2. **24/7 Scheduler** 面板 → Start Daemon（`state/scheduler.json` 的 `enabled` 控制）
+3. Agent 更新 `runs/<id>/checkpoint.md`；implement 完成需 `STATUS: COMPLETE`
+4. **Promote** 面板把 `staging/` 复制进 Obsidian Vault
 
-可选 `api_token`：queue 项设 `provider: api_token`，`.env.local` 配 `OPENAI_API_KEY`。
-```
+可选 `provider: api_token` + `.env.local` 中 `OPENAI_API_KEY`。
 
-桌面发布：`pnpm build` 后执行 `pnpm tauri build`（见 [维护手册](./wiki/maintenance.md)）。
+桌面发布：`pnpm build` → `pnpm tauri build`（见 [维护手册](./wiki/maintenance.md)）。
 
-若窗口只显示 **Internal Server Error**：`pnpm clean` → 结束占用 3000 的旧 Node → `pnpm dev` 或 `pnpm tauri:dev`（见维护手册 §9）。
-
-- 主界面：http://localhost:3000  
-- 组件目录（仅开发）：http://localhost:3000/dev/components  
+- 主界面：http://localhost:3000
+- 组件目录（仅 dev）：http://localhost:3000/dev/components
 
 ## 能力概览
 
-- 多窗可拖拽网格（24 行、无可见画布滚动条）、`Omni-Surveillance` / `Deep Focus` 模式
-- 窗体 1/4|1/2|FULL、标题栏滚轮缩放内容、Shift/Ctrl+滚轮调格位
-- Widget：行情、GitHub 雷达、基础设施遥测、应用嵌入位
-- 多市场自选（Crypto / US / HK / A股）、布局预设与本地保存（layout v3）
-- HUD UI Kit、`/dev/components` 预览
+- 多窗网格、Omni-Surveillance / Deep Focus、LIVE/MOCK 行情
+- **Overseer Widgets**：Run Queue、Daily、Active Run、Scheduler、Mission Board、Promote
+- 经典 Widget：Market、GitHub、Infra、App Slot
+- `.cursor/hooks`：Vault 防火墙 + **destructive-ops 防火墙**（见 `wiki/overseer-quality.md` §11）
 
 详见 [wiki/whitepaper.md](./wiki/whitepaper.md)。

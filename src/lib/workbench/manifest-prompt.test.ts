@@ -108,5 +108,7 @@ describe("buildUserPrompt", () => {
     expect(prompt).toContain("Allowed paths only.");
     expect(prompt).toContain("## Recent events (tail)");
     expect(prompt).toContain('"type":"assistant"');
+    expect(prompt).toContain("Destructive ops firewall");
+    expect(prompt).toContain("hard link");
   });
 });
