@@ -1,0 +1,26 @@
+{
+  "id": "self-iterate-p0",
+  "version": 1,
+  "description": "Literature P0: workflow library + events schema + eval profiles",
+  "evalProfile": "orchestrator",
+  "slots": [
+    {
+      "kind": "implement",
+      "prompt": "executor_implement",
+      "missionId": "juno-self-iterate-2026",
+      "phaseId": "si00-implement-p0"
+    },
+    {
+      "kind": "review",
+      "prompt": "executor_review",
+      "missionId": "juno-self-iterate-2026",
+      "phaseId": "si01-review-p0"
+    },
+    {
+      "kind": "verify",
+      "prompt": "executor_verify",
+      "missionId": "juno-self-iterate-2026",
+      "phaseId": "si02-verify-p0"
+    }
+  ]
+}

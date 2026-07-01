@@ -1,0 +1,13 @@
+{
+  "id": "default-implement-debate-review-verify",
+  "version": 2,
+  "description": "Variant: adds debate slot between implement and review (DyLAN-style)",
+  "evalProfile": "orchestrator",
+  "baseWorkflow": "default",
+  "slots": [
+    { "kind": "implement", "prompt": "executor_implement" },
+    { "kind": "debate", "prompt": "executor_review" },
+    { "kind": "review", "prompt": "executor_review" },
+    { "kind": "verify", "prompt": "executor_verify" }
+  ]
+}

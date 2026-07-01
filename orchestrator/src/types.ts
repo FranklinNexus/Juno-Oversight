@@ -1,4 +1,4 @@
-export type RunKind = "implement" | "review" | "verify";
+export type RunKind = "implement" | "review" | "verify" | "debate" | "vote";
 export type RepoTarget = "workbench" | "juno-overseer";
 
 export interface RunManifest {
@@ -18,6 +18,8 @@ export interface RunManifest {
   allowedTools?: string[];
   outputDir?: string;
   successCriteria?: string;
+  workflowId?: string;
+  evalProfile?: "code" | "ui" | "literature" | "orchestrator";
 }
 
 export interface QueueItem {
@@ -32,6 +34,9 @@ export interface QueueItem {
   mission_id?: string;
   phase_id?: string;
   success_criteria?: string;
+  depends_on?: string;
+  workflow_id?: string;
+  eval_profile?: "code" | "ui" | "literature" | "orchestrator";
 }
 
 export interface RunState {

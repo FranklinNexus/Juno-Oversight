@@ -4,9 +4,10 @@
 
 ## 文档
 
-- **[Wiki 索引](./wiki/README.md)**
-- [产品白皮书](./wiki/whitepaper.md)
-- [维护手册](./wiki/maintenance.md)
+- **[Wiki 索引（120%）](./wiki/README.md)**
+- [产品白皮书](./wiki/whitepaper.md) · [Widget 参考](./wiki/widgets.md)
+- [Orchestrator](./wiki/orchestrator.md) · [Agent Workbench](./wiki/workbench.md)
+- [维护手册](./wiki/maintenance.md) · [Smoke Loop](./wiki/smoke-loop.md)
 - [Overseer 质量门禁](./wiki/overseer-quality.md)（**长任务 / Review 权威**）
 
 ## 运行
@@ -19,6 +20,8 @@ pnpm test
 pnpm lint
 pnpm build            # 静态 export → out/（Tauri 打包前置）
 pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
+pnpm loop:smoke       # 最小 loop 本地跑通
+pnpm queue:restore-literature   # 文献 Mission backlog → now
 ```
 
 初始化 Workbench（仅需一次）：

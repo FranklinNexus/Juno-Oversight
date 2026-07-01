@@ -1,0 +1,17 @@
+{
+  "id": "axiom-book",
+  "version": 1,
+  "description": "Axiom book: decide → debate → write → review → merge → verify",
+  "evalProfile": "literature",
+  "slots": [
+    { "kind": "implement", "prompt": "executor_implement", "phaseId": "ax00-decide" },
+    { "kind": "debate", "prompt": "executor_book_review", "phaseId": "ax01-debate-axioms", "dependsOn": "ax00-decide" },
+    { "kind": "review", "prompt": "executor_book_review", "phaseId": "ax02-review-plan", "dependsOn": "ax01-debate-axioms" },
+    { "kind": "implement", "prompt": "executor_book_write", "phaseId": "ax-ch-write" },
+    { "kind": "review", "prompt": "executor_book_review", "phaseId": "ax-ch-review", "dependsOn": "ax-ch-write" },
+    { "kind": "implement", "prompt": "executor_implement", "phaseId": "ax43-merge" },
+    { "kind": "debate", "prompt": "executor_book_review", "phaseId": "ax44-debate-final", "dependsOn": "ax43-merge" },
+    { "kind": "review", "prompt": "executor_book_review", "phaseId": "ax45-review-final", "dependsOn": "ax44-debate-final" },
+    { "kind": "verify", "prompt": "executor_verify", "phaseId": "ax46-verify", "dependsOn": "ax45-review-final" }
+  ]
+}

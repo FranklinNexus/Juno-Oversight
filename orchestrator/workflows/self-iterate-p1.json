@@ -1,0 +1,28 @@
+{
+  "id": "self-iterate-p1",
+  "version": 1,
+  "description": "P1: safety verify bundle + phase DAG + skill wiki promote",
+  "evalProfile": "orchestrator",
+  "slots": [
+    {
+      "kind": "implement",
+      "prompt": "executor_implement",
+      "missionId": "juno-self-iterate-p1-2026",
+      "phaseId": "si10-implement-p1"
+    },
+    {
+      "kind": "review",
+      "prompt": "executor_review",
+      "missionId": "juno-self-iterate-p1-2026",
+      "phaseId": "si11-review-p1",
+      "dependsOn": "si10-implement-p1"
+    },
+    {
+      "kind": "verify",
+      "prompt": "executor_verify",
+      "missionId": "juno-self-iterate-p1-2026",
+      "phaseId": "si12-verify-p1",
+      "dependsOn": "si11-review-p1"
+    }
+  ]
+}

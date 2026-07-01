@@ -82,21 +82,24 @@ export function resolveQueueAdvance(
     return { action: "dequeue" };
   }
 
-  const parsed = parseReviewVerdict(checkpointText);
-  if (!parsed) {
-    return { action: "hold", reason: "review_pending" };
+  if (runKind === "debate" || runKind === "review" || runKind === "vote") {
+    const parsed = parseReviewVerdict(checkpointText);
+    if (!parsed) {
+      return { action: "hold", reason: "review_pending" };
+    }
+    switch (parsed.verdict) {
+      case "PASS":
+        return { action: "dequeue" };
+      case "BLOCK":
+        return { action: "block" };
+      case "REVISE":
+        return { action: "revise", mustFix: parsed.mustFixNextSlot };
+      default:
+        return { action: "hold", reason: "review_pending" };
+    }
   }
 
-  switch (parsed.verdict) {
-    case "PASS":
-      return { action: "dequeue" };
-    case "BLOCK":
-      return { action: "block" };
-    case "REVISE":
-      return { action: "revise", mustFix: parsed.mustFixNextSlot };
-    default:
-      return { action: "hold", reason: "review_pending" };
-  }
+  return { action: "hold", reason: "review_pending" };
 }
 
 /** Mission queue should alternate implement/review pairs after the first slot. */
@@ -107,7 +110,8 @@ export function validateReviewAlternation(items: Array<{ run_kind?: RunKind; kin
   for (let i = 1; i < kinds.length; i += 1) {
     const prev = kinds[i - 1];
     const curr = kinds[i];
-    if (prev === "implement" && curr !== "review") return false;
+    if (prev === "implement" && curr !== "review" && curr !== "debate") return false;
+    if (prev === "debate" && curr !== "review") return false;
     if (prev === "review" && curr !== "implement" && curr !== "verify") return false;
     if (prev === "verify" && curr !== "review") return false;
   }
@@ -117,6 +121,7 @@ export function validateReviewAlternation(items: Array<{ run_kind?: RunKind; kin
 function inferKindFromItem(item: { run_kind?: RunKind; kind?: string }): RunKind {
   if (item.run_kind) return item.run_kind;
   if (item.kind === "review") return "review";
+  if (item.kind === "debate") return "debate";
   if (item.kind === "verify") return "verify";
   return "implement";
 }

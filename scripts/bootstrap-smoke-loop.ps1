@@ -140,7 +140,7 @@ $orch = @"
 
 $sched = @"
 {
-  "enabled": true,
+  "enabled": false,
   "runsToday": 0,
   "missionInjectIntervalMin": 90,
   "lastAction": "bootstrap_smoke_loop",
@@ -154,4 +154,4 @@ $sched = @"
 Write-Host "Mission $missionId ready: 3 slots (implement -> review -> verify)."
 Write-Host "Hardening h06+ moved to backlog."
 Write-Host "Ensure: pnpm dev --port 3000 running before sl02 verify."
-Write-Host "Start: pnpm orchestrator:build; node orchestrator/dist/scheduler-daemon.js"
+Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."

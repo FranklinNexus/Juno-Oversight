@@ -1,6 +1,6 @@
 # Juno Oversight — 维护手册
 
-**最后更新**：2026-07-01（第六轮 — Overseer 对齐）
+**最后更新**：2026-07-01（第七轮 — 120% Wiki + LIVE dev 路由恢复）
 
 ---
 
@@ -29,6 +29,7 @@ pnpm test             # Vitest 单元测试
 pnpm orchestrator:build
 pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
 pnpm ui:smoke         # HTTP 冒烟（需 dev server）
+node scripts/simulate-smoke-loop.mjs   # 三 slot 门禁 dry 模拟
 node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 ```
 
@@ -91,27 +92,28 @@ pnpm tauri build
 
 ```
 src/
-  app/                 # Next 路由、globals.css（网格/画布样式）
+  app/
+    api/market/          # dev only：quotes + klines（静态 build 不含）
+    dev/components/      # UI 目录（development only）
   components/
-    dashboard/         # HudViewport、LayoutCanvas、PanelWindow、顶栏
-    widgets/           # Overseer + 经典 Widget（见 widget-registry）
-    market/            # 行情 Hub、详情、图表
-  lib/
-    workbench/         # orchestrator-client、types、测试
-  app/api/market/      # （已移除）静态 export 不含 API 路由；LIVE 走 lib/market/live
-    ui/                # HUD UI Kit
+    dashboard/           # HudViewport、LayoutCanvas、PanelWindow、顶栏
+    widgets/             # Overseer + 战术 Widget（见 wiki/widgets.md）
+    market/              # 行情 Hub、详情、图表
+    ui/                  # HUD UI Kit
   hooks/
   lib/
-    layout/            # 网格常量、clamp、preset 匹配、contentZoom、size 动画
+    layout/              # widget-registry、presets、clamp、contentZoom
+    workbench/           # orchestrator-client、测试
+    market/live/         # Binance + Yahoo 聚合（LIVE 数据层）
     mock-feed-connection.ts
     jupiter-telemetry-hub.ts
-    market/sanitize-watchlist.ts
   mocks/
-  store/               # layout-store (persist v3)、hud-store、market-store
+  store/                 # layout-store v6、hud-store、market-store
+orchestrator/src/        # scheduler、spawn-run、review-loop（见 wiki/orchestrator.md）
 src-tauri/
-scripts/free-port.mjs
-out/                   # 仅 pnpm build 生成；勿提交 git
-wiki/
+scripts/
+wiki/                    # 120% 文档索引见 wiki/README.md
+out/                     # 仅 pnpm build；勿提交
 ```
 
 ### 4.1 布局相关模块
@@ -146,10 +148,17 @@ wiki/
 
 ## 6. Tauri IPC
 
-| Command | 返回 |
+完整表见 [widgets.md §6](./widgets.md#6-tauri-ipc-完整表)。
+
+| Command | 用途 |
 |---------|------|
-| `get_hud_system_snapshot` | `cpuPct`, `ramMb`, `ramTotalMb` |
-| `get_jupiter_telemetry` | `node`, `sshConnected`, `thermalC`, `npuPct`, `latencyMs`（当前为 stub） |
+| `get_hud_system_snapshot` | CPU/RAM |
+| `get_jupiter_telemetry` | Infra Widget |
+| `spawn_agent_run` / `kill_agent_run` | Active Run |
+| `read_run_events` | events tail |
+| `start_scheduler_daemon` / `stop_scheduler_daemon` / `get_scheduler_status` | WIDGET-S |
+| `get_missions_snapshot` | Mission Board |
+| `list_staging_entries` / `promote_to_vault` | Promote |
 
 前端 Hub：
 
@@ -162,7 +171,8 @@ wiki/
 
 ### 7.1 顶栏切换
 
-- **LIVE**（默认）：`useLiveMarketFeed` 轮询 `GET /api/market/quotes?symbols=...`（2.5–4s）
+- **LIVE**（dev）：`useLiveMarketFeed` → `GET /api/market/quotes` → `lib/market/live/fetch-quotes.ts`
+- **LIVE**（Tauri 静态包）：无 Route Handler → 切 **MOCK** 或 Phase 3 外置代理
 - **MOCK**：`useMockWebSocket` + `generateMarketBatch`
 
 | 市场 | LIVE 现价/K线 | 盘口 |
@@ -170,9 +180,9 @@ wiki/
 | Crypto | Binance REST | Binance depth（列表 ≤3 标的时） |
 | US / HK / A股 | Yahoo Finance v7 / v8 | 合成五档（暂无 L2 API） |
 
-K 线：`GET /api/market/klines?symbol=&timeframe=` → `MarketTradingChart`。
+K 线：`GET /api/market/klines?symbol=&timeframe=` → `fetchLiveOhlcSeries`（**仅 dev**）。
 
-**限制**：`pnpm build` 静态导出**无** `/api/*`；Tauri 发布包需外置代理或继续用 MOCK。见 `.env.example` 中 `NEXT_PUBLIC_MARKET_API_BASE`。
+**限制**：`pnpm build` 静态导出**不含** `/api/*`；Tauri 发布包需 MOCK 或外置代理。
 
 ### 7.2 弹出窗
 
@@ -211,6 +221,8 @@ pnpm test
 | `manifest-prompt.test.ts` | prompt 注入含 §11 |
 | `orchestrator-isolation.test.ts` | Workbench/Vault 隔离 |
 
+Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review-loop.test.ts`（经 re-export 测 `shouldMarkPhaseDone`）。
+
 ---
 
 ## 9. 排错
@@ -224,93 +236,60 @@ pnpm test
 | 顶栏 DISCONNECTED | 所有 Mock 实例已卸载 | 确认至少一个行情/GitHub 窗 |
 | 布局错乱 | localStorage 损坏 | Reset 或删 `juno-layout-store` |
 | 拖窗只能左右、不能放到下面 | 旧 12 行 + 垂直压缩 | 24 行 + `compactType: null`；画布空白处 **滚轮** 下移 |
-| **按下瞬间窗体下跳** | RGL `createScaledStrategy` 的 `calcDragPosition` 用视口坐标 | 用 `createHudScaledStrategy`（有 scale、无 calcDragPosition） |
-| **拖拽全程错位** | 全局缩放未校正 | `transform`+宽高补偿 + `createHudScaledStrategy(uiScale)` |
-| **hydration 警告 `trancy-version`** | 浏览器扩展（Trancy 等）改写 `<html>` | 非应用 bug；已 `suppressHydrationWarning`；可禁用扩展验证 |
-| 画布粗滚动条闪烁 | `overflow:auto` 与缩放抢宽度 | 隐藏滚动条、`overflow-x:hidden`；高度仅 RGL `autoSize` |
-| 标题栏滚轮无法滚盘口 | 标题栏 wheel 用于缩放/调格 | 在窗体 **内容区** 滚轮滚动列表 |
-| **两个同标的弹出窗** | 旧版每次 spawn 都新建 | 刷新后 migrate 去重；↗/⠿ 会置顶已有窗 |
-| LIVE 行情失败 | 网络无法访问 Binance/Yahoo | 切 MOCK；国内可能需要代理 |
-| `formatVolume24h` 重复 import | 合并 import 时残留 | 只保留一行 `@/lib/format` import |
+| **按下瞬间窗体下跳** | RGL `calcDragPosition` 用视口坐标 | 用 `createHudScaledStrategy` |
+| **拖拽全程错位** | 全局缩放未校正 | `transform` + `createHudScaledStrategy(uiScale)` |
+| LIVE 行情失败（dev） | 网络 / API 502 | 切 MOCK；查 `/api/market/quotes` 响应 |
+| LIVE 行情失败（Tauri 包） | 静态 export 无 API | 预期行为；用 MOCK |
+| Scheduler 不出队 | checkpoint 缺 COMPLETE / REVIEW PASS | 见 [overseer-quality §8](./overseer-quality.md#8-checkpoint-结构跨-slot-契约) |
+| progress.md 不更新 | checkpoint 不满足三态 done 条件 | `shouldMarkPhaseDone`（implement/review/verify） |
 
 ---
 
-## 10. 变更记录
+## 10. Orchestrator 运维
 
-### 2026-07-01（第六轮 — Wiki/代码对齐 + 安全）
+详见 [orchestrator.md](./orchestrator.md)、[workbench.md](./workbench.md)。
 
-- **Scheduler** 接入 `evaluateCompletedRun`、`shouldSkipSpawn`；不再启动时强制 `enabled: true`
-- **Hooks**：`destructive-ops-gate.mjs`；`sync-workbench-hooks.mjs`
-- **Wiki**：`overseer-quality.md` §7–§11；README 去重；移除 `/api/market`（静态 export）
-- **默认布局**：Overseer Quad（runqueue / daily / daemon / activerun / mission / promote）
+```powershell
+pnpm orchestrator:build
+node scripts/simulate-smoke-loop.mjs
+.\scripts\bootstrap-smoke-loop.ps1
+node orchestrator/dist/spawn-run.js --manifest E:\AgentWorkbench\runs\<id>\manifest.json --dry-run
+```
 
-### 2026-06-02（第五轮 c — 主动 code review 修补）
-
-- **点击行情行 / 搜索结果** → `useFocusSymbol` 打开或置顶详情窗（不再只写 `selectedSymbol`）
-- 自选上限统一 **24**（`WATCHLIST_MAX`）；搜索支持 **中文名**（如「腾讯」）
-- 去掉未实现的「深度」Tab（与订单表重复）
-- 详情窗 LIVE 失败提示；`useElementHeight` 回调 ref 修复首帧高度为 0
-- K 线 LIVE 数据到达后再次 `scrollToRealTime`
-
-### 2026-06-02（第五轮 c — 主动 code review 修补）
-
-- **点击行情行 / 搜索结果** → `useFocusSymbol` 打开或置顶详情窗（不再只写 `selectedSymbol`）
-- 自选上限统一 **24**（`WATCHLIST_MAX`）；搜索支持 **中文名**（如「腾讯」）
-- 去掉未实现的「深度」Tab（与订单表重复）
-- 详情窗 LIVE 失败提示；`useElementHeight` 回调 ref 修复首帧高度为 0
-- K 线 LIVE 数据到达后再次 `scrollToRealTime`
-
-### 2026-06-02（第五轮 b — 详情窗渐进布局）
-
-- 切换 **1m/15m/1H…** 后 K 线 `scrollToRealTime()` 右对齐（`fixRightEdge`）
-- 详情窗按高度 **渐进显示**：K线 → MACD → 订单表（不够高则整块隐藏，不裁切）
-- `symbol-detail-layout.ts` / `useElementHeight`
-
-### 2026-06-02（第五轮 b — 详情窗渐进布局）
-
-- 切换 **1m/15m/1H…** 后 K 线 `scrollToRealTime()` 右对齐（`fixRightEdge`）
-- 详情窗按高度 **渐进显示**：K线 → MACD → 订单表（不够高则整块隐藏，不裁切）
-- `symbol-detail-layout.ts` / `useElementHeight`
-
-### 2026-06-02（第五轮 — LIVE 行情 + 弹出窗）
-
-- **LIVE/MOCK** 顶栏切换；`juno-hud-prefs.marketDataMode`
-- **`/api/market/quotes`**、**`/api/market/klines`**（仅 dev）
-- Binance（Crypto）+ Yahoo（US/HK/A）；`lib/market/live/*`
-- 弹出窗：**同标的去重**、右侧 5×14、`stackOrder` 堆叠、整条标题栏拖拽
-- `MarketTradingChart` + `payload.ts` 类型统一
-- `.env.example`
-
-### 2026-06-02（第四轮 — 布局/缩放/滚动）
-
-- **全局缩放**：`transform` + 宽高补偿 + RGL `transformScale`（`zoom`  alone 会导致拖拽错位）
-- **拖拽**：仅 `onDragStop` / `onResizeStop` 落盘
-- **画布**：24 行网格；滚动条隐藏；`overflow-x: hidden`；纵向滚轮平移
-- **窗交互**：`contentZoom` persist **v3**；`panel-zoom` / `panel-preset` / `size-animation` 拆分
-- **测试**：`panel-zoom.test.ts`；`clamp-panel` 对齐 24 行
-- **脚本**：`predev` + `scripts/free-port.mjs`；`pnpm preview` 替代 `next start`
-
-### 2026-06-02（窗口交互）
-
-- 标题栏 **滚轮**：窗内内容缩放（75%–150%）
-- **Shift + 滚轮**：格高；**Ctrl + 滚轮**：格宽
-- **1/4 / 1/2 / FULL**：过渡动画 + 预设高亮
-
-### 2026-06-02（第三轮）
-
-- **修复**：`output: "export"` 仅在 production `next build` 启用
-- **新增**：`pnpm clean`；build 前自动 clean
-- Mock 按 socket 实例注册；Tauri `frontendDist: ../out`
-
-### 2026-06-02（第二轮 / 首轮）
-
-- market-store v1；ErrorBoundary；Jupiter 全局 mode；UI Kit、wiki 初版
-
-**待办**：真实行情 / GitHub / Jupiter SSH；Widget D iframe；E2E；Firefox 下 `zoom` 降级方案（若需）
+| 状态文件 | 关键字段 |
+|----------|----------|
+| `state/scheduler.json` | `enabled` — 人类控制 |
+| `state/orchestrator.json` | `activeRunStatus` — `done` 触发出队 |
 
 ---
 
-## 11. 贡献约定
+## 11. 变更记录
+
+### 2026-07-01（第七轮 — 120% Wiki）
+
+- Wiki 新增：`orchestrator.md`、`workbench.md`、`widgets.md`
+- LIVE dev：恢复 `src/app/api/market/*` → `lib/market/live/*`
+- `shouldMarkPhaseDone`；bootstrap smoke 默认 `enabled: false`
+- `simulate-smoke-loop.mjs`
+
+### 2026-07-01（第六轮 — Overseer + 安全）
+
+- Scheduler 接 `evaluateCompletedRun`、`shouldSkipSpawn`
+- Hooks：`destructive-ops-gate.mjs`；Overseer Quad 默认布局
+
+### 2026-06-02（第五轮 — LIVE + 布局）
+
+- LIVE/MOCK；`/api/market`（dev）；弹出窗去重；24 行网格；contentZoom v6
+
+### 更早
+
+- Phase 1–2：Mock 行情、Tauri 探针、UI Kit、wiki 初版
+
+**待办**：Tauri LIVE 代理、GitHub API、Jupiter SSH、E2E
+
+---
+
+## 12. 贡献约定
 
 - 样式走 `@/components/ui`
 - 新 Widget 只改 `widget-registry.tsx`

@@ -109,7 +109,19 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 | `## CHANGES` | **implement** | 本 slot 改动文件列表 |
 | `## REVIEW_VERDICT` | review | §2 固定格式 |
 | `## VERIFY_REPORT` | verify | 见 §9 |
-| `STATUS: COMPLETE` | 最终 review | 仅当 Mission 全部 phase PASS |
+| `STATUS: COMPLETE` | 最终 implement / Mission 收尾 | 仅当 Mission 全部 phase done |
+
+### 8.1 progress.md 自动更新（`shouldMarkPhaseDone`）
+
+出队成功后，Scheduler 按 runKind 判定是否将 `progress.md` 对应 phase 标为 `done`：
+
+| runKind | 条件 |
+|---------|------|
+| implement | checkpoint 含 `STATUS: COMPLETE` |
+| review | `REVIEW_VERDICT` → `verdict: PASS` |
+| verify | 含 `## VERIFY_REPORT` 且无 FAIL/BLOCK |
+
+实现：`orchestrator/src/mission-progress.ts` → `scheduler-daemon.ts` `handleCompletedRun`。
 
 ---
 
@@ -137,6 +149,8 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 | `writeOrchestrator("idle", null)` 不清 activeRunId | 高 | **已修** | `mergeOrchestratorState` 显式置空 |
 | orchestrator `juno-hud: file:..` | 高 | **已修** | `install-orchestrator.mjs` + preinstall |
 | scheduler 未接 review 门禁 | 高 | **已修** | `evaluateCompletedRun` / `shouldSkipSpawn` |
+| progress 仅 review PASS 才 done | 中 | **已修** | `shouldMarkPhaseDone` 三态 |
+| **Loop gate** | 中 | **已加** | `loop-gate.ts` + `loop_gate_blocked` |
 | **硬链接双路径** | **致命** | **文档+hook** | §11；禁止对 C:/D: 任一路径递归删 |
 | **无 destructive hook** | **致命** | **已修** | `destructive-ops-gate.mjs` + prompt 注入 |
 

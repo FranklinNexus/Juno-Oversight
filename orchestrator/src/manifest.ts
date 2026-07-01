@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { junoProjectRoot, nowIso, workbenchRoot } from "./env.js";
 import { getSafetyDoctrineExcerpt } from "./safety-doctrine.js";
+import { normalizeEvalProfile, evalProfileFromWorkflow } from "./eval-profile.js";
+import { loadWorkflow } from "./workflow.js";
 import type { QueueItem, RunManifest, RunState } from "./types.js";
 
 const EVENTS_TAIL_LINES = 40;
@@ -80,6 +82,20 @@ export function buildManifestFromQueue(item: QueueItem): RunManifest {
   const repoRoot = inferRepoTarget(item);
   const runKind = inferRunKind(item);
 
+  let workflowId = item.workflow_id;
+  let evalProfile = item.eval_profile;
+  if (workflowId) {
+    try {
+      const wf = loadWorkflow(workflowId);
+      evalProfile = evalProfile ?? wf.evalProfile;
+    } catch {
+      // queue item may reference workflow not yet materialized
+    }
+  }
+  evalProfile = normalizeEvalProfile(
+    evalProfile ?? evalProfileFromWorkflow(workflowId),
+  );
+
   let cwd: string;
   if (repoRoot === "juno-overseer") {
     cwd = ".";
@@ -107,6 +123,8 @@ export function buildManifestFromQueue(item: QueueItem): RunManifest {
     maxRetries: 3,
     outputDir: "output",
     successCriteria: item.success_criteria ?? "Update checkpoint.md with progress",
+    workflowId,
+    evalProfile,
   };
 }
 

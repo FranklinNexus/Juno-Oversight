@@ -1,0 +1,26 @@
+{
+  "id": "meta-loop-smoke-then-meta",
+  "version": 1,
+  "description": "Loop gate prerequisites: smoke mission then meta self-referential runner",
+  "evalProfile": "orchestrator",
+  "slots": [
+    {
+      "kind": "implement",
+      "prompt": "executor_implement",
+      "missionId": "juno-loop-meta-2026",
+      "phaseId": "meta00-implement-runner"
+    },
+    {
+      "kind": "review",
+      "prompt": "executor_review",
+      "missionId": "juno-loop-meta-2026",
+      "phaseId": "meta01-review-runner"
+    },
+    {
+      "kind": "verify",
+      "prompt": "executor_verify",
+      "missionId": "juno-loop-meta-2026",
+      "phaseId": "meta02-verify-runner"
+    }
+  ]
+}

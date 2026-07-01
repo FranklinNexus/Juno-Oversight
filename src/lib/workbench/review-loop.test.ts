@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shouldMarkPhaseDone } from "../../../orchestrator/src/mission-progress.js";
 import {
   isReviewBlocked,
   isReviewPass,
@@ -86,6 +87,25 @@ describe("resolveQueueAdvance", () => {
       action: "revise",
       mustFix: ["fix tests"],
     });
+  });
+});
+
+describe("shouldMarkPhaseDone", () => {
+  it("marks implement done on STATUS COMPLETE", () => {
+    expect(shouldMarkPhaseDone("implement", "STATUS: COMPLETE\n")).toBe(true);
+    expect(shouldMarkPhaseDone("implement", "")).toBe(false);
+  });
+
+  it("marks review done on PASS verdict", () => {
+    expect(shouldMarkPhaseDone("review", sampleVerdict)).toBe(true);
+    expect(shouldMarkPhaseDone("review", "")).toBe(false);
+  });
+
+  it("marks verify done when VERIFY_REPORT has no FAIL", () => {
+    const ok = "## VERIFY_REPORT\n- pnpm test: PASS\n";
+    expect(shouldMarkPhaseDone("verify", ok)).toBe(true);
+    const fail = "## VERIFY_REPORT\n- **FAIL**: lint\n";
+    expect(shouldMarkPhaseDone("verify", fail)).toBe(false);
   });
 });
 

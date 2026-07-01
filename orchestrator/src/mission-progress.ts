@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { workbenchRoot } from "./env.js";
 import {
+  isReviewBlocked,
   isReviewPass,
   parseReviewVerdict,
   resolveQueueAdvance,
@@ -35,6 +36,7 @@ export function readRunKind(workbench: string, runId: string): RunKind {
     };
     if (item.run_kind) return item.run_kind;
     if (item.kind === "review") return "review";
+    if (item.kind === "debate") return "debate";
     if (item.kind === "verify") return "verify";
   } catch {
     // fall through
@@ -50,6 +52,24 @@ export function evaluateCompletedRun(
   const checkpoint = readCheckpoint(workbench, runId);
   const runKind = readRunKind(workbench, runId);
   return resolveQueueAdvance(runKind, checkpoint);
+}
+
+/** Whether a completed slot should flip progress.md phase row to `done`. */
+export function shouldMarkPhaseDone(runKind: RunKind, checkpointText: string): boolean {
+  if (runKind === "implement") {
+    return /STATUS:\s*COMPLETE/i.test(checkpointText);
+  }
+  if (runKind === "review" || runKind === "debate" || runKind === "vote") {
+    return isReviewPass(checkpointText);
+  }
+  if (runKind === "verify") {
+    if (isReviewBlocked(checkpointText)) return false;
+    if (/##\s*VERIFY_REPORT[\s\S]*?\*\*FAIL\*\*|verdict:\s*BLOCK/i.test(checkpointText)) {
+      return false;
+    }
+    return /##\s*VERIFY_REPORT/i.test(checkpointText);
+  }
+  return false;
 }
 
 export function markMissionPhaseDone(

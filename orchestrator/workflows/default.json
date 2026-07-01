@@ -1,0 +1,11 @@
+{
+  "id": "default-implement-review-verify",
+  "version": 1,
+  "description": "Standard Juno mission: implement → review → verify",
+  "evalProfile": "code",
+  "slots": [
+    { "kind": "implement", "prompt": "executor_implement" },
+    { "kind": "review", "prompt": "executor_review" },
+    { "kind": "verify", "prompt": "executor_verify" }
+  ]
+}

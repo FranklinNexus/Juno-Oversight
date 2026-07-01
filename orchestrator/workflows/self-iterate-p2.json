@@ -1,0 +1,35 @@
+{
+  "id": "self-iterate-p2-debate",
+  "version": 1,
+  "description": "P2: OPRO workflow search + optional debate slot before review",
+  "evalProfile": "orchestrator",
+  "slots": [
+    {
+      "kind": "implement",
+      "prompt": "executor_implement",
+      "missionId": "juno-self-iterate-p2-2026",
+      "phaseId": "si20-implement-p2"
+    },
+    {
+      "kind": "debate",
+      "prompt": "executor_review",
+      "missionId": "juno-self-iterate-p2-2026",
+      "phaseId": "si21-debate-p2",
+      "dependsOn": "si20-implement-p2"
+    },
+    {
+      "kind": "review",
+      "prompt": "executor_review",
+      "missionId": "juno-self-iterate-p2-2026",
+      "phaseId": "si22-review-p2",
+      "dependsOn": "si21-debate-p2"
+    },
+    {
+      "kind": "verify",
+      "prompt": "executor_verify",
+      "missionId": "juno-self-iterate-p2-2026",
+      "phaseId": "si23-verify-p2",
+      "dependsOn": "si22-review-p2"
+    }
+  ]
+}
