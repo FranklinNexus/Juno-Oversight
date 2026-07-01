@@ -9,20 +9,30 @@ import {
 import {
   sanitizeSelectedSymbol,
   sanitizeWatchlist,
+  WATCHLIST_MAX,
 } from "@/lib/market/sanitize-watchlist";
+
+export type MarketHubTab = "watchlist" | "all" | MarketClass;
+
+export type MarketFilter = "all" | MarketClass;
 
 type MarketStore = {
   watchlist: string[];
-  marketFilter: MarketClass | "all";
+  hubTab: MarketHubTab;
   selectedSymbol: string;
+  searchOpen: boolean;
   pickerOpen: boolean;
-  setMarketFilter: (filter: MarketClass | "all") => void;
+  marketFilter: MarketFilter;
+  setHubTab: (tab: MarketHubTab) => void;
   setSelectedSymbol: (symbol: string) => void;
   toggleWatchlist: (symbol: string) => void;
+  setSearchOpen: (open: boolean) => void;
   setPickerOpen: (open: boolean) => void;
+  setMarketFilter: (filter: MarketFilter) => void;
 };
 
-const MARKET_FILTERS = new Set<MarketClass | "all">([
+const HUB_TABS = new Set<MarketHubTab>([
+  "watchlist",
   "all",
   "crypto",
   "us",
@@ -30,23 +40,27 @@ const MARKET_FILTERS = new Set<MarketClass | "all">([
   "cn_a",
 ]);
 
-function sanitizeMarketFilter(value: unknown): MarketClass | "all" {
-  if (typeof value === "string" && MARKET_FILTERS.has(value as MarketClass | "all")) {
-    return value as MarketClass | "all";
+function sanitizeHubTab(value: unknown): MarketHubTab {
+  if (typeof value === "string" && HUB_TABS.has(value as MarketHubTab)) {
+    return value as MarketHubTab;
   }
-  return "all";
+  return "watchlist";
 }
 
 export const useMarketStore = create<MarketStore>()(
   persist(
     (set, get) => ({
       watchlist: DEFAULT_WATCHLIST,
-      marketFilter: "all",
+      hubTab: "watchlist",
       selectedSymbol: DEFAULT_WATCHLIST[0],
+      searchOpen: false,
       pickerOpen: false,
-      setMarketFilter: (filter) => set({ marketFilter: filter }),
+      marketFilter: "all",
+      setHubTab: (tab) => set({ hubTab: tab }),
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      setSearchOpen: (open) => set({ searchOpen: open }),
       setPickerOpen: (open) => set({ pickerOpen: open }),
+      setMarketFilter: (marketFilter) => set({ marketFilter }),
       toggleWatchlist: (symbol) => {
         const current = get().watchlist;
         if (current.includes(symbol)) {
@@ -58,30 +72,37 @@ export const useMarketStore = create<MarketStore>()(
           });
           return;
         }
-        if (current.length >= 12) return;
+        if (current.length >= WATCHLIST_MAX) return;
         set({ watchlist: [...current, symbol] });
       },
     }),
     {
       name: "juno-market-store",
-      version: 1,
+      version: 2,
       migrate: (persisted) => {
         if (!persisted || typeof persisted !== "object") {
           return {
             watchlist: [...DEFAULT_WATCHLIST],
-            marketFilter: "all" as const,
+            hubTab: "watchlist" as const,
             selectedSymbol: DEFAULT_WATCHLIST[0],
           };
         }
         const state = persisted as {
           watchlist?: unknown;
+          hubTab?: unknown;
           marketFilter?: unknown;
           selectedSymbol?: unknown;
         };
         const watchlist = sanitizeWatchlist(state.watchlist);
+        const hubTab =
+          state.hubTab !== undefined
+            ? sanitizeHubTab(state.hubTab)
+            : state.marketFilter === "all"
+              ? "all"
+              : sanitizeHubTab(state.marketFilter);
         return {
           watchlist,
-          marketFilter: sanitizeMarketFilter(state.marketFilter),
+          hubTab,
           selectedSymbol: sanitizeSelectedSymbol(state.selectedSymbol, watchlist),
         };
       },
@@ -89,20 +110,29 @@ export const useMarketStore = create<MarketStore>()(
         if (!persisted || typeof persisted !== "object") return current;
         const state = persisted as {
           watchlist?: unknown;
+          hubTab?: unknown;
           marketFilter?: unknown;
           selectedSymbol?: unknown;
         };
         const watchlist = sanitizeWatchlist(state.watchlist);
+        const hubTab =
+          state.hubTab !== undefined
+            ? sanitizeHubTab(state.hubTab)
+            : state.marketFilter !== undefined
+              ? state.marketFilter === "all"
+                ? "all"
+                : sanitizeHubTab(state.marketFilter)
+              : current.hubTab;
         return {
           ...current,
           watchlist,
-          marketFilter: sanitizeMarketFilter(state.marketFilter),
+          hubTab,
           selectedSymbol: sanitizeSelectedSymbol(state.selectedSymbol, watchlist),
         };
       },
       partialize: (state) => ({
         watchlist: state.watchlist,
-        marketFilter: state.marketFilter,
+        hubTab: state.hubTab,
         selectedSymbol: state.selectedSymbol,
       }),
     },

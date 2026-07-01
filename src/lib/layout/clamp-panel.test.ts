@@ -10,9 +10,10 @@ describe("clampPanel", () => {
       w: 99,
       h: 99,
       widgetType: "market",
+      contentZoom: 1,
     });
     expect(result.w).toBe(12);
-    expect(result.h).toBe(12);
+    expect(result.h).toBe(24);
     expect(result.x).toBe(0);
     expect(result.y).toBe(0);
   });
@@ -25,6 +26,7 @@ describe("clampPanel", () => {
       w: 1,
       h: 1,
       widgetType: "github",
+      contentZoom: 1,
     });
     expect(result.w).toBe(3);
     expect(result.h).toBe(2);

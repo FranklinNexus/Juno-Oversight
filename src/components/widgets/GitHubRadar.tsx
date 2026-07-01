@@ -6,6 +6,7 @@ import { EmptyState, FeedItem, LoadingRows, ScrollFeed, TagChip } from "@/compon
 import { useMockWebSocket } from "@/hooks/useMockWebSocket";
 import { formatRelativeTime } from "@/lib/time";
 import { generateGitHubEvent, type GitHubEvent } from "@/mocks/generators/github-feed";
+import type { WidgetPanelProps } from "@/lib/layout/widget-registry";
 import { useHudStore, type HudMode } from "@/store/hud-store";
 
 const tagTone: Record<GitHubEvent["type"], "muted" | "gold" | "down"> = {
@@ -58,7 +59,8 @@ function GitHubFeed({ mode }: { mode: HudMode }) {
   );
 }
 
-export function GitHubRadar() {
+export function GitHubRadar({ panelId }: WidgetPanelProps) {
+  void panelId;
   const mode = useHudStore((state) => state.mode);
   return (
     <div className="h-full min-h-0" key={mode}>

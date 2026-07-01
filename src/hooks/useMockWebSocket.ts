@@ -14,6 +14,7 @@ type UseMockWebSocketOptions<T> = {
   mode: HudMode;
   generate: () => T;
   onMessage?: (payload: T) => void;
+  enabled?: boolean;
 };
 
 export function useMockWebSocket<T>({
@@ -21,6 +22,7 @@ export function useMockWebSocket<T>({
   mode,
   generate,
   onMessage,
+  enabled = true,
 }: UseMockWebSocketOptions<T>) {
   const [data, setData] = useState<T | null>(null);
   const reactId = useId();
@@ -32,6 +34,11 @@ export function useMockWebSocket<T>({
   }, [onMessage]);
 
   useEffect(() => {
+    if (!enabled) {
+      unregisterMockFeed(instanceId);
+      return;
+    }
+
     const socket = createMockSocket<T>({
       mode,
       generate,
@@ -55,7 +62,7 @@ export function useMockWebSocket<T>({
       socket.close();
       unregisterMockFeed(instanceId);
     };
-  }, [instanceId, mode, generate]);
+  }, [enabled, instanceId, mode, generate]);
 
-  return data;
+  return enabled ? data : null;
 }

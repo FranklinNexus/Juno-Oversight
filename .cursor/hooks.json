@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/vault-gate.mjs",
+        "failClosed": true
+      },
+      {
+        "command": "node .cursor/hooks/destructive-ops-gate.mjs",
+        "failClosed": true
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "node .cursor/hooks/vault-gate.mjs",
+        "failClosed": true
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "node .cursor/hooks/vault-gate.mjs",
+        "failClosed": true
+      }
+    ]
+  }
+}

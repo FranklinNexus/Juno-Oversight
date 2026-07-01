@@ -3,8 +3,10 @@
 import { WidgetShell } from "@/components/dashboard/WidgetShell";
 import { AlertFrame, LoadingRows, MetricRow } from "@/components/ui";
 import { useJupiterTelemetry } from "@/hooks/useJupiterTelemetry";
+import type { WidgetPanelProps } from "@/lib/layout/widget-registry";
 
-export function InfraTelemetry() {
+export function InfraTelemetry({ panelId }: WidgetPanelProps) {
+  void panelId;
   const telemetry = useJupiterTelemetry();
 
   return (

@@ -43,7 +43,7 @@ export function Sparkline({
     <svg width={width} height={height} className="block" aria-hidden>
       <polyline
         fill="none"
-        stroke={alert ? "var(--accent-gold)" : "var(--text-porcelain)"}
+        stroke={alert ? "var(--accent-gold)" : "var(--sparkline-stroke)"}
         strokeWidth={1.2}
         points={points}
       />

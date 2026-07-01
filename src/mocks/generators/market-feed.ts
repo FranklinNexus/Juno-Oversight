@@ -1,26 +1,9 @@
 import { getInstrument } from "@/lib/market/catalog";
+import type { BookLevel, MarketPayload } from "@/lib/market/payload";
 
-export type BookLevel = {
-  price: number;
-  size: number;
-};
+export type { BookLevel, MarketPayload };
 
-export type MarketPayload = {
-  id: string;
-  timestamp: number;
-  symbol: string;
-  market: "crypto" | "us" | "hk" | "cn_a";
-  name: string;
-  currency: string;
-  last: number;
-  changePct: number;
-  volatility: number;
-  alert: boolean;
-  bids: BookLevel[];
-  asks: BookLevel[];
-  history: number[];
-};
-
+/** Module-scoped mock state (survives HMR in dev). Reset only on full reload. */
 /** Module-scoped mock state (survives HMR in dev). Reset only on full reload. */
 const lastPrices = new Map<string, number>();
 const histories = new Map<string, number[]>();
@@ -54,36 +37,38 @@ function pushHistory(symbol: string, value: number) {
 }
 
 export function generateMarketBatch(watchlist: string[]): MarketPayload[] {
-  return watchlist
-    .map((symbol) => {
-      const instrument = getInstrument(symbol);
-      if (!instrument) return null;
+  const rows: MarketPayload[] = [];
+  for (const symbol of watchlist) {
+    const instrument = getInstrument(symbol);
+    if (!instrument) continue;
 
-      const base = instrument.basePrice;
-      const prev = lastPrices.get(symbol) ?? base;
-      const next = jitter(prev, 0.012);
-      const changePct = ((next - base) / base) * 100;
-      const volatility = Math.abs(((next - prev) / prev) * 100);
-      lastPrices.set(symbol, next);
+    const base = instrument.basePrice;
+    const prev = lastPrices.get(symbol) ?? base;
+    const next = jitter(prev, 0.012);
+    const changePct = ((next - base) / base) * 100;
+    const volatility = Math.abs(((next - prev) / prev) * 100);
+    lastPrices.set(symbol, next);
 
-      const { bids, asks } = makeBook(next);
-      const history = pushHistory(symbol, next);
+    const { bids, asks } = makeBook(next);
+    const history = pushHistory(symbol, next);
 
-      return {
-        id: symbol,
-        timestamp: Date.now(),
-        symbol,
-        market: instrument.market,
-        name: instrument.name,
-        currency: instrument.currency,
-        last: Number(next.toFixed(4)),
-        changePct: Number(changePct.toFixed(2)),
-        volatility: Number(volatility.toFixed(3)),
-        alert: volatility > 0.45,
-        bids,
-        asks,
-        history,
-      };
-    })
-    .filter((row): row is MarketPayload => row !== null);
+    rows.push({
+      id: symbol,
+      timestamp: Date.now(),
+      symbol,
+      market: instrument.market,
+      name: instrument.name,
+      currency: instrument.currency,
+      last: Number(next.toFixed(4)),
+      changePct: Number(changePct.toFixed(2)),
+      volatility: Number(volatility.toFixed(3)),
+      alert: volatility > 0.45,
+      bids,
+      asks,
+      history,
+      volume24h: base * 12_000 * (0.8 + Math.random() * 0.4),
+      source: "mock",
+    });
+  }
+  return rows;
 }

@@ -1,0 +1,20 @@
+{
+  "name": "juno-orchestrator",
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "spawn": "node dist/spawn-run.js",
+    "preinstall": "node ../scripts/check-orchestrator-deps.mjs"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

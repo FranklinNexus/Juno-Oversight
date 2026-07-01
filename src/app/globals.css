@@ -1,7 +1,10 @@
 @import "tailwindcss";
 @import "react-grid-layout/css/styles.css";
+@import "react-grid-layout/css/styles.css";
 
-:root {
+/* Night — default institutional terminal */
+:root,
+[data-hud-theme="night"] {
   --bg-base: #0b0c0e;
   --bg-panel: #111318;
   --bg-elevated: #161a22;
@@ -11,6 +14,7 @@
   --text-porcelain: #ddd9d0;
   --text-muted: #7a808a;
   --accent-gold: #c9a227;
+  --accent-gold-bright: #e0c04a;
   --status-ok: #4f6b57;
   --status-warn: #8a4a42;
   --up: #6f8f78;
@@ -19,6 +23,68 @@
   --ask: #9a6d6d;
   --depth-bid: #3f5748;
   --depth-ask: #6a4545;
+  --canvas-bg: #242a33;
+  --sparkline-stroke: var(--text-porcelain);
+  --market-up-bg: #3a2424;
+  --market-up-text: #e07070;
+  --market-down-bg: #1a2e24;
+  --market-down-text: #6fae88;
+}
+
+/* Saturn — warm gold (project namesake palette) */
+[data-hud-theme="saturn"] {
+  --bg-base: #0a0907;
+  --bg-panel: #12100b;
+  --bg-elevated: #1a1610;
+  --bg-hover: #221d14;
+  --border-dim: #3a3220;
+  --border-strong: #5a4a28;
+  --text-porcelain: #f0e6d2;
+  --text-muted: #9a8f72;
+  --accent-gold: #d4a84b;
+  --accent-gold-bright: #f0d078;
+  --status-ok: #6a7a4a;
+  --status-warn: #a65a38;
+  --up: #8faa5c;
+  --down: #c48468;
+  --bid: #7a9a52;
+  --ask: #b87858;
+  --depth-bid: #4a5e32;
+  --depth-ask: #7a4530;
+  --canvas-bg: #1e1a12;
+  --sparkline-stroke: var(--accent-gold-bright);
+  --market-up-bg: #3d2818;
+  --market-up-text: #f0a060;
+  --market-down-bg: #1a2a1a;
+  --market-down-text: #88c878;
+}
+
+/* Day — light workspace for bright environments */
+[data-hud-theme="day"] {
+  --bg-base: #e3e6eb;
+  --bg-panel: #f0f2f6;
+  --bg-elevated: #fafbfc;
+  --bg-hover: #e8ebf0;
+  --border-dim: #c5ccd6;
+  --border-strong: #9aa5b5;
+  --text-porcelain: #141820;
+  --text-muted: #5a6575;
+  --accent-gold: #9a7a18;
+  --accent-gold-bright: #c9a227;
+  --status-ok: #3d6b52;
+  --status-warn: #a04a38;
+  --up: #2f6b4a;
+  --down: #a04444;
+  --bid: #4a8f68;
+  --ask: #c07070;
+  --depth-bid: #b8d4c4;
+  --depth-ask: #e8c4c4;
+  --canvas-bg: #d0d5de;
+  --sparkline-stroke: var(--text-porcelain);
+  --market-up-bg: #3a2424;
+  --market-up-text: #e07070;
+  --market-down-bg: #1a2e24;
+  --market-down-text: #6fae88;
 }
 
 body {
@@ -42,7 +108,7 @@ body {
 }
 
 .hud-scale-stage {
-  transform-origin: top left;
+  overflow: hidden;
 }
 
 .hud-shell {
@@ -52,11 +118,10 @@ body {
 }
 
 .layout-canvas {
-  background: var(--border-dim);
+  background: var(--canvas-bg);
 }
 
 .layout-canvas .react-grid-layout {
-  height: 100% !important;
   min-height: 100%;
 }
 
@@ -71,6 +136,39 @@ body {
 .layout-canvas .react-grid-item.resizing {
   transition: none;
   z-index: 30;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.hud-grid-interacting,
+body.hud-grid-interacting * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: default;
+}
+
+body.hud-grid-interacting [data-popout-handle] {
+  pointer-events: none;
+}
+
+body.hud-grid-interacting [data-popout-handle] {
+  pointer-events: none;
+}
+
+body.hud-grid-interacting .panel-chrome.panel-drag-handle {
+  cursor: grabbing !important;
+}
+
+.panel-chrome.panel-drag-handle,
+.layout-canvas .react-resizable-handle {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.panel-chrome {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .layout-canvas .react-grid-item > .react-resizable-handle::after {
@@ -86,26 +184,4 @@ body {
   background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
   border: 1px dashed var(--accent-gold);
   opacity: 1;
-}
-
-/* PanelWindow already has its own chrome, so hide duplicated widget header */
-.panel-window .widget-panel > header {
-  display: none;
-}
-
-.panel-window .widget-panel .widget-panel-body {
-  height: 100%;
-}
-
-.hud-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-.hud-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.hud-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
 }

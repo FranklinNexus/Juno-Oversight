@@ -5,7 +5,7 @@
 | 文档 | 说明 |
 |------|------|
 | [whitepaper.md](./whitepaper.md) | 产品白皮书：定位、原则、架构、路线图 |
-| [maintenance.md](./maintenance.md) | 维护手册：环境、命令、**Internal Server Error 排错**、变更记录 |
+| [maintenance.md](./maintenance.md) | 维护手册：环境、命令、布局/缩放、排错、变更记录 |
 
 **窗口只显示 `Internal Server Error`？** → 先看 [维护手册 §3、§9](./maintenance.md#3-next-配置要点必读)。
 

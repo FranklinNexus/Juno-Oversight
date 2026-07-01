@@ -1,5 +1,6 @@
 "use client";
 
+import { HudThemeToggle } from "@/components/dashboard/HudThemeToggle";
 import { LayoutToolbar } from "@/components/dashboard/LayoutToolbar";
 import { ConnectionBadge, HudButton, HudSegment } from "@/components/ui";
 import { useRuntimeHudMetrics } from "@/hooks/useRuntimeHudMetrics";
@@ -16,6 +17,8 @@ export function GlobalControlHeader() {
   const autoFit = useHudStore((state) => state.autoFit);
   const bumpUiScale = useHudStore((state) => state.bumpUiScale);
   const setAutoFit = useHudStore((state) => state.setAutoFit);
+  const marketDataMode = useHudStore((state) => state.marketDataMode);
+  const toggleMarketDataMode = useHudStore((state) => state.toggleMarketDataMode);
   const addPanel = useLayoutStore((state) => state.addPanel);
   const { cpuPct, ramMb, ramTotalMb, source } = useRuntimeHudMetrics();
 
@@ -30,11 +33,29 @@ export function GlobalControlHeader() {
             { id: "focus", label: "Deep Focus" },
           ]}
         />
-        <HudButton onClick={() => addPanel("market")}>+ Window</HudButton>
+        <HudButton onClick={() => addPanel("runqueue")}>+ Window</HudButton>
         <LayoutToolbar />
       </div>
 
-      <ConnectionBadge connected={wsConnected} latencyMs={wsLatencyMs} />
+      <div className="flex items-center gap-2">
+        <HudButton
+          active={marketDataMode === "live"}
+          onClick={toggleMarketDataMode}
+          title={marketDataMode === "live" ? "真实行情（Binance + Yahoo）" : "模拟行情"}
+        >
+          {marketDataMode === "live" ? "LIVE" : "MOCK"}
+        </HudButton>
+        <div className="flex items-center gap-2">
+        <HudButton
+          active={marketDataMode === "live"}
+          onClick={toggleMarketDataMode}
+          title={marketDataMode === "live" ? "真实行情（Binance + Yahoo）" : "模拟行情"}
+        >
+          {marketDataMode === "live" ? "LIVE" : "MOCK"}
+        </HudButton>
+        <ConnectionBadge connected={wsConnected} latencyMs={wsLatencyMs} />
+      </div>
+      </div>
 
       <div className="font-mono-numeric text-xs flex items-center gap-2">
         <span>
@@ -46,6 +67,13 @@ export function GlobalControlHeader() {
             <span className="text-[var(--text-muted)]"> / {formatRam(ramTotalMb)}</span>
           )}
         </span>
+
+        <div
+          className="flex items-center justify-center border border-[var(--border-dim)] h-6 w-6 shrink-0"
+          title="切换主题"
+        >
+          <HudThemeToggle />
+        </div>
 
         <div className="flex items-center gap-1 border border-[var(--border-dim)] px-1 h-6">
           <HudButton variant="ghost" onClick={() => bumpUiScale(-0.05)} aria-label="Zoom out">

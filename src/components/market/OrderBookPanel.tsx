@@ -2,7 +2,7 @@
 
 import { DepthRow, SectionLabel } from "@/components/ui";
 import { formatPrice } from "@/lib/format";
-import type { BookLevel } from "@/mocks/generators/market-feed";
+import type { BookLevel } from "@/lib/market/payload";
 
 type OrderBookPanelProps = {
   symbol: string;

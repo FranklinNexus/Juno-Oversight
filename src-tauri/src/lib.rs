@@ -1,7 +1,9 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
+use tauri::Manager;
+use tauri::Manager;
 use tauri::State;
 
 struct HudSystemState(Mutex<System>);

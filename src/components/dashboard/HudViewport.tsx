@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useHudStore } from "@/store/hud-store";
 
 const BASE_WIDTH = 1440;
@@ -14,6 +14,16 @@ export function HudViewport({ children }: HudViewportProps) {
   const uiScale = useHudStore((state) => state.uiScale);
   const autoFit = useHudStore((state) => state.autoFit);
   const applyUiScale = useHudStore((state) => state.applyUiScale);
+
+  const stageStyle = useMemo(
+    () => ({
+      transform: `scale(${uiScale})`,
+      transformOrigin: "top left" as const,
+      width: `${100 / uiScale}%`,
+      height: `${100 / uiScale}%`,
+    }),
+    [uiScale],
+  );
 
   useEffect(() => {
     if (!autoFit) return;
@@ -32,14 +42,7 @@ export function HudViewport({ children }: HudViewportProps) {
 
   return (
     <div className="hud-viewport">
-      <div
-        className="hud-scale-stage"
-        style={{
-          transform: `scale(${uiScale})`,
-          width: `${100 / uiScale}%`,
-          height: `${100 / uiScale}%`,
-        }}
-      >
+      <div className="hud-scale-stage" style={stageStyle}>
         {children}
       </div>
     </div>

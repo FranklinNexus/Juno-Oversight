@@ -2,6 +2,9 @@
   "name": "juno-hud",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "next dev",
     "clean": "node -e \"const fs=require('fs');['out','.next'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch{}})\"",
@@ -9,13 +12,19 @@
     "build:desktop": "pnpm build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.mts",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev"
+    "orchestrator:build": "node scripts/check-node.mjs && node scripts/install-orchestrator.mjs && node scripts/check-orchestrator-deps.mjs && npm run build --prefix orchestrator",
+    "orchestrator:test:dry": "node scripts/check-node.mjs && npm run build --prefix orchestrator && node orchestrator/dist/spawn-run.js --manifest E:\\\\AgentWorkbench\\\\runs\\\\demo-jupiter-bench\\\\manifest.json --dry-run",
+    "orchestrator:test:live": "node scripts/check-node.mjs && node scripts/test-live-key.mjs",
+    "ui:smoke": "node scripts/ui-smoke.mjs",
+    "verify:desktop": "node scripts/check-node.mjs && node scripts/verify-desktop.mjs",
+    "tauri:dev": "node scripts/check-node.mjs && pnpm orchestrator:build && tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
     "clsx": "^2.1.1",
+    "lightweight-charts": "^5.0.8",
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -34,5 +43,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.4"
-  }
+  },
+  "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad"
 }
