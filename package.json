@@ -39,6 +39,7 @@
     "book:loop": "node scripts/run-axiom-book-loop.mjs",
     "book:loop:tick": "node scripts/juno-autonomy-tick.mjs --execute",
     "book:daemon": "node scripts/run-axiom-book-daemon.mjs",
+    "api:quota": "node scripts/show-api-quota.mjs",
     "promote:mission-wiki": "node scripts/promote-mission-wiki.mjs",
     "queue:restore-literature": "node scripts/restore-literature-queue.mjs",
     "verify:desktop": "node scripts/check-node.mjs && node scripts/verify-desktop.mjs",

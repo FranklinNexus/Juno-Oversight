@@ -1,0 +1,28 @@
+{
+  "providers": {
+    "cursor": {
+      "minIntervalMs": 8000,
+      "maxRpm": 8,
+      "maxRph": 100,
+      "maxRpd": 400,
+      "maxConcurrent": 1,
+      "tokenBudgetDaily": 2500000,
+      "backoffBaseMs": 15000,
+      "backoffMaxMs": 600000
+    },
+    "openai": {
+      "minIntervalMs": 1000,
+      "maxRpm": 60,
+      "maxRph": 500,
+      "maxConcurrent": 2,
+      "tokenBudgetDaily": 0
+    }
+  },
+  "missions": {
+    "juno-axiom-book-2026": {
+      "estimatedLiveSlots": 42,
+      "estimatedTokensPerSlot": 26000,
+      "notes": "Copy to AgentWorkbench/config/api-limits.json"
+    }
+  }
+}

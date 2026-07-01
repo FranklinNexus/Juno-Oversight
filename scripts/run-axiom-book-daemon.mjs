@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Background daemon for axiom book mission. */
+/** Background daemon for axiom book mission — respects API gateway backoff. */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -32,13 +32,39 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function loadGateway() {
+  spawnSync("pnpm", ["orchestrator:build"], { cwd: repoRoot, stdio: "pipe", shell: true });
+  return import("../orchestrator/dist/api-gateway.js");
+}
+
+function backoffSleepMs(gateway) {
+  const rows = gateway.getQuotaStatus(workbench);
+  const cursor = rows.find((r) => r.providerId === "cursor");
+  if (!cursor?.backoffUntil) return 0;
+  const until = Date.parse(cursor.backoffUntil);
+  if (Number.isNaN(until)) return 0;
+  return Math.max(0, until - Date.now() + 2000);
+}
+
 log(`started pid=${process.pid} interval=${intervalMs}ms`);
+
+const gateway = await loadGateway();
 
 while (true) {
   if (missionComplete()) {
-    writeFileSync(statePath, `${JSON.stringify({ status: "complete", bookHan: countBookHan(workbench), updatedAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
+    writeFileSync(
+      statePath,
+      `${JSON.stringify({ status: "complete", bookHan: countBookHan(workbench), updatedAt: new Date().toISOString() }, null, 2)}\n`,
+      "utf8",
+    );
     log("mission COMPLETE — exit");
     break;
+  }
+
+  const backoffMs = backoffSleepMs(gateway);
+  if (backoffMs > 0) {
+    log(`API backoff — sleep ${Math.round(backoffMs / 1000)}s`);
+    await sleep(backoffMs);
   }
 
   const tick = spawnSync("node", ["scripts/juno-autonomy-tick.mjs", "--execute"], {
@@ -47,9 +73,22 @@ while (true) {
     shell: false,
   });
 
+  const quota = gateway.getQuotaStatus(workbench).find((r) => r.providerId === "cursor");
   writeFileSync(
     statePath,
-    `${JSON.stringify({ status: "running", lastExit: tick.status, bookHan: countBookHan(workbench), updatedAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        status: "running",
+        lastExit: tick.status,
+        bookHan: countBookHan(workbench),
+        api: quota
+          ? { rpm: quota.rpm, dailyRequests: quota.dailyRequests, backoffUntil: quota.backoffUntil }
+          : null,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 

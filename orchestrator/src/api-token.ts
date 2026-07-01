@@ -2,6 +2,15 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { appendEvent, touchHeartbeat } from "./events.js";
 import { nowIso } from "./env.js";
+import {
+  estimateManifestTokens,
+  parseHttpRetryAfterMs,
+  recordApiFailure,
+  recordApiSuccess,
+  releaseApiSlot,
+  resolveProviderId,
+  waitForApiSlot,
+} from "./api-gateway.js";
 import type { RunManifest } from "./types.js";
 
 function resolveApiKey(manifest: RunManifest): { apiKey: string; model: string; baseUrl: string } {
@@ -26,6 +35,18 @@ export async function runApiToken(
   prompt: string,
 ): Promise<{ ok: boolean; text: string }> {
   const { apiKey, model, baseUrl } = resolveApiKey(manifest);
+  const providerId = resolveProviderId(manifest);
+  const estimatedTokens = estimateManifestTokens(manifest);
+  const started = Date.now();
+
+  const gate = await waitForApiSlot(workbench, providerId, {
+    estimatedTokens,
+    maxWaitMs: 600_000,
+  });
+  if (!gate.ok) {
+    throw new Error(`API gateway blocked (${gate.reason})`);
+  }
+
   const eventsPath = path.join(runDir, "events.jsonl");
   mkdirSync(path.resolve(workbench, manifest.cwd), { recursive: true });
 
@@ -33,7 +54,7 @@ export async function runApiToken(
     ts: nowIso(),
     type: "status",
     status: "starting",
-    detail: `api_token:${model}`,
+    detail: `api_token:${model} via ${providerId}`,
   });
 
   const heartbeat = setInterval(() => touchHeartbeat(runDir), 30_000);
@@ -62,6 +83,13 @@ export async function runApiToken(
 
     if (!res.ok) {
       const errText = await res.text();
+      const retryAfterMs = parseHttpRetryAfterMs(res.headers);
+      recordApiFailure(workbench, providerId, {
+        httpStatus: res.status,
+        retryAfterMs,
+        retryable: res.status === 429 || res.status >= 500,
+        message: errText.slice(0, 200),
+      });
       throw new Error(`OpenAI HTTP ${res.status}: ${errText.slice(0, 400)}`);
     }
 
@@ -111,9 +139,14 @@ export async function runApiToken(
       status: "finished",
       result: fullText.slice(0, 8000),
     });
+    recordApiSuccess(workbench, providerId, {
+      tokens: estimatedTokens,
+      latencyMs: Date.now() - started,
+    });
     return { ok: true, text: fullText };
   } finally {
     clearInterval(heartbeat);
+    releaseApiSlot(workbench, providerId);
   }
 }
 

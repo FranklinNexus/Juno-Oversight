@@ -2,6 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Agent, CursorAgentError } from "@cursor/sdk";
 import { runApiToken } from "./api-token.js";
+import {
+  estimateManifestTokens,
+  recordApiFailure,
+  recordApiSuccess,
+  releaseApiSlot,
+  resolveProviderId,
+  waitForApiSlot,
+} from "./api-gateway.js";
 import { appendEvent, touchHeartbeat } from "./events.js";
 import { loadProjectEnv, nowIso, workbenchRoot } from "./env.js";
 import {
@@ -70,12 +78,29 @@ async function runComposerStreaming(
   const apiKey = process.env.CURSOR_API_KEY;
   if (!apiKey?.trim()) throw new Error("CURSOR_API_KEY is not set");
 
+  const providerId = resolveProviderId(manifest);
+  const estimatedTokens = estimateManifestTokens(manifest);
+  const started = Date.now();
+
+  const gate = await waitForApiSlot(workbench, providerId, {
+    estimatedTokens,
+    maxWaitMs: 900_000,
+  });
+  if (!gate.ok) {
+    throw new Error(`API gateway blocked (${gate.reason}) — retry later`);
+  }
+
   const cwd = workbench;
   mkdirSync(path.resolve(workbench, manifest.cwd), { recursive: true });
   const eventsPath = path.join(runDir, "events.jsonl");
   const modelId = manifest.model ?? "composer-2.5";
 
-  appendEvent(eventsPath, { ts: nowIso(), type: "status", status: "starting", detail: modelId });
+  appendEvent(eventsPath, {
+    ts: nowIso(),
+    type: "status",
+    status: "starting",
+    detail: `${modelId} via api-gateway:${providerId}`,
+  });
   updateOrchestrator(workbench, manifest.runId, "running");
 
   const heartbeat = setInterval(() => touchHeartbeat(runDir), 30_000);
@@ -114,6 +139,7 @@ async function runComposerStreaming(
         status: "error",
         result: result.result,
       });
+      recordApiFailure(workbench, providerId, { retryable: true, message: result.result });
       return { ok: false, text: result.result ?? streamed };
     }
 
@@ -124,9 +150,22 @@ async function runComposerStreaming(
       status: "finished",
       result: finalText.slice(0, 8000),
     });
+    recordApiSuccess(workbench, providerId, {
+      tokens: estimatedTokens,
+      latencyMs: Date.now() - started,
+    });
     return { ok: true, text: finalText };
+  } catch (err: unknown) {
+    if (err instanceof CursorAgentError) {
+      recordApiFailure(workbench, providerId, {
+        retryable: err.isRetryable,
+        message: err.message,
+      });
+    }
+    throw err;
   } finally {
     clearInterval(heartbeat);
+    releaseApiSlot(workbench, providerId);
   }
 }
 
