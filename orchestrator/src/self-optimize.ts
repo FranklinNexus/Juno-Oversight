@@ -52,6 +52,45 @@ export function loadSelfOptimizeConfig(workbench: string): SelfOptimizeConfig {
   }
 }
 
+export const BOOK_QUALITY_MISSION_ID = "juno-book-quality-2026";
+
+function bookQualityCheckpointComplete(workbench: string): boolean {
+  const cp = path.join(workbench, "missions", BOOK_QUALITY_MISSION_ID, "checkpoint.md");
+  if (!existsSync(cp)) return false;
+  return /STATUS:\s*COMPLETE/i.test(readFileSync(cp, "utf8"));
+}
+
+/** Mark book-quality mission COMPLETE when programmatic scan has zero failures. */
+export function syncBookQualityMissionComplete(workbench: string): boolean {
+  const scan = readQualityScan(workbench);
+  if (!scan || scan.failedChapters.length > 0) return false;
+
+  const missionDir = path.join(workbench, "missions", BOOK_QUALITY_MISSION_ID);
+  if (!existsSync(missionDir)) return false;
+  if (bookQualityCheckpointComplete(workbench)) return true;
+
+  const progressPath = path.join(missionDir, "progress.md");
+  if (existsSync(progressPath)) {
+    let text = readFileSync(progressPath, "utf8");
+    text = text.replace(/\|\s*(?:queued|in_progress)\s*\|/gi, "| done |");
+    writeFileSync(progressPath, text, "utf8");
+  }
+
+  writeFileSync(
+    path.join(missionDir, "checkpoint.md"),
+    `# Checkpoint — ${BOOK_QUALITY_MISSION_ID}
+
+STATUS: COMPLETE
+
+## 状态
+Programmatic quality scan PASS — all chapters ok (${scan.scannedAt})
+
+`,
+    "utf8",
+  );
+  return true;
+}
+
 export function readQualityScan(workbench: string): BookQualityScan | null {
   const p = qualityScanPath(workbench);
   if (!existsSync(p)) return null;
@@ -128,6 +167,9 @@ export function runSelfOptimize(workbench: string): SelfOptimizeReport {
       }
     }
     rubricPatched = patchQualityRubric(workbench, qualityScan);
+    if (qualityScan.failedChapters.length === 0) {
+      syncBookQualityMissionComplete(workbench);
+    }
   }
 
   const workflowIds = listSearchableWorkflows();

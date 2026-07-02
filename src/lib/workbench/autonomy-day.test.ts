@@ -12,4 +12,12 @@ describe("autonomy-day", () => {
     expect(ms).toBeGreaterThan(0);
     expect(ms).toBeLessThanOrEqual(49 * 3_600_000);
   });
+
+  it("msUntilNextAutonomyDay targets next calendar day boundary", () => {
+    const tz = "Asia/Shanghai";
+    const noon = Date.parse("2026-07-02T04:00:00.000Z"); // 12:00 Shanghai
+    const ms = msUntilNextAutonomyDay("/tmp/unused", noon);
+    expect(ms).toBeGreaterThan(10 * 3_600_000);
+    expect(ms).toBeLessThan(13 * 3_600_000);
+  });
 });

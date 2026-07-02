@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 
 import path from "node:path";
 import type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
 import { evaluateLoopGate } from "./loop-gate.js";
-import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan } from "./self-optimize.js";
+import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 
 export type LoopKind =
   | "local_loop"
@@ -159,6 +159,9 @@ export function loadMissionRegistry(workbench: string): MissionSpec[] {
       const o = charter.missionOverrides![spec.missionId];
       return o ? { ...spec, ...o } : spec;
     });
+  }
+  if (charter.missionPriority?.length) {
+    return base;
   }
   return base.sort((a, b) => a.priority - b.priority);
 }
@@ -340,6 +343,26 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
     const incomplete = !missionComplete(workbench, spec.missionId);
 
     if (started && incomplete) {
+      if (
+        spec.missionId === "juno-book-quality-2026" &&
+        !hasPendingBookQualityFixes(workbench)
+      ) {
+        syncBookQualityMissionComplete(workbench);
+        continue;
+      }
+      if (
+        spec.loopKind === "generic_queue" &&
+        !queueHeadMissionId(workbench) &&
+        missionHasQueuedPhases(workbench, spec.missionId) &&
+        spec.bootstrap
+      ) {
+        return {
+          action: "queue_mission",
+          missionId: spec.missionId,
+          bootstrap: spec.bootstrap,
+          reason: `Juno restores queue for ${spec.missionId} (phases queued, now empty)`,
+        };
+      }
       return decisionForSpec(
         spec,
         `Juno autonomously continues ${spec.missionId} (charter-driven)`,

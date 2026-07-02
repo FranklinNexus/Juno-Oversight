@@ -40,6 +40,7 @@ const { loadDailySchedule } = await import("../orchestrator/dist/daily-schedule.
 const { readAutonomyState, DEFAULT_AUTONOMY_LIMITS } = await import(
   "../orchestrator/dist/bounded-autonomy.js"
 );
+const { syncBookQualityMissionComplete } = await import("../orchestrator/dist/self-optimize.js");
 const { runDailyExport, validateExportRoot } = await import(
   "../orchestrator/dist/daily-export.js"
 );
@@ -52,6 +53,9 @@ const { acquireAutonomyLock, releaseAutonomyLock, readAutonomyLock } = await imp
 const { todayAutonomyDate } = await import("../orchestrator/dist/autonomy-day.js");
 
 const schedule = loadDailySchedule(workbench);
+if (syncBookQualityMissionComplete(workbench)) {
+  log("book-quality mission marked COMPLETE (scan PASS)");
+}
 const stateDir = path.join(workbench, "state");
 const runStatePath = path.join(stateDir, "daily-juno.json");
 const pidPath = path.join(stateDir, "daily-juno.pid");

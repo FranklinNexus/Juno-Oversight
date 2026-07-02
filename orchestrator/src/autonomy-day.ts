@@ -21,14 +21,19 @@ export function loadAutonomyTimezone(workbench: string): string {
   }
 }
 
+/** YYYY-MM-DD at a specific instant in the configured local timezone. */
+export function autonomyDateAtMs(ms: number, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
 /** YYYY-MM-DD in the configured local timezone (for daily iteration caps). */
 export function todayAutonomyDate(workbench: string, timezone?: string): string {
   const tz = timezone ?? loadAutonomyTimezone(workbench);
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
+  return autonomyDateAtMs(Date.now(), tz);
 }
 
 /** Milliseconds until the next autonomy day boundary (local midnight in configured TZ). */
@@ -37,15 +42,15 @@ export function msUntilNextAutonomyDay(
   nowMs: number = Date.now(),
 ): number {
   const tz = loadAutonomyTimezone(workbench);
-  const today = todayAutonomyDate(workbench, tz);
+  const today = autonomyDateAtMs(nowMs, tz);
   let cursor = nowMs + 30_000;
   const maxProbe = nowMs + 49 * 3_600_000;
-  while (cursor < maxProbe && todayAutonomyDate(workbench, tz) === today) {
+  while (cursor < maxProbe && autonomyDateAtMs(cursor, tz) === today) {
     cursor += 60_000;
   }
   if (cursor >= maxProbe) return 3_600_000;
   cursor -= 60_000;
-  while (cursor < maxProbe && todayAutonomyDate(workbench, tz) === today) {
+  while (cursor < maxProbe && autonomyDateAtMs(cursor, tz) === today) {
     cursor += 1_000;
   }
   return Math.max(1_000, cursor - nowMs);

@@ -98,7 +98,13 @@ export function recordAutonomyDecision(
       decision.action === "queue_mission");
 
   if (countsAsIteration) state.iterationsToday += 1;
-  if (succeeded && decision.action === "queue_mission") state.autoQueuedToday += 1;
+  if (succeeded && decision.action === "queue_mission") {
+    const restore =
+      "missionId" in decision &&
+      decision.missionId &&
+      missionStarted(workbench, decision.missionId);
+    if (!restore) state.autoQueuedToday += 1;
+  }
 
   writeAutonomyState(workbench, state);
   return state;
