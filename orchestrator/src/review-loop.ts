@@ -79,7 +79,10 @@ export function resolveQueueAdvance(
   }
 
   if (runKind === "implement") {
-    return { action: "dequeue" };
+    if (/STATUS:\s*COMPLETE/i.test(checkpointText)) {
+      return { action: "dequeue" };
+    }
+    return { action: "hold", reason: "review_pending" };
   }
 
   if (runKind === "debate" || runKind === "review" || runKind === "vote") {

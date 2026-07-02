@@ -116,6 +116,18 @@ while (true) {
   writeState({ lastExit: r.status ?? 0, status: "running" });
 
   if (r.status === 2) {
+    try {
+      const planner = JSON.parse(
+        readFileSync(path.join(workbench, "state", "mission-planner.json"), "utf8"),
+      );
+      if (planner.decision?.reason === "daily_iteration_cap") {
+        log(`daily cap reached (${planner.decision.detail ?? ""}) — exiting`);
+        onExit();
+        process.exit(0);
+      }
+    } catch {
+      /* ignore */
+    }
     log("escalate_human — sleeping until next interval");
   }
 

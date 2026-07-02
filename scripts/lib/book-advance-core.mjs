@@ -264,15 +264,26 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
   let action = evaluateCompletedRun(workbench, head.id);
 
   if (ch && runKind === "implement" && /-write|-revise/.test(head.phase_id ?? "")) {
-    const { validateChapterText } = await import("../../orchestrator/dist/quality-gate.js");
+    const { validateChapterText, autoFixChapterSpacedBold } = await import(
+      "../../orchestrator/dist/quality-gate.js"
+    );
     const p = chapterPath(workbench, ch);
     const text = readFileSync(p, "utf8");
-    const report = validateChapterText(text, ch, { strictLength: false });
+    let report = validateChapterText(text, ch, { strictLength: false });
     if (!report.ok) {
-      const mustFix = report.issues
-        .filter((i) => i.severity === "fail")
-        .map((i) => `${i.code}: ${i.message}`);
-      action = { action: "revise", mustFix };
+      const failCodes = report.issues.filter((i) => i.severity === "fail").map((i) => i.code);
+      if (failCodes.every((c) => c === "spaced_bold")) {
+        const fixResult = autoFixChapterSpacedBold(workbench, ch, { strictLength: false });
+        if (fixResult.fixed) {
+          report = validateChapterText(readFileSync(p, "utf8"), ch, { strictLength: false });
+        }
+      }
+      if (!report.ok) {
+        const mustFix = report.issues
+          .filter((i) => i.severity === "fail")
+          .map((i) => `${i.code}: ${i.message}`);
+        action = { action: "revise", mustFix };
+      }
     }
   }
 

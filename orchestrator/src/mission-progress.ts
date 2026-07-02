@@ -77,12 +77,43 @@ export function markMissionPhaseDone(
   missionId: string,
   phaseId: string,
 ): boolean {
+  const phaseKeys = progressPhaseKeys(phaseId);
+  const missionIds = progressMissionIds(missionId, phaseId);
+
+  for (const mid of missionIds) {
+    for (const key of phaseKeys) {
+      if (markProgressRow(workbench, mid, key)) return true;
+    }
+  }
+  return false;
+}
+
+/** Map bq-ch16-revise → ch16 for book-quality progress tables. */
+function progressPhaseKeys(phaseId: string): string[] {
+  const keys = [phaseId];
+  const m = phaseId.match(/(?:bq-)?ch(\d{2})/i);
+  if (m) keys.push(`ch${m[1]}`, `bq-ch${m[1]}`);
+  return [...new Set(keys)];
+}
+
+function progressMissionIds(missionId: string, phaseId: string): string[] {
+  const ids = [missionId];
+  if (/bq-ch\d{2}/i.test(phaseId) || phaseId.includes("book-quality")) {
+    ids.push("juno-book-quality-2026");
+  }
+  if (missionId === "juno-axiom-book-2026" && /bq-ch/i.test(phaseId)) {
+    ids.push("juno-book-quality-2026");
+  }
+  return [...new Set(ids)];
+}
+
+function markProgressRow(workbench: string, missionId: string, phaseId: string): boolean {
   const progressPath = path.join(workbench, "missions", missionId, "progress.md");
   if (!existsSync(progressPath)) return false;
 
   let text = readFileSync(progressPath, "utf8");
   const row = new RegExp(
-    `(\\|\\s*${phaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\|[^|]*\\|)\\s*queued\\s*(\\|)`,
+    `(\\|\\s*${phaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\|[^|]*\\|)\\s*(?:queued|in_progress)\\s*(\\|)`,
     "i",
   );
   if (!row.test(text)) return false;

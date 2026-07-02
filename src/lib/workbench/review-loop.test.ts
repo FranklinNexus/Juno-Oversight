@@ -33,8 +33,15 @@ describe("parseReviewVerdict", () => {
 });
 
 describe("resolveQueueAdvance", () => {
-  it("dequeues after implement without verdict", () => {
-    expect(resolveQueueAdvance("implement", "")).toEqual({ action: "dequeue" });
+  it("holds implement without STATUS COMPLETE", () => {
+    expect(resolveQueueAdvance("implement", "")).toEqual({
+      action: "hold",
+      reason: "review_pending",
+    });
+  });
+
+  it("dequeues implement with STATUS COMPLETE", () => {
+    expect(resolveQueueAdvance("implement", "STATUS: COMPLETE\n")).toEqual({ action: "dequeue" });
   });
 
   it("holds review slot until PASS", () => {

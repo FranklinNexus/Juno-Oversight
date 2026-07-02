@@ -40,6 +40,8 @@
     "book:loop:tick": "node scripts/juno-autonomy-tick.mjs --execute",
     "book:daemon": "node scripts/run-axiom-book-daemon.mjs",
     "book:quality-loop": "node scripts/run-book-quality-loop.mjs",
+    "book:quality-fix": "node scripts/run-book-quality-fix.mjs",
+    "juno:self-repair": "node scripts/run-self-repair-loop.mjs",
     "self:optimize": "node scripts/run-self-optimize.mjs",
     "mission:loop": "node scripts/run-mission-loop.mjs",
     "queue:hardening": "node scripts/queue-hardening.mjs",

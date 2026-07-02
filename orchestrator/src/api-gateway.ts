@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { workbenchRoot } from "./env.js";
+import { todayAutonomyDate } from "./autonomy-day.js";
 import type { RunManifest } from "./types.js";
 
 export type ApiProviderId = "cursor" | "openai" | "anthropic" | "generic";
@@ -99,26 +100,18 @@ const DEFAULT_LIMITS: Record<ApiProviderId, ProviderLimitConfig> = {
   },
 };
 
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
+function todayForQuota(workbench: string): string {
+  return todayAutonomyDate(workbench);
 }
 
-function quotaPath(workbench: string): string {
-  return path.join(workbench, "state", "api-quota.json");
-}
-
-function limitsConfigPath(workbench: string): string {
-  return path.join(workbench, "config", "api-limits.json");
-}
-
-function emptyProviderState(): ProviderState {
+function emptyProviderState(workbench: string): ProviderState {
   return {
     inflight: 0,
     lastStartTs: 0,
     backoffUntil: 0,
     backoffStreak: 0,
     requests: [],
-    daily: { date: todayUtc(), requests: 0, tokens: 0 },
+    daily: { date: todayForQuota(workbench), requests: 0, tokens: 0 },
   };
 }
 
@@ -170,11 +163,20 @@ export function resolveProviderId(manifest: RunManifest): ApiProviderId {
   return "generic";
 }
 
-function getProviderState(state: QuotaState, providerId: ApiProviderId): ProviderState {
-  if (!state.providers[providerId]) state.providers[providerId] = emptyProviderState();
+function quotaPath(workbench: string): string {
+  return path.join(workbench, "state", "api-quota.json");
+}
+
+function limitsConfigPath(workbench: string): string {
+  return path.join(workbench, "config", "api-limits.json");
+}
+
+function getProviderState(state: QuotaState, workbench: string, providerId: ApiProviderId): ProviderState {
+  if (!state.providers[providerId]) state.providers[providerId] = emptyProviderState(workbench);
   const ps = state.providers[providerId];
-  if (ps.daily.date !== todayUtc()) {
-    ps.daily = { date: todayUtc(), requests: 0, tokens: 0 };
+  const today = todayForQuota(workbench);
+  if (ps.daily.date !== today) {
+    ps.daily = { date: today, requests: 0, tokens: 0 };
   }
   pruneRequests(ps, Date.now());
   return ps;
@@ -243,7 +245,7 @@ export function acquireApiSlot(
 ): AcquireResult {
   const limits = resolveLimits(workbench, providerId);
   const state = readQuotaState(workbench);
-  const ps = getProviderState(state, providerId);
+  const ps = getProviderState(state, workbench, providerId);
   const now = Date.now();
   const check = computeWaitMs(limits, ps, now, opts.estimatedTokens ?? 0);
 
@@ -268,7 +270,7 @@ export function acquireApiSlot(
 
 export function releaseApiSlot(workbench: string, providerId: ApiProviderId): void {
   const state = readQuotaState(workbench);
-  const ps = getProviderState(state, providerId);
+  const ps = getProviderState(state, workbench, providerId);
   ps.inflight = Math.max(0, ps.inflight - 1);
   writeQuotaState(workbench, state);
 }
@@ -279,7 +281,7 @@ export function recordApiSuccess(
   meta: { tokens?: number; latencyMs?: number } = {},
 ): void {
   const state = readQuotaState(workbench);
-  const ps = getProviderState(state, providerId);
+  const ps = getProviderState(state, workbench, providerId);
   ps.backoffStreak = 0;
   ps.backoffUntil = 0;
   if (meta.tokens && meta.tokens > 0) {
@@ -298,7 +300,7 @@ export function recordApiFailure(
 ): AcquireResult {
   const limits = resolveLimits(workbench, providerId);
   const state = readQuotaState(workbench);
-  const ps = getProviderState(state, providerId);
+  const ps = getProviderState(state, workbench, providerId);
   ps.backoffStreak += 1;
 
   let waitMs = err.retryAfterMs ?? 0;
@@ -411,7 +413,7 @@ export function getQuotaStatus(workbench: string = workbenchRoot()): QuotaStatus
   for (const providerId of Object.keys(DEFAULT_LIMITS) as ApiProviderId[]) {
     const ps = state.providers[providerId];
     if (!ps && providerId !== "cursor") continue;
-    const p = ps ?? emptyProviderState();
+    const p = ps ?? emptyProviderState(workbench);
     pruneRequests(p, now);
     const limits = resolveLimits(workbench, providerId);
     rows.push({

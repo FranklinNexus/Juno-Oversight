@@ -26,6 +26,13 @@ if (build.status !== 0) process.exit(build.status ?? 1);
 const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
 loadProjectEnv();
 
+const { autoFixBookSpacedBoldOnly, scanBookQuality } = await import(
+  "../orchestrator/dist/quality-gate.js"
+);
+const preFix = autoFixBookSpacedBoldOnly(workbench, { strictLength: false });
+const preFixed = preFix.filter((r) => r.fixed).length;
+if (preFixed > 0) log(`programmatic fix: ${preFixed} chapters`);
+
 const deps = {
   queueIo: await import("../orchestrator/dist/queue-io.js"),
   manifest: await import("../orchestrator/dist/manifest.js"),
@@ -33,7 +40,34 @@ const deps = {
   idempotency: await import("../orchestrator/dist/idempotency.js"),
 };
 
+function clearStaleBqQueue(scan) {
+  if (scan.failedChapters.length > 0) return false;
+  const { parseNowYaml, saveNowQueue } = deps.queueIo;
+  const { markMissionPhaseDone } = deps.missionProgress;
+  let { now, backlog } = parseNowYaml(workbench);
+  const stale = now.filter((h) => /^bq-ch/.test(h.phase_id ?? ""));
+  if (stale.length === 0) return false;
+  for (const item of stale) {
+    markMissionPhaseDone(workbench, item.mission_id ?? BOOK_MISSION_ID, item.phase_id ?? "");
+  }
+  saveNowQueue(
+    workbench,
+    now.filter((h) => !/^bq-ch/.test(h.phase_id ?? "")),
+    backlog,
+  );
+  log(`cleared ${stale.length} stale bq-* slots — scan PASS`);
+  return true;
+}
+
+let scan = scanBookQuality(workbench, { strictLength: false });
+if (clearStaleBqQueue(scan)) {
+  writeBookLoopState(workbench, { status: "idle", slotsAdvancedThisRun: 0, qualityLoop: true, clearedStale: true });
+  log("=== book:quality-loop done — stale queue cleared ===");
+  process.exit(0);
+}
+
 let advanced = 0;
+let failed = false;
 for (let i = 0; i < maxSlots; i++) {
   const { parseNowYaml } = deps.queueIo;
   const { now } = parseNowYaml(workbench);
@@ -50,6 +84,7 @@ for (let i = 0; i < maxSlots; i++) {
   const live = await spawnLiveBookSlot(workbench, head, deps);
   if (!live.ok && !live.revised) {
     log(`failed: ${live.reason}`);
+    failed = true;
     break;
   }
   advanced += 1;
@@ -67,5 +102,8 @@ if (advanced > 0) {
   runSelfOptimize(workbench);
 }
 
-log(`=== book:quality-loop done — advanced ${advanced} ===`);
-process.exit(0);
+scan = scanBookQuality(workbench, { strictLength: false });
+const remaining = scan.failedChapters.length;
+
+log(`=== book:quality-loop done — advanced ${advanced}, remaining fail ${remaining || 0} ===`);
+process.exit(failed || remaining > 0 ? 1 : 0);

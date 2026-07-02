@@ -1,7 +1,7 @@
 /**
  * Programmatic quality gates — complements LLM review (catches Goodhart / typography bugs).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface ChapterQualityIssue {
@@ -39,6 +39,90 @@ export function countSpacedBoldArtifacts(text: string): number {
   const triple = (text.match(/\*\*\s+\*\*\s+\*\*/g) ?? []).length;
   const innerSpace = (text.match(/\*\*[^*\n]{1,12}\*\*\s+\*\*/g) ?? []).length;
   return triple + innerSpace;
+}
+
+/** Strip spaced-bold padding artifacts; returns cleaned text and approximate fixes applied. */
+export function fixSpacedBoldInText(text: string): { text: string; fixesApplied: number } {
+  let result = text;
+  let fixesApplied = 0;
+  const before = countSpacedBoldArtifacts(result);
+
+  for (let pass = 0; pass < 8; pass++) {
+    const prev = result;
+    result = result.replace(/\*\*\s+\*\*\s+\*\*/g, () => {
+      fixesApplied += 1;
+      return "";
+    });
+    result = result.replace(/\*\*([^*\n]{1,12}?)\*\*(\s+\*\*)+/g, (_, inner: string) => {
+      fixesApplied += 1;
+      return inner;
+    });
+    result = result.replace(/\*\*\s+\*\*/g, () => {
+      fixesApplied += 1;
+      return "";
+    });
+    if (result === prev) break;
+  }
+
+  const after = countSpacedBoldArtifacts(result);
+  return { text: result, fixesApplied: Math.max(fixesApplied, before - after) };
+}
+
+export interface ChapterAutoFixResult {
+  chapter: number;
+  path: string;
+  fixed: boolean;
+  skippedReason?: string;
+  fixesApplied: number;
+  okAfter: boolean;
+}
+
+/** Programmatic repair when spaced-bold is the only fail reason. */
+export function autoFixChapterSpacedBold(
+  workbench: string,
+  chapterNum: number,
+  opts: { strictLength?: boolean } = {},
+): ChapterAutoFixResult {
+  const p = chapterFilePath(workbench, chapterNum);
+  if (!existsSync(p)) {
+    return { chapter: chapterNum, path: p, fixed: false, skippedReason: "missing", fixesApplied: 0, okAfter: false };
+  }
+  const original = readFileSync(p, "utf8");
+  const before = validateChapterText(original, chapterNum, opts);
+  const failCodes = before.issues.filter((i) => i.severity === "fail").map((i) => i.code);
+  if (failCodes.length === 0) {
+    return { chapter: chapterNum, path: p, fixed: false, skippedReason: "already_ok", fixesApplied: 0, okAfter: true };
+  }
+  if (!failCodes.every((c) => c === "spaced_bold")) {
+    return {
+      chapter: chapterNum,
+      path: p,
+      fixed: false,
+      skippedReason: `other_fails:${failCodes.join(",")}`,
+      fixesApplied: 0,
+      okAfter: false,
+    };
+  }
+  const { text, fixesApplied } = fixSpacedBoldInText(original);
+  writeFileSync(p, text, "utf8");
+  const after = validateChapterText(text, chapterNum, opts);
+  return {
+    chapter: chapterNum,
+    path: p,
+    fixed: true,
+    fixesApplied,
+    okAfter: after.ok,
+  };
+}
+
+/** Fix all chapters that fail only on spaced-bold. */
+export function autoFixBookSpacedBoldOnly(
+  workbench: string,
+  opts: { strictLength?: boolean; chapters?: number[] } = {},
+): ChapterAutoFixResult[] {
+  const scan = scanBookQuality(workbench, opts);
+  const targets = opts.chapters ?? scan.failedChapters;
+  return targets.map((ch) => autoFixChapterSpacedBold(workbench, ch, opts));
 }
 
 export function validateChapterText(

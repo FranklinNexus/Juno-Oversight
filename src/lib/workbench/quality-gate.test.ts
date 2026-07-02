@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   countSpacedBoldArtifacts,
+  fixSpacedBoldInText,
   validateChapterText,
 } from "../../../orchestrator/src/quality-gate.js";
 
 describe("quality-gate", () => {
+  it("fixes spaced-bold artifacts programmatically", () => {
+    const bad = "正常段落。** ** **债务** ** **关系** ** **未** ** **闭合**。";
+    const { text, fixesApplied } = fixSpacedBoldInText(bad);
+    expect(fixesApplied).toBeGreaterThan(0);
+    expect(countSpacedBoldArtifacts(text)).toBe(0);
+    expect(text).toContain("债务");
+    expect(text).toContain("未");
+    expect(text).not.toMatch(/\*\*\s+\*\*/);
+  });
+
   it("detects spaced-bold artifacts", () => {
     const bad = "正常段落。** ** **债务** ** **关系** ** **未** ** **闭合**。";
     expect(countSpacedBoldArtifacts(bad)).toBeGreaterThanOrEqual(2);
