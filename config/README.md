@@ -7,6 +7,19 @@
 | [api-limits.example.json](./api-limits.example.json) | `api-limits.json` | Cursor/OpenAI RPM、并发、日 token 预算 |
 | [self-optimize.example.json](./self-optimize.example.json) | `self-optimize.json` | 自主优化：strict 字数、首选 workflow |
 | [mcp-servers.example.json](./mcp-servers.example.json) | `mcp-servers.json` | MCP 注册表；`devOnly` 仅 juno-overseer 任务 |
+| [autonomy-charter.example.json](./autonomy-charter.example.json) | `autonomy-charter.json` | **Juno 自主章程** — 不用逐 mission 指派 |
+
+## autonomy-charter.json
+
+Juno 根据章程 + mission registry **自己选下一 mission**：
+
+```bash
+pnpm autonomy:tick              # 预览决策
+pnpm autonomy:tick --execute  # 执行
+pnpm juno:daemon                # 后台循环（推荐）
+```
+
+见 [juno-bounded-autonomy.md](../wiki/juno-bounded-autonomy.md) §8。
 
 ## api-limits.json
 

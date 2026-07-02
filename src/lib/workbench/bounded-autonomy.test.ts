@@ -10,6 +10,11 @@ import os from "node:os";
 function wb(): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), "juno-autonomy-"));
   mkdirSync(path.join(dir, "missions", "juno-self-iterate-p2-2026"), { recursive: true });
+  writeFileSync(
+    path.join(dir, "missions", "juno-self-iterate-p2-2026", "progress.md"),
+    "| p01 | implement | in_progress |\n",
+    "utf8",
+  );
   mkdirSync(path.join(dir, "state"), { recursive: true });
   writeFileSync(path.join(dir, "config.yaml"), "scheduler:\n  require_loop_gate: false\n", "utf8");
   return dir;

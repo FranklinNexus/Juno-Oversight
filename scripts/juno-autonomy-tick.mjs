@@ -71,6 +71,14 @@ if (decision.action === "run_self_optimize") {
   process.exit(r.status ?? 1);
 }
 
+if (decision.action === "run_generic_loop") {
+  const r = spawnSync("node", ["scripts/run-mission-loop.mjs"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  process.exit(r.status ?? 1);
+}
+
 if (decision.action === "queue_mission") {
   if (decision.bootstrap === "queue:agi-literature") {
     const r = spawnSync("node", ["scripts/bootstrap-agi-literature.mjs"], {
@@ -81,6 +89,20 @@ if (decision.action === "queue_mission") {
   }
   if (decision.bootstrap === "queue:axiom-book") {
     const r = spawnSync("node", ["scripts/bootstrap-axiom-book.mjs"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    process.exit(r.status ?? 1);
+  }
+  if (decision.bootstrap === "queue:hardening") {
+    const r = spawnSync("node", ["scripts/queue-hardening.mjs"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    process.exit(r.status ?? 1);
+  }
+  if (decision.bootstrap === "queue:book-quality") {
+    const r = spawnSync("node", ["scripts/bootstrap-book-quality-revise.mjs"], {
       cwd: repoRoot,
       stdio: "inherit",
     });

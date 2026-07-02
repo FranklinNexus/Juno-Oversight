@@ -105,7 +105,7 @@ queue/now.yaml → Scheduler / loop scripts → spawn-run
 
 - **Review 门禁**：`REVIEW_VERDICT` 机器可读；BLOCK 不出队
 - **防火墙**：`.cursor/hooks` 拦截 Vault 读写与 destructive shell
-- **Bounded autonomy**：`pnpm autonomy:tick --execute` 自动推进 AGI / 写书 / self-optimize
+- **Bounded autonomy**：`pnpm juno:daemon` 或 `pnpm autonomy:tick --execute` — mission-planner 自选下一任务（quality / hardening / AGI…）
 
 ---
 
@@ -151,8 +151,9 @@ pnpm book:quality-loop    # 程序化 quality REVISE
 
 ```bash
 pnpm self:optimize        # scan + rubric patch + workflow + MCP hints
-pnpm autonomy:tick        # 决策预览
+pnpm autonomy:tick        # 决策预览（mission-planner）
 pnpm autonomy:tick --execute
+pnpm juno:daemon          # 后台自主循环（推荐）
 ```
 
 ---
