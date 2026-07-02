@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "startHourLocal": 7,
+  "tickIntervalMs": 120000,
+  "maxIterationsPerDay": null,
+  "maxIdleTicks": 5,
+  "exportRoot": "E:\\JunoDailyExport",
+  "exportObsidianBundle": true,
+  "exportMissionIds": [],
+  "purgeAfterRun": true,
+  "purgePolicy": {
+    "runsRetentionDays": 0,
+    "runsKeepRecent": 3,
+    "stagingRetentionDays": 0,
+    "purgeEmptyRuns": true
+  },
+  "exportRetentionDays": 30,
+  "notes": "Copy to AgentWorkbench/config/daily-schedule.json. exportRoot MUST be isolated — never Vault/repo/Workbench."
+}

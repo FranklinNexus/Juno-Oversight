@@ -143,9 +143,17 @@ pnpm autonomy:tick --execute    # 执行一轮
 pnpm juno:daemon                # 后台循环（推荐）
 ```
 
-Planner 优先级：quality scan → self-optimize → 队列头 → registry（P2 → AGI → 写书 → hardening…）。
+### 每日自动（刷满限额 + 隔离导出 + 清理）
 
-文档：[Bounded Autonomy](./wiki/juno-bounded-autonomy.md) · [Mission Planner §8](./wiki/juno-bounded-autonomy.md#8-mission-planner--章程不用逐-mission-指派)
+```bash
+Copy-Item config\daily-schedule.example.json E:\AgentWorkbench\config\daily-schedule.json
+pnpm daily:juno                 # 立即跑一轮
+pnpm daily:juno:install         # Windows 计划任务 07:00
+```
+
+导出到 **隔离目录**（默认 `E:\JunoDailyExport`），不写入 Vault。详见 [juno-daily-schedule.md](./wiki/juno-daily-schedule.md)。
+
+Planner 优先级：quality scan → self-optimize → 队列头 → registry（P2 → AGI → 写书 → hardening…）。
 
 ---
 

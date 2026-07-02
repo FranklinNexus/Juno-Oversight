@@ -8,6 +8,23 @@
 | [self-optimize.example.json](./self-optimize.example.json) | `self-optimize.json` | 自主优化：strict 字数、首选 workflow |
 | [mcp-servers.example.json](./mcp-servers.example.json) | `mcp-servers.json` | MCP 注册表；`devOnly` 仅 juno-overseer 任务 |
 | [autonomy-charter.example.json](./autonomy-charter.example.json) | `autonomy-charter.json` | **Juno 自主章程** — 不用逐 mission 指派 |
+| [daily-schedule.example.json](./daily-schedule.example.json) | `daily-schedule.json` | **每日自动批处理** — 刷满限额 + 隔离导出 + purge |
+
+## daily-schedule.json
+
+每日 Task Scheduler 调用 `pnpm daily:juno`：
+
+1. 循环 `autonomy:tick --execute` 直到**日限额刷满**或连续 idle
+2. 复制 Mission 文档 + state 到 **隔离目录**（默认 `E:\JunoDailyExport`，**非 Vault**）
+3. 自动 purge `runs/`、`staging/`（保留最近 3 个 run）
+
+```bash
+pnpm daily:juno                  # 立即跑一轮
+pnpm daily:juno:install          # Windows 计划任务（默认 07:00）
+pnpm daily:juno:uninstall
+```
+
+`exportRoot` 不得与 Vault、Workbench、Juno 仓库路径重叠。
 
 ## workbench:purge（安全清理）
 
