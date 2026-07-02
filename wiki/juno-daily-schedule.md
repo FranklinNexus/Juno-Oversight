@@ -9,9 +9,11 @@
 
 | 阶段 | 行为 |
 |------|------|
-| **Autonomy 刷满** | 循环 tick 直到 `iterationsToday >= maxSelfIterationsPerDay` |
+| **Autonomy 刷满** | 循环 tick 直到 `iterationsToday >= maxSelfIterationsPerDay`（**成功**才计次） |
+| **Autonomy 日切** | `autonomyTimezone`（默认 `Asia/Shanghai`），07:00 任务与限额对齐 |
+| **全局锁** | `state/autonomy.lock.json` — `juno:daemon` 与 `daily:juno` 互斥 |
 | **隔离导出** | 复制 digest + mission markdown → `exportRoot/YYYY-MM-DD/` |
-| **Purge** | 删除过期 `runs/`、`staging/`（不碰 missions/config/state） |
+| **Purge** | 删除过期 `runs/`、`staging/`（保留最近 N 个 run，含空目录） |
 
 人只需：设一次 `daily-schedule.json` + 安装计划任务。
 

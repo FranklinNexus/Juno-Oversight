@@ -7,6 +7,7 @@ import {
   type AutonomyLimits,
   type AutonomyState,
 } from "./autonomy-types.js";
+import { todayAutonomyDate } from "./autonomy-day.js";
 import { planNextMission, writePlannerSnapshot } from "./mission-planner.js";
 
 export type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
@@ -16,23 +17,24 @@ function statePath(workbench: string): string {
   return path.join(workbench, "state", "bounded-autonomy.json");
 }
 
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
+function todayForWorkbench(workbench: string): string {
+  return todayAutonomyDate(workbench);
 }
 
 export function readAutonomyState(workbench: string): AutonomyState {
   const p = statePath(workbench);
+  const today = todayForWorkbench(workbench);
   if (!existsSync(p)) {
-    return { date: todayUtc(), iterationsToday: 0, autoQueuedToday: 0 };
+    return { date: today, iterationsToday: 0, autoQueuedToday: 0 };
   }
   try {
     const raw = JSON.parse(readFileSync(p, "utf8")) as AutonomyState;
-    if (raw.date !== todayUtc()) {
-      return { date: todayUtc(), iterationsToday: 0, autoQueuedToday: 0 };
+    if (raw.date !== today) {
+      return { date: today, iterationsToday: 0, autoQueuedToday: 0 };
     }
     return raw;
   } catch {
-    return { date: todayUtc(), iterationsToday: 0, autoQueuedToday: 0 };
+    return { date: today, iterationsToday: 0, autoQueuedToday: 0 };
   }
 }
 
@@ -77,23 +79,26 @@ export function decideNextAction(
 export function recordAutonomyDecision(
   workbench: string,
   decision: AutonomyDecision,
+  opts: { succeeded?: boolean } = {},
 ): AutonomyState {
+  const succeeded = opts.succeeded !== false;
   const state = readAutonomyState(workbench);
   state.lastAction = decision.action;
   state.lastDecisionAt = new Date().toISOString();
   if ("missionId" in decision) state.lastMissionId = decision.missionId;
 
   const countsAsIteration =
-    decision.action === "run_local_loop" ||
-    decision.action === "run_agi_loop" ||
-    decision.action === "run_book_loop" ||
-    decision.action === "run_book_quality_loop" ||
-    decision.action === "run_generic_loop" ||
-    decision.action === "run_self_optimize" ||
-    decision.action === "queue_mission";
+    succeeded &&
+    (decision.action === "run_local_loop" ||
+      decision.action === "run_agi_loop" ||
+      decision.action === "run_book_loop" ||
+      decision.action === "run_book_quality_loop" ||
+      decision.action === "run_generic_loop" ||
+      decision.action === "run_self_optimize" ||
+      decision.action === "queue_mission");
 
   if (countsAsIteration) state.iterationsToday += 1;
-  if (decision.action === "queue_mission") state.autoQueuedToday += 1;
+  if (succeeded && decision.action === "queue_mission") state.autoQueuedToday += 1;
 
   writeAutonomyState(workbench, state);
   return state;

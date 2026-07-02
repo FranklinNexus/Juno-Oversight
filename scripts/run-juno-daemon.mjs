@@ -24,12 +24,32 @@ const daemonStatePath = path.join(stateDir, "juno-daemon.json");
 
 mkdirSync(stateDir, { recursive: true });
 
+const buildOnce = spawnSync("pnpm", ["orchestrator:build"], {
+  cwd: repoRoot,
+  stdio: "inherit",
+  shell: true,
+});
+if (buildOnce.status !== 0) process.exit(buildOnce.status ?? 1);
+
+const { acquireAutonomyLock, releaseAutonomyLock, readAutonomyLock } = await import(
+  "../orchestrator/dist/autonomy-lock.js"
+);
+
+if (!acquireAutonomyLock(workbench, "juno-daemon")) {
+  const held = readAutonomyLock(workbench);
+  process.stderr.write(
+    `[juno-daemon] blocked — autonomy lock held by ${held?.holder ?? "?"} pid=${held?.pid ?? "?"}\n`,
+  );
+  process.exit(1);
+}
+
 if (existsSync(pidPath)) {
   const oldPid = Number(readFileSync(pidPath, "utf8").trim());
   if (oldPid && oldPid !== process.pid) {
     try {
       process.kill(oldPid, 0);
       process.stderr.write(`[juno-daemon] already running pid=${oldPid}\n`);
+      releaseAutonomyLock(workbench);
       process.exit(1);
     } catch {
       /* stale */
@@ -59,29 +79,41 @@ function writeState(patch) {
   );
 }
 
+function onExit() {
+  try {
+    writeFileSync(pidPath, "", "utf8");
+  } catch {
+    /* ignore */
+  }
+  releaseAutonomyLock(workbench);
+}
+
+process.on("SIGINT", () => {
+  log("SIGINT — exit");
+  onExit();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  log("SIGTERM — exit");
+  onExit();
+  process.exit(0);
+});
+
 log(`started pid=${process.pid} interval=${intervalMs}ms`);
 
 while (true) {
-  const r = spawnSync("node", ["scripts/juno-autonomy-tick.mjs", "--execute"], {
-    cwd: repoRoot,
-    env: { ...process.env },
-    stdio: "inherit",
-    shell: false,
-  });
+  const r = spawnSync(
+    "node",
+    ["scripts/juno-autonomy-tick.mjs", "--execute", "--skip-build"],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+      stdio: "inherit",
+      shell: false,
+    },
+  );
 
   writeState({ lastExit: r.status ?? 0, status: "running" });
-
-  if (existsSync(daemonStatePath)) {
-    try {
-      const s = JSON.parse(readFileSync(daemonStatePath, "utf8"));
-      if (s.status === "complete") {
-        log("mission COMPLETE — exit");
-        break;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
 
   if (r.status === 2) {
     log("escalate_human — sleeping until next interval");
@@ -101,10 +133,4 @@ while (true) {
   }
 
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
-}
-
-try {
-  writeFileSync(pidPath, "", "utf8");
-} catch {
-  /* ignore */
 }

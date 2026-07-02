@@ -7,6 +7,8 @@ import type { PurgePolicy } from "./workbench-purge.js";
 
 export interface DailyScheduleConfig {
   enabled?: boolean;
+  /** IANA timezone for autonomy day boundary (default Asia/Shanghai). */
+  autonomyTimezone?: string;
   /** Local hour 0–23 to start (Task Scheduler should match). */
   startHourLocal?: number;
   /** Tick interval while filling daily cap (ms). */
@@ -31,6 +33,7 @@ export interface DailyScheduleConfig {
 
 export const DEFAULT_DAILY_SCHEDULE: DailyScheduleConfig = {
   enabled: true,
+  autonomyTimezone: "Asia/Shanghai",
   startHourLocal: 7,
   tickIntervalMs: 120_000,
   maxIterationsPerDay: null,

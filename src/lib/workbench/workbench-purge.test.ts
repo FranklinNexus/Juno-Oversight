@@ -31,6 +31,27 @@ describe("workbench-purge", () => {
     expect(isSafePurgePath(root, "C:\\Windows\\Temp")).toBe(false);
   });
 
+  it("keeps empty runs in runsKeepRecent set", () => {
+    const root = wb();
+    const recent = path.join(root, "runs", "recent-empty");
+    const old = path.join(root, "runs", "old-empty");
+    mkdirSync(recent, { recursive: true });
+    mkdirSync(old, { recursive: true });
+    const now = Date.now();
+    utimesSync(recent, now / 1000, now / 1000);
+    utimesSync(old, (now - 86_400_000) / 1000, (now - 86_400_000) / 1000);
+
+    const plan = planWorkbenchPurge(root, {
+      ...DEFAULT_PURGE_POLICY,
+      runsRetentionDays: 0,
+      runsKeepRecent: 1,
+      purgeEmptyRuns: true,
+    });
+
+    expect(plan.candidates.some((c) => c.relativePath.includes("recent-empty"))).toBe(false);
+    expect(plan.candidates.some((c) => c.relativePath.includes("old-empty"))).toBe(true);
+  });
+
   it("never deletes activeRunId", () => {
     const root = wb();
     mkdirSync(path.join(root, "runs", "keep-me"), { recursive: true });

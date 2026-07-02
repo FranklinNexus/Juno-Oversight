@@ -168,6 +168,8 @@ export function planWorkbenchPurge(
       const runPath = path.join(runsDir, name);
       if (!isSafePurgePath(workbenchRoot, runPath)) continue;
 
+      if (keepSet.has(name)) continue;
+
       const bytes = dirSizeBytes(runPath);
       const age = now - mtime;
 
@@ -180,8 +182,6 @@ export function planWorkbenchPurge(
         });
         continue;
       }
-
-      if (keepSet.has(name)) continue;
 
       if (age >= retentionMs) {
         candidates.push({

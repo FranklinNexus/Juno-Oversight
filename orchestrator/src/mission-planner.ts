@@ -303,11 +303,16 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
   // If queue has work, prefer running head mission (Juno continues what's in flight)
   const headMission = queueHeadMissionId(workbench);
   if (headMission) {
+    if (!limits.allowedMissionIds.includes(headMission)) {
+      return {
+        action: "stop",
+        reason: `queue head ${headMission} not in allowedMissionIds — fix now.yaml or charter`,
+      };
+    }
     const headSpec = registry.find((s) => s.missionId === headMission);
     if (headSpec && specEligible(workbench, headSpec, charter, limits)) {
       return decisionForSpec(headSpec, `queue head active — advance ${headMission}`);
     }
-    // Unknown mission in queue — generic loop
     return {
       action: "run_generic_loop",
       missionId: headMission,

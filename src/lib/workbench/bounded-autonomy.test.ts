@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   decideNextAction,
+  recordAutonomyDecision,
+  readAutonomyState,
   DEFAULT_AUTONOMY_LIMITS,
 } from "../../../orchestrator/src/bounded-autonomy.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
@@ -53,7 +55,7 @@ describe("bounded-autonomy", () => {
     writeFileSync(
       path.join(dir, "state", "bounded-autonomy.json"),
       JSON.stringify({
-        date: new Date().toISOString().slice(0, 10),
+        date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
         iterationsToday: 99,
         autoQueuedToday: 0,
       }),
@@ -61,5 +63,27 @@ describe("bounded-autonomy", () => {
     );
     const d = decideNextAction(dir, { ...DEFAULT_AUTONOMY_LIMITS, maxSelfIterationsPerDay: 3 });
     expect(d.action).toBe("escalate_human");
+  });
+
+  it("does not increment iteration when recordAutonomyDecision succeeded=false", () => {
+    const dir = wb();
+    mkdirSync(path.join(dir, "config"), { recursive: true });
+    writeFileSync(
+      path.join(dir, "config", "daily-schedule.json"),
+      JSON.stringify({ autonomyTimezone: "Asia/Shanghai" }),
+      "utf8",
+    );
+    const before = readAutonomyState(dir).iterationsToday;
+    recordAutonomyDecision(
+      dir,
+      {
+        action: "run_book_quality_loop",
+        missionId: "juno-book-quality-2026",
+        script: "book:quality-loop",
+        reason: "test fail",
+      },
+      { succeeded: false },
+    );
+    expect(readAutonomyState(dir).iterationsToday).toBe(before);
   });
 });
