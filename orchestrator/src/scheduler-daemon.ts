@@ -187,7 +187,7 @@ function handleCompletedRun(runId: string): void {
     case "revise":
       if (head) {
         dequeueNowHead();
-        prependNowItem(buildReviseImplementItem(head, Date.now()));
+        prependNowItem(buildReviseImplementItem(head, Date.now(), action.mustFix));
       }
       sched.lastAction = "review_revise";
       break;

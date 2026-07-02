@@ -11,13 +11,14 @@ import {
   waitForApiSlot,
 } from "./api-gateway.js";
 import { appendEvent, touchHeartbeat } from "./events.js";
-import { loadProjectEnv, nowIso, workbenchRoot } from "./env.js";
+import { junoProjectRoot, loadProjectEnv, nowIso, workbenchRoot } from "./env.js";
 import {
   buildUserPrompt,
   loadRunState,
   readJsonFile,
   saveRunState,
 } from "./manifest.js";
+import { writeMcpHints } from "./mcp-config.js";
 import type { RunManifest } from "./types.js";
 
 function parseArgs(argv: string[]): { manifestPath: string; dryRun: boolean } {
@@ -90,8 +91,16 @@ async function runComposerStreaming(
     throw new Error(`API gateway blocked (${gate.reason}) — retry later`);
   }
 
-  const cwd = workbench;
-  mkdirSync(path.resolve(workbench, manifest.cwd), { recursive: true });
+  const cwd =
+    manifest.repoRoot === "juno-overseer" ? junoProjectRoot() : workbench;
+  mkdirSync(path.resolve(cwd, manifest.cwd === "." ? "" : manifest.cwd), {
+    recursive: true,
+  });
+  const mcpHints = writeMcpHints(workbench, {
+    missionId: manifest.missionId,
+    repoRoot: manifest.repoRoot,
+    provider: manifest.provider,
+  });
   const eventsPath = path.join(runDir, "events.jsonl");
   const modelId = manifest.model ?? "composer-2.5";
 
@@ -99,7 +108,7 @@ async function runComposerStreaming(
     ts: nowIso(),
     type: "status",
     status: "starting",
-    detail: `${modelId} via api-gateway:${providerId}`,
+    detail: `${modelId} via api-gateway:${providerId}; mcp=[${mcpHints.enabledServers.map((s) => s.id).join(",")}]`,
   });
   updateOrchestrator(workbench, manifest.runId, "running");
 

@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "autoQueueBookRevise": true,
+  "strictChapterLength": false,
+  "preferredBookWorkflow": "axiom-book",
+  "notes": "Copy to AgentWorkbench/config/self-optimize.json"
+}

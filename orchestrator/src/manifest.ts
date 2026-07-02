@@ -1,7 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { junoProjectRoot, nowIso, workbenchRoot } from "./env.js";
 import { getSafetyDoctrineExcerpt } from "./safety-doctrine.js";
+import { readMcpHints, writeMcpHints } from "./mcp-config.js";
+import { parseReviewVerdict } from "./review-loop.js";
 import { normalizeEvalProfile, evalProfileFromWorkflow } from "./eval-profile.js";
 import { loadWorkflow } from "./workflow.js";
 import type { QueueItem, RunManifest, RunState } from "./types.js";
@@ -125,6 +127,7 @@ export function buildManifestFromQueue(item: QueueItem): RunManifest {
     successCriteria: item.success_criteria ?? "Update checkpoint.md with progress",
     workflowId,
     evalProfile,
+    allowedTools: item.allowed_tools,
   };
 }
 
@@ -157,6 +160,41 @@ function loadMissionContext(missionId: string, workbench: string): string {
     "## Mission progress",
     progress,
   ].join("\n");
+}
+
+function loadMustFixContext(workbench: string, missionId: string, phaseId?: string): string {
+  if (!phaseId) return "";
+  const missionDir = path.join(workbench, "missions", missionId);
+  if (!existsSync(missionDir)) return "";
+
+  const runsDir = path.join(workbench, "runs");
+  if (!existsSync(runsDir)) return "";
+
+  let latestReview = "";
+  const reviewKey = phaseId.replace(/-write$/, "-review").replace(/-revise-\d+$/, "-review");
+  for (const runId of readdirSync(runsDir)) {
+    if (!runId.includes(reviewKey)) continue;
+    const cpPath = path.join(runsDir, runId, "checkpoint.md");
+    if (!existsSync(cpPath)) continue;
+    const cp = readFileSync(cpPath, "utf8");
+    const parsed = parseReviewVerdict(cp);
+    if (parsed?.verdict === "REVISE" && parsed.mustFixNextSlot.length > 0) {
+      latestReview = parsed.mustFixNextSlot.map((f) => `- ${f}`).join("\n");
+    }
+  }
+  if (!latestReview) return "";
+  return ["## must_fix from prior review", latestReview, ""].join("\n");
+}
+
+function loadMcpContext(manifest: RunManifest, workbench: string): string {
+  const hints =
+    readMcpHints(workbench) ??
+    writeMcpHints(workbench, {
+      missionId: manifest.missionId,
+      repoRoot: manifest.repoRoot,
+      provider: manifest.provider,
+    });
+  return hints.promptBlock;
 }
 
 function loadQualityExcerpt(): string {
@@ -215,6 +253,10 @@ export function buildUserPrompt(
     ? loadMissionContext(manifest.missionId, workbench)
     : "";
   const qualityExcerpt = loadQualityExcerpt();
+  const mustFixCtx = manifest.missionId
+    ? loadMustFixContext(workbench, manifest.missionId, manifest.phaseId)
+    : "";
+  const mcpCtx = loadMcpContext(manifest, workbench);
   const eventsTail = tailEvents(runDir, EVENTS_TAIL_LINES);
   const kindGuard = runKindGuard(manifest.runKind);
 
@@ -248,6 +290,9 @@ export function buildUserPrompt(
     getSafetyDoctrineExcerpt(),
     "## Quality doctrine (excerpt)",
     qualityExcerpt,
+    mustFixCtx,
+    "## MCP (workbench registry)",
+    mcpCtx,
     missionCtx,
     "",
     "## Prompt template",

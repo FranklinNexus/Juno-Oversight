@@ -37,6 +37,7 @@ export interface QueueItem {
   depends_on?: string;
   workflow_id?: string;
   eval_profile?: "code" | "ui" | "literature" | "orchestrator";
+  allowed_tools?: string[];
 }
 
 export interface RunState {

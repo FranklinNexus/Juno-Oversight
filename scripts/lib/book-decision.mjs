@@ -190,5 +190,7 @@ export function needsLiveAgent(head) {
   const phase = head.phase_id ?? "";
   if (kind === "implement" && /ch\d{2}-write/.test(phase)) return true;
   if (kind === "review" && /ch\d{2}-review/.test(phase)) return true;
+  if (kind === "implement" && /bq-ch\d{2}-revise|ch\d{2}-revise/.test(phase)) return true;
+  if (kind === "review" && /bq-ch\d{2}-review/.test(phase)) return true;
   return false;
 }

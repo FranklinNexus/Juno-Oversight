@@ -225,8 +225,13 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
   const { loadProjectEnv } = await import("../../orchestrator/dist/env.js");
   loadProjectEnv();
   const { materializeQueueRun } = deps.manifest;
-  const { evaluateCompletedRun, markMissionPhaseDone, readRunKind, shouldMarkPhaseDone } =
-    deps.missionProgress;
+  const {
+    evaluateCompletedRun,
+    markMissionPhaseDone,
+    readRunKind,
+    shouldMarkPhaseDone,
+    buildReviseImplementItem,
+  } = deps.missionProgress;
   const { parseNowYaml, saveNowQueue } = deps.queueIo;
   const { mergeOrchestratorState } = deps.idempotency;
 
@@ -254,14 +259,43 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
   }
 
   const cp = readFileSync(cpPath, "utf8");
+  const runKind = readRunKind(workbench, head.id);
   const ch = parseChapterFromPhase(head.phase_id ?? "");
-  if (ch && (head.run_kind ?? head.kind) === "implement") {
-    const v = validateChapter(workbench, ch);
-    if (!v.ok) return { ok: false, reason: `chapter gate: ${v.reason}` };
+  let action = evaluateCompletedRun(workbench, head.id);
+
+  if (ch && runKind === "implement" && /-write|-revise/.test(head.phase_id ?? "")) {
+    const { validateChapterText } = await import("../../orchestrator/dist/quality-gate.js");
+    const p = chapterPath(workbench, ch);
+    const text = readFileSync(p, "utf8");
+    const report = validateChapterText(text, ch, { strictLength: false });
+    if (!report.ok) {
+      const mustFix = report.issues
+        .filter((i) => i.severity === "fail")
+        .map((i) => `${i.code}: ${i.message}`);
+      action = { action: "revise", mustFix };
+    }
   }
 
-  const action = evaluateCompletedRun(workbench, head.id);
-  const runKind = readRunKind(workbench, head.id);
+  if (action.action === "revise") {
+    const fix = buildReviseImplementItem(head, Date.now(), action.mustFix ?? []);
+    fix.repo_target = "workbench";
+    fix.prompt = "executor_book_write";
+    fix.phase_id = head.phase_id?.includes("-revise-")
+      ? head.phase_id
+      : `${head.phase_id?.replace(/-review$/, "-write") ?? "fix"}-revise-${Date.now()}`;
+    let { now, backlog } = parseNowYaml(workbench);
+    saveNowQueue(workbench, [fix, ...now.slice(1)], backlog);
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+    return { ok: true, revised: true, runId: head.id, mustFix: action.mustFix };
+  }
+
+  if (ch && runKind === "implement") {
+    const v = validateChapter(workbench, ch);
+    if (!v.ok && !/-revise-/.test(head.phase_id ?? "")) {
+      return { ok: false, reason: `chapter gate: ${v.reason}` };
+    }
+  }
+
   if (action.action !== "dequeue") {
     return { ok: false, reason: `live slot not dequeue-ready: ${action.action}` };
   }

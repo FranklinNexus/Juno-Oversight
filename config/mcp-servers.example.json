@@ -1,0 +1,21 @@
+{
+  "defaultForComposer": ["cursor-browser", "github"],
+  "servers": [
+    {
+      "id": "github",
+      "server": "github",
+      "enabled": true,
+      "devOnly": true,
+      "missions": ["juno-overseer-hardening-2026", "juno-self-iterate-p2-2026"],
+      "notes": "Dev branch — PR/issue ops via Cursor MCP"
+    },
+    {
+      "id": "cursor-browser",
+      "server": "cursor-ide-browser",
+      "enabled": true,
+      "devOnly": false,
+      "notes": "Optional web fetch for literature missions"
+    }
+  ],
+  "notes": "Copy to AgentWorkbench/config/mcp-servers.json. Vault still blocked by .cursor/hooks vault-gate."
+}

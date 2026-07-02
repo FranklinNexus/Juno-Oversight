@@ -119,7 +119,9 @@ pnpm queue:restore-literature
 | P0 自迭代（workflow + events + eval） | **完成** — `pnpm loop:self-iterate-run` |
 | P1 自迭代（safety + DAG + wiki promote） | **完成** — `pnpm loop:self-iterate-p1-run` |
 | P2 + bounded autonomy + AGI scaffold | **完成** — `pnpm loop:self-iterate-p2-run` |
-| AGI 1000 篇 + north-star 定稿 | 进行中 — `pnpm queue:agi-literature` |
+| AGI 1000 篇 + north-star 定稿 | **完成** — `pnpm agi:loop` |
+| 公理之书实验 | **完成** — `pnpm book:loop` |
+| API Gateway + self-optimize | **完成** — `pnpm self:optimize` · [juno-self-optimize.md](./juno-self-optimize.md) |
 | CI 跑 `pnpm loop:smoke` | 待接 |
 | Tauri 启 daemon 前 UI 提示 gate | 待接 |
 

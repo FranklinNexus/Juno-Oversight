@@ -93,7 +93,7 @@ for (let i = 0; i < maxSlots; i++) {
       break;
     }
     advanced += 1;
-    log(`live done ${head.id}`);
+    log(`live done ${head.id}${live.revised ? " (REVISE fix queued)" : ""}`);
     continue;
   }
 

@@ -55,6 +55,22 @@ if (decision.action === "run_book_loop") {
   process.exit(r.status ?? 1);
 }
 
+if (decision.action === "run_book_quality_loop") {
+  const r = spawnSync("node", ["scripts/run-book-quality-loop.mjs", "--max-slots=2"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  process.exit(r.status ?? 1);
+}
+
+if (decision.action === "run_self_optimize") {
+  const r = spawnSync("node", ["scripts/run-self-optimize.mjs"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  process.exit(r.status ?? 1);
+}
+
 if (decision.action === "queue_mission") {
   if (decision.bootstrap === "queue:agi-literature") {
     const r = spawnSync("node", ["scripts/bootstrap-agi-literature.mjs"], {

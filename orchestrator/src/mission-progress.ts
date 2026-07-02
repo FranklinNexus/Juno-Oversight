@@ -95,20 +95,25 @@ export function markMissionPhaseDone(
 export function buildReviseImplementItem(
   reviewItem: QueueItem,
   reviseIndex: number,
+  mustFix: string[] = [],
 ): QueueItem {
   const phaseId = reviewItem.phase_id ?? "fix";
+  const fixList =
+    mustFix.length > 0
+      ? mustFix.map((f) => `- ${f}`).join("\n")
+      : "address must_fix from prior review checkpoint";
   return {
     id: `${reviewItem.mission_id ?? "mission"}-${phaseId}-revise-${reviseIndex}`,
     horizon: reviewItem.horizon,
     kind: "implement",
     run_kind: "implement",
     repo_target: reviewItem.repo_target ?? "juno-overseer",
-    prompt: "executor_implement",
+    prompt: reviewItem.prompt === "executor_book_review" ? "executor_book_write" : "executor_implement",
     provider: reviewItem.provider,
     max_minutes: reviewItem.max_minutes ?? 25,
     mission_id: reviewItem.mission_id,
     phase_id: phaseId,
-    success_criteria: `REVISE fix slot ${reviseIndex}: address must_fix from review`,
+    success_criteria: `REVISE fix slot ${reviseIndex}:\n${fixList}`,
   };
 }
 

@@ -1,6 +1,6 @@
 # Juno Oversight — 维护手册
 
-**最后更新**：2026-07-01（第七轮 — 120% Wiki + LIVE dev 路由恢复）
+**最后更新**：2026-07-03（Self-optimize + API Gateway + quality-gate）
 
 ---
 
@@ -218,7 +218,10 @@ pnpm test
 | `review-loop.test.ts` | REVIEW/VERIFY 出队逻辑 |
 | `safety-doctrine.test.ts` | destructive shell 分类 |
 | `spawn-idempotency.test.ts` | shouldSkipSpawn |
-| `manifest-prompt.test.ts` | prompt 注入含 §11 |
+| `manifest-prompt.test.ts` | prompt 注入含 §11、MCP |
+| `api-gateway.test.ts` | 限速、配额、mission 容量 |
+| `quality-gate.test.ts` | spaced-bold、章节 rubric |
+| `bounded-autonomy.test.ts` | 自决策优先级 |
 | `orchestrator-isolation.test.ts` | Workbench/Vault 隔离 |
 
 Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review-loop.test.ts`（经 re-export 测 `shouldMarkPhaseDone`）。
@@ -264,6 +267,13 @@ node orchestrator/dist/spawn-run.js --manifest E:\AgentWorkbench\runs\<id>\manif
 ---
 
 ## 11. 变更记录
+
+### 2026-07-03（Self-optimize + Quality Gate）
+
+- `quality-gate.ts` — 程序化写书门禁（spaced-bold、公理、本书主张）
+- `self-optimize.ts` — scan → rubric patch → workflow selection → MCP hints
+- `book:quality-loop` / `self:optimize` / `pnpm api:quota`
+- README 与 `config/README.md` 上线文档
 
 ### 2026-07-01（第七轮 — 120% Wiki）
 
