@@ -41,6 +41,15 @@ export interface AutonomyCharter {
 
 export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
   {
+    missionId: "juno-daily-autonomy-2026",
+    priority: 1,
+    loopKind: "generic_queue",
+    loopScript: "juno:daemon",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: false,
+  },
+  {
     missionId: "juno-self-iterate-p2-2026",
     priority: 10,
     loopKind: "local_loop",
@@ -322,7 +331,9 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
   }
 
   for (const spec of registry) {
-    if (spec.missionId === "__self_optimize__") continue;
+    if (spec.missionId === "__self_optimize__" || spec.missionId === "juno-daily-autonomy-2026") {
+      continue;
+    }
     if (!specEligible(workbench, spec, charter, limits)) continue;
 
     const started = missionStarted(workbench, spec.missionId);

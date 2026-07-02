@@ -34,6 +34,7 @@ if (buildOnce.status !== 0) process.exit(buildOnce.status ?? 1);
 const { acquireAutonomyLock, releaseAutonomyLock, readAutonomyLock } = await import(
   "../orchestrator/dist/autonomy-lock.js"
 );
+const { msUntilNextAutonomyDay } = await import("../orchestrator/dist/autonomy-day.js");
 
 if (!acquireAutonomyLock(workbench, "juno-daemon")) {
   const held = readAutonomyLock(workbench);
@@ -121,9 +122,14 @@ while (true) {
         readFileSync(path.join(workbench, "state", "mission-planner.json"), "utf8"),
       );
       if (planner.decision?.reason === "daily_iteration_cap") {
-        log(`daily cap reached (${planner.decision.detail ?? ""}) — exiting`);
-        onExit();
-        process.exit(0);
+        const waitMs = msUntilNextAutonomyDay(workbench);
+        const nextAt = new Date(Date.now() + waitMs).toISOString();
+        log(`daily cap reached (${planner.decision.detail ?? ""}) — sleep until next day (~${Math.round(waitMs / 60_000)} min, ~${nextAt})`);
+        writeState({ status: "waiting_midnight", waitUntil: nextAt, lastCapDetail: planner.decision.detail });
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        log("autonomy day reset — resume ticks");
+        writeState({ status: "running", waitUntil: null });
+        continue;
       }
     } catch {
       /* ignore */

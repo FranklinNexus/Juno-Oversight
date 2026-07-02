@@ -30,3 +30,23 @@ export function todayAutonomyDate(workbench: string, timezone?: string): string 
     return new Date().toISOString().slice(0, 10);
   }
 }
+
+/** Milliseconds until the next autonomy day boundary (local midnight in configured TZ). */
+export function msUntilNextAutonomyDay(
+  workbench: string,
+  nowMs: number = Date.now(),
+): number {
+  const tz = loadAutonomyTimezone(workbench);
+  const today = todayAutonomyDate(workbench, tz);
+  let cursor = nowMs + 30_000;
+  const maxProbe = nowMs + 49 * 3_600_000;
+  while (cursor < maxProbe && todayAutonomyDate(workbench, tz) === today) {
+    cursor += 60_000;
+  }
+  if (cursor >= maxProbe) return 3_600_000;
+  cursor -= 60_000;
+  while (cursor < maxProbe && todayAutonomyDate(workbench, tz) === today) {
+    cursor += 1_000;
+  }
+  return Math.max(1_000, cursor - nowMs);
+}

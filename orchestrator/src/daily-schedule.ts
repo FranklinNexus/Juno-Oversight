@@ -34,7 +34,7 @@ export interface DailyScheduleConfig {
 export const DEFAULT_DAILY_SCHEDULE: DailyScheduleConfig = {
   enabled: true,
   autonomyTimezone: "Asia/Shanghai",
-  startHourLocal: 7,
+  startHourLocal: 0,
   tickIntervalMs: 120_000,
   maxIterationsPerDay: null,
   maxIdleTicks: 5,

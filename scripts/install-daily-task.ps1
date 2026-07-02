@@ -9,7 +9,7 @@
   .\scripts\install-daily-task.ps1 -Uninstall
 #>
 param(
-  [int]$Hour = 7,
+  [int]$Hour = 0,
   [int]$Minute = 0,
   [switch]$Uninstall
 )
