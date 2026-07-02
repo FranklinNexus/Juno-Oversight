@@ -93,6 +93,16 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     requiresIncomplete: true,
     autoQueue: true,
   },
+  {
+    missionId: "juno-workbench-cleanup-2026",
+    priority: 55,
+    bootstrap: "queue:workbench-cleanup",
+    loopKind: "generic_queue",
+    loopScript: "mission:loop",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: false,
+  },
 ];
 
 function charterPath(workbench: string): string {

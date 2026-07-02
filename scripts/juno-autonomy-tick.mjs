@@ -108,6 +108,13 @@ if (decision.action === "queue_mission") {
     });
     process.exit(r.status ?? 1);
   }
+  if (decision.bootstrap === "queue:workbench-cleanup") {
+    const r = spawnSync("node", ["scripts/bootstrap-workbench-cleanup.mjs"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    process.exit(r.status ?? 1);
+  }
   process.exit(1);
 }
 

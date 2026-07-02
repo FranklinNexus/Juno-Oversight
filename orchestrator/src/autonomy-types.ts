@@ -21,6 +21,7 @@ export const DEFAULT_AUTONOMY_LIMITS: AutonomyLimits = {
     "juno-axiom-book-2026",
     "juno-book-quality-2026",
     "juno-overseer-hardening-2026",
+    "juno-workbench-cleanup-2026",
   ],
 };
 

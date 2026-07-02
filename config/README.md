@@ -9,6 +9,18 @@
 | [mcp-servers.example.json](./mcp-servers.example.json) | `mcp-servers.json` | MCP 注册表；`devOnly` 仅 juno-overseer 任务 |
 | [autonomy-charter.example.json](./autonomy-charter.example.json) | `autonomy-charter.json` | **Juno 自主章程** — 不用逐 mission 指派 |
 
+## workbench:purge（安全清理）
+
+仅删除 `runs/`、`staging/` 下过期临时产物；**永不**触碰 missions、config、queue、state、仓库或 Vault：
+
+```bash
+pnpm workbench:purge
+pnpm workbench:purge --execute --i-understand
+pnpm queue:cleanup              # bootstrap cleanup mission（默认不覆盖 busy queue）
+```
+
+见 `missions-templates/juno-workbench-cleanup-2026/`。
+
 ## autonomy-charter.json
 
 Juno 根据章程 + mission registry **自己选下一 mission**：
