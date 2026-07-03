@@ -49,6 +49,7 @@ try {
 run("pnpm test", "pnpm", ["test"]);
 run("pnpm lint", "pnpm", ["lint"]);
 run("pnpm build", "pnpm", ["build"]);
+run("dev smoke (Turbopack)", "node", ["scripts/dev-smoke.mjs"]);
 run("orchestrator:build", "pnpm", ["orchestrator:build"]);
 run("cargo check", "cargo", ["check"], { cwd: path.join(root, "src-tauri") });
 

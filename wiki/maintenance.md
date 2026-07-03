@@ -19,7 +19,8 @@
 
 ```bash
 pnpm install          # 安装依赖
-pnpm dev              # predev 释放 3000 + next dev -p 3000
+pnpm dev              # 释放 3000 + 修复 Turbopack cache + next dev
+pnpm dev:smoke        # 临时起 dev 并 HTTP 冒烟（verify:desktop 已包含）
 pnpm tauri:dev        # 桌面壳 + Next 热更新（需先能访问 localhost:3000）
 pnpm clean            # 删除 out/ 与 .next/（排错时用；勿在 dev 跑着时 clean）
 pnpm build            # clean + 静态导出到 out/（仅 production 启用 export）
@@ -27,7 +28,7 @@ pnpm preview          # 静态 out/ 本地预览（原 start）
 pnpm lint             # ESLint
 pnpm test             # Vitest 单元测试
 pnpm orchestrator:build
-pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
+pnpm verify:desktop   # test + lint + build + dev-smoke + orchestrator + cargo check
 pnpm ui:smoke         # HTTP 冒烟（需 dev server）
 node scripts/simulate-smoke-loop.mjs   # 三 slot 门禁 dry 模拟
 node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
@@ -232,7 +233,8 @@ Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review
 
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
-| **Internal Server Error**（白底一行字） | dev 时误开 `output: "export"`；或 3000 上跑着坏掉的旧 Next | `pnpm clean` → 杀旧 node → `pnpm dev` |
+| **Runtime Error: Cannot find module … [turbopack]_runtime.js** | `.next/dev` 里残留坏的 `pages/_document.js`（Obsidian 同步 / 中断 dev） | `pnpm clean` → `pnpm dev`（现会自动清 cache + 释放 3000） |
+| **Internal Server Error**（白底一行字） | dev 时误开 `output: "export"`；或 3000 上跑着坏掉的旧 Next | `pnpm clean` → `pnpm dev` |
 | Tauri 开发窗口报错但浏览器正常 | `devUrl` 端口不对（3000 vs 3001） | 只保留一个 `pnpm dev` |
 | Tauri 白屏 | 未 build 或 `out/` 无 `index.html` | `pnpm build` 后检查 `out/index.html` |
 | `out/dev/server` 或 `out/dev/cache` | 曾在 export 模式下跑过 `next dev` | `pnpm clean` 后重来 |
