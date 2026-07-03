@@ -129,6 +129,11 @@ if (decision.action === "queue_mission") {
       cwd: repoRoot,
       stdio: "inherit",
     });
+  } else if (decision.bootstrap === "queue:runtime-overnight") {
+    r = spawnSync("node", ["scripts/bootstrap-runtime-overnight.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
   } else {
     finish(false);
     process.exit(1);

@@ -49,18 +49,30 @@ function missionStarted(workbench: string, missionId: string): boolean {
 }
 
 function limitsForWorkbench(workbench: string, base: AutonomyLimits): AutonomyLimits {
+  let limits = base;
+  const overridePath = path.join(workbench, "config", "autonomy-limits.json");
+  if (existsSync(overridePath)) {
+    try {
+      const raw = JSON.parse(readFileSync(overridePath, "utf8")) as Partial<AutonomyLimits>;
+      limits = { ...limits, ...raw };
+    } catch {
+      /* use base */
+    }
+  }
   if (
     missionStarted(workbench, "juno-axiom-book-2026") &&
     !existsSync(path.join(workbench, "missions", "juno-axiom-book-2026", "checkpoint.md"))
   ) {
-    return BOOK_EXPERIMENT_LIMITS;
+    return { ...BOOK_EXPERIMENT_LIMITS, ...limits, maxSelfIterationsPerDay: Math.max(limits.maxSelfIterationsPerDay, BOOK_EXPERIMENT_LIMITS.maxSelfIterationsPerDay) };
   }
   const cp = path.join(workbench, "missions", "juno-axiom-book-2026", "checkpoint.md");
   if (missionStarted(workbench, "juno-axiom-book-2026") && existsSync(cp)) {
     const text = readFileSync(cp, "utf8");
-    if (!/STATUS:\s*COMPLETE/i.test(text)) return BOOK_EXPERIMENT_LIMITS;
+    if (!/STATUS:\s*COMPLETE/i.test(text)) {
+      return { ...BOOK_EXPERIMENT_LIMITS, ...limits, maxSelfIterationsPerDay: Math.max(limits.maxSelfIterationsPerDay, BOOK_EXPERIMENT_LIMITS.maxSelfIterationsPerDay) };
+    }
   }
-  return base;
+  return limits;
 }
 
 /**

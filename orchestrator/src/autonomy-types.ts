@@ -14,6 +14,7 @@ export const DEFAULT_AUTONOMY_LIMITS: AutonomyLimits = {
   requireLoopGateForScheduler: true,
   requireHumanPromoteFor: ["scheduler_enable", "vault_write", "git_destroy"],
   allowedMissionIds: [
+    "juno-runtime-overnight-2026",
     "juno-von-neumann-unit-2026",
     "juno-daily-autonomy-2026",
     "juno-self-iterate-2026",

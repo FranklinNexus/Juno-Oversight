@@ -52,6 +52,8 @@
     "evolution:tick": "node scripts/run-evolution-tick.mjs",
     "workbench:purge": "node scripts/run-workbench-purge.mjs",
     "queue:cleanup": "node scripts/bootstrap-workbench-cleanup.mjs",
+    "queue:runtime-overnight": "node scripts/bootstrap-runtime-overnight.mjs --force-queue",
+    "overnight:start": "node scripts/start-overnight.mjs",
     "daily:juno": "node scripts/run-daily-juno.mjs",
     "daily:juno:install": "powershell -ExecutionPolicy Bypass -File scripts/install-daily-task.ps1",
     "daily:juno:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/install-daily-task.ps1 -Uninstall",

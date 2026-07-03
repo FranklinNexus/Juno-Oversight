@@ -3,6 +3,7 @@
   "charter": "Juno AI Work Runtime — bounded autonomy for long-running missions: deterministic gates, checkpoint memory, human promote. You set charter; Runtime picks the next queued work.",
   "autoDiscoverMissions": true,
   "missionPriority": [
+    "juno-runtime-overnight-2026",
     "juno-von-neumann-unit-2026",
     "juno-daily-autonomy-2026",
     "juno-book-quality-2026",

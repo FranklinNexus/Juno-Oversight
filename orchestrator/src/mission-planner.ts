@@ -45,6 +45,16 @@ export interface AutonomyCharter {
 
 export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
   {
+    missionId: "juno-runtime-overnight-2026",
+    priority: 5,
+    bootstrap: "queue:runtime-overnight",
+    loopKind: "generic_queue",
+    loopScript: "mission:loop",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: false,
+  },
+  {
     missionId: "juno-von-neumann-unit-2026",
     priority: 0,
     loopKind: "generic_queue",
