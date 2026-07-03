@@ -65,4 +65,4 @@ backlog:
 [System.IO.File]::WriteAllText($nowPath, $nowYaml, $utf8)
 Write-Host "Mission $missionId queued (3 slots)."
 Write-Host "Run: pnpm loop:self-iterate-run  (local runner)"
-Write-Host "Live: enable scheduler + spawn-run per slot (see wiki/architecture-loop.md §8)"
+Write-Host "Live: enable scheduler + spawn-run per slot (see wiki/archive/architecture-loop.md §8)"

@@ -20,7 +20,7 @@ $scopeLock = @"
 - orchestrator/src/queue-io.ts
 - orchestrator/src/scheduler-daemon.ts（仅改为 import queue-io）
 - package.json（仅 \`loop:smoke\` / \`loop:meta\` scripts）
-- wiki/architecture-loop.md、wiki/smoke-loop.md、wiki/orchestrator.md（loop 章节）
+- wiki/archive/architecture-loop.md、wiki/smoke-loop.md、wiki/modules/runtime.md（loop 章节）
 
 ## 允许修改（Workbench）
 - missions/$missionId/**
@@ -38,7 +38,7 @@ $northStar = @"
 3. 本 Mission 自身也走 implement→review→verify 过关
 
 ## 完成定义
-meta02 verify 的 VERIFY_REPORT 全 PASS；wiki/architecture-loop.md 描述自指闭环。
+meta02 verify 的 VERIFY_REPORT 全 PASS；wiki/archive/architecture-loop.md 描述自指闭环。
 "@
 
 $progress = @"

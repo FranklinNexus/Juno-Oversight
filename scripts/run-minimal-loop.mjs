@@ -134,7 +134,7 @@ function assertSelfIterateP2Deliverables() {
     "scripts/juno-autonomy-tick.mjs",
     "scripts/bootstrap-agi-literature.mjs",
     "wiki/juno-agi-north-star.md",
-    "wiki/juno-bounded-autonomy.md",
+    "wiki/modules/runtime.md",
   ];
   for (const rel of required) {
     if (!existsSync(path.join(repoRoot, rel))) {
@@ -164,7 +164,7 @@ function assertMetaDeliverables() {
   const required = [
     "scripts/run-minimal-loop.mjs",
     "orchestrator/src/queue-io.ts",
-    "wiki/architecture-loop.md",
+    "wiki/archive/architecture-loop.md",
     "package.json",
   ];
   for (const rel of required) {
@@ -282,7 +282,7 @@ STATUS: COMPLETE
 - orchestrator/workflows/self-iterate-p2.json + variants/
 - debate run_kind + review-loop updates
 - scripts/juno-autonomy-tick.mjs, bootstrap-agi-literature.mjs
-- wiki/juno-agi-north-star.md, juno-bounded-autonomy.md
+- wiki/juno-agi-north-star.md, wiki/modules/runtime.md
 - missions/juno-agi-literature-2026 scaffold + batch-01
 `;
   } else if (missionId === "juno-self-iterate-p1-2026") {
@@ -308,7 +308,7 @@ STATUS: COMPLETE
 - manifest.ts workflowId + evalProfile
 - scripts/bootstrap-self-iterate.ps1, run-minimal-loop.mjs
 - package.json loop:self-iterate*
-- wiki/architecture-loop.md §8
+- wiki/archive/architecture-loop.md §8
 `;
   } else {
     changes = `# Checkpoint — ${item.phase_id}
@@ -318,7 +318,7 @@ STATUS: COMPLETE
 ## CHANGES
 - scripts/run-minimal-loop.mjs
 - orchestrator/src/queue-io.ts
-- wiki/architecture-loop.md
+- wiki/archive/architecture-loop.md
 - package.json loop:smoke / loop:meta-run
 `;
   }

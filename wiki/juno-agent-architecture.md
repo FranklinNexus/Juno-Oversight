@@ -2,7 +2,7 @@
 
 **Mission**：`juno-agent-literature-2026`  
 **最后更新**：2026-06-01  
-**依据**：100 篇 auto-agent 论文（见 [agent-literature-index.md](./agent-literature-index.md)）+ 现有 Loop 自指栈（[architecture-loop.md](./architecture-loop.md)）
+**依据**：100 篇 auto-agent 论文（见 [agent-literature-index.md](./agent-literature-index.md)）+ 现有 Loop 自指栈（[archive/architecture-loop.md](./archive/architecture-loop.md)）
 
 ---
 
@@ -103,7 +103,7 @@ flowchart TB
 
 ## 4. 与 Loop 自指栈的关系
 
-[architecture-loop.md](./architecture-loop.md) 已实现的 **自指闭环** 在文献中有直接对应：
+[archive/architecture-loop.md](./archive/architecture-loop.md) 已实现的 **自指闭环** 在文献中有直接对应：
 
 | Juno 机制 | 文献锚点 | 迭代含义 |
 |-----------|----------|----------|
@@ -181,4 +181,4 @@ flowchart TB
 
 - **Scope-lock**：本 Mission **未改** `src/**` 与 orchestrator 依赖；以上为 **架构建议**，落地需独立 implement Mission。
 - **真源顺序**：行为以 `orchestrator/src/` + [overseer-quality.md](./overseer-quality.md) 为准；本文档为文献驱动的 **设计 north-star**。
-- **关联**：[workbench.md](./workbench.md) · [orchestrator.md](./orchestrator.md) · [architecture-loop.md](./architecture-loop.md) · [agent-literature-index.md](./agent-literature-index.md)
+- **关联**：[modules/runtime.md](./modules/runtime.md) · [archive/architecture-loop.md](./archive/architecture-loop.md) · [agent-literature-index.md](./agent-literature-index.md)

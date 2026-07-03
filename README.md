@@ -143,7 +143,7 @@ Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT` · `CURSOR_API_KEY`
 ```bash
 pnpm install && pnpm test
 cp .env.example .env.local
-.\scripts\scaffold-workbench.ps1          # Windows; see wiki/workbench.md
+.\scripts\scaffold-workbench.ps1          # Windows; see wiki/modules/runtime.md
 node scripts/sync-workbench-hooks.mjs
 pnpm orchestrator:build && pnpm verify:desktop
 pnpm tauri:dev                            # Surface
@@ -212,7 +212,7 @@ fitness = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) 
 
 Workbench holds ephemeral runs/staging; Vault stays read-only. Agent proposes next mission; human keeps **charter** and **promote**. Amodei-style oversight without unbounded AutoGPT loops.
 
-Deep dives → [juno-architecture.md](./wiki/juno-architecture.md) · [juno-von-neumann-unit.md](./wiki/juno-von-neumann-unit.md) · [overseer-quality.md](./wiki/overseer-quality.md)
+Deep dives → [modules/evolution.md](./wiki/modules/evolution.md) · [overseer-quality.md](./wiki/overseer-quality.md)
 
 </details>
 

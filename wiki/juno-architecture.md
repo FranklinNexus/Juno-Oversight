@@ -95,7 +95,7 @@ flowchart TD
 7. Registry（charter 排序）→ 继续 / bootstrap
 8. auto-discover（progress 有 queued、队列为空）
 
-详见 [juno-bounded-autonomy.md](./juno-bounded-autonomy.md)。
+详见 [modules/runtime.md](./modules/runtime.md)（Bounded Autonomy）。
 
 ---
 
@@ -126,7 +126,7 @@ Fitness 公式（默认权重）：
 score = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
 ```
 
-详见 [juno-von-neumann-unit.md](./juno-von-neumann-unit.md)。
+详见 [modules/evolution.md](./modules/evolution.md)（Von Neumann 自指单元）。
 
 ---
 

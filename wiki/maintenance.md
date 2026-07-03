@@ -97,7 +97,7 @@ src/
     dev/components/      # UI 目录（development only）
   components/
     dashboard/           # HudViewport、LayoutCanvas、PanelWindow、顶栏
-    widgets/             # Overseer + 战术 Widget（见 wiki/widgets.md）
+    widgets/             # Overseer + 战术 Widget（见 wiki/modules/product.md）
     market/              # 行情 Hub、详情、图表
     ui/                  # HUD UI Kit
   hooks/
@@ -109,7 +109,7 @@ src/
     jupiter-telemetry-hub.ts
   mocks/
   store/                 # layout-store v6、hud-store、market-store
-orchestrator/src/        # scheduler、spawn-run、review-loop（见 wiki/orchestrator.md）
+orchestrator/src/        # scheduler、spawn-run、review-loop（见 wiki/modules/runtime.md）
 src-tauri/
 scripts/
 wiki/                    # 120% 文档索引见 wiki/README.md

@@ -17,7 +17,7 @@
 | 记忆 | checkpoint + events + wiki skill 库 |
 | 工具 | scope-lock + MCP + repo |
 | 自我改进 | P0–P2 self-iterate + workflow-search |
-| **限制** | [bounded-autonomy](./juno-bounded-autonomy.md) |
+| **限制** | [bounded-autonomy](./modules/runtime.md) |
 
 ```mermaid
 flowchart TB
@@ -115,7 +115,7 @@ pnpm autonomy:tick --execute    # 执行（排队 AGI 或跑 P2 loop）
 
 ## 6. 关联
 
-- [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) — 自指进化 v0（fitness + 突变白名单）
-- [juno-bounded-autonomy.md](./juno-bounded-autonomy.md)
+- [modules/evolution.md](./modules/evolution.md) — 自指进化 v0（fitness + 突变白名单）
+- [modules/runtime.md](./modules/runtime.md) — Bounded Autonomy
 - [juno-agent-architecture.md](./juno-agent-architecture.md)
-- [architecture-loop.md](./architecture-loop.md)
+- [archive/architecture-loop.md](./archive/architecture-loop.md)
