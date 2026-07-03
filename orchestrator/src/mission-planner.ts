@@ -442,6 +442,12 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
           reason: `Juno discovered stale mission ${missionId} — restore queue`,
         };
       }
+      if (spec) {
+        return decisionForSpec(
+          spec,
+          `Juno discovered incomplete mission ${missionId} with queued phases`,
+        );
+      }
       return {
         action: "run_generic_loop",
         missionId,

@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tests-126_passing-success" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-127_passing-success" alt="tests" />
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
 </p>
 
@@ -222,9 +222,9 @@ Deep dives → [juno-architecture.md](./wiki/juno-architecture.md) · [juno-von-
 
 | When you need… | Link |
 |----------------|------|
-| Module map & state files | [juno-architecture.md](./wiki/juno-architecture.md) |
+| Module map & state files | [wiki/modules/runtime.md](./wiki/modules/runtime.md) · [juno-architecture.md](./wiki/juno-architecture.md) |
 | Gate spec (authoritative) | [overseer-quality.md](./wiki/overseer-quality.md) |
-| HUD & widgets | [whitepaper.md](./wiki/whitepaper.md) |
+| Full wiki index | [wiki/modules/README.md](./wiki/modules/README.md) |
 | Full index | [wiki/README.md](./wiki/README.md) |
 
 ---

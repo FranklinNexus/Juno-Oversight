@@ -87,10 +87,20 @@ if (decision.action === "run_self_optimize") {
 }
 
 if (decision.action === "run_generic_loop") {
-  const r = spawnSync("node", ["scripts/run-mission-loop.mjs"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
+  const script = decision.script ?? "mission:loop";
+  let r;
+  if (script === "mission:loop") {
+    r = spawnSync("node", ["scripts/run-mission-loop.mjs", "--skip-build"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+    });
+  } else if (script.endsWith(".mjs")) {
+    r = spawnSync("node", [`scripts/${script}`], { cwd: repoRoot, stdio: "inherit" });
+  } else {
+    r = spawnSync("pnpm", [script], { cwd: repoRoot, stdio: "inherit", shell: true });
+  }
+  // exit 4 = queue empty noop — do not burn daily cap
   finish(r.status === 0);
   process.exit(r.status ?? 1);
 }

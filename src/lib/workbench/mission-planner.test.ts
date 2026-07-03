@@ -158,4 +158,27 @@ describe("mission-planner", () => {
       existsSync(path.join(dir, "missions", "juno-book-quality-2026", "checkpoint.md")),
     ).toBe(true);
   });
+
+  it("auto-discover von-neumann uses evolution:tick not mission:loop", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "juno-planner-vn-"));
+    mkdirSync(path.join(dir, "missions", "juno-von-neumann-unit-2026"), { recursive: true });
+    writeFileSync(
+      path.join(dir, "missions", "juno-von-neumann-unit-2026", "progress.md"),
+      "| mcp-effectors | queued |\n",
+      "utf8",
+    );
+    mkdirSync(path.join(dir, "queue"), { recursive: true });
+    writeFileSync(path.join(dir, "queue", "now.yaml"), "now: []\nbacklog: []\n", "utf8");
+    mkdirSync(path.join(dir, "state"), { recursive: true });
+    writeFileSync(path.join(dir, "config.yaml"), "scheduler:\n  require_loop_gate: false\n", "utf8");
+
+    const d = planNextMission({
+      workbench: dir,
+      state: { date: "2026-07-03", iterationsToday: 0, autoQueuedToday: 0 },
+      limits: DEFAULT_AUTONOMY_LIMITS,
+    });
+    expect(d.action).toBe("run_generic_loop");
+    expect(d.missionId).toBe("juno-von-neumann-unit-2026");
+    expect(d.script).toBe("evolution:tick");
+  });
 });

@@ -3,7 +3,7 @@
  * Generic mission loop — spawn one Live slot from queue head (hardening, etc.).
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,8 +17,17 @@ function log(m) {
   process.stderr.write(`[mission-loop] ${m}\n`);
 }
 
-const build = spawnSync("pnpm", ["orchestrator:build"], { cwd: repoRoot, stdio: "inherit", shell: true });
-if (build.status !== 0) process.exit(build.status ?? 1);
+const skipBuild =
+  process.argv.includes("--skip-build") ||
+  process.env.JUNO_SKIP_ORCHESTRATOR_BUILD === "1";
+if (!skipBuild) {
+  const build = spawnSync("pnpm", ["orchestrator:build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (build.status !== 0) process.exit(build.status ?? 1);
+}
 
 const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
 loadProjectEnv();
@@ -39,7 +48,7 @@ const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotenc
 let { now, backlog } = parseNowYaml(workbench);
 if (now.length === 0) {
   log("queue empty — nothing to advance");
-  process.exit(0);
+  process.exit(4);
 }
 
 const { repairHardeningQueue, HARDENING_MISSION_ID } = await import(
@@ -54,7 +63,7 @@ if (head.mission_id === HARDENING_MISSION_ID) {
     ({ now, backlog } = parseNowYaml(workbench));
     if (now.length === 0) {
       log("queue empty after repair");
-      process.exit(0);
+      process.exit(4);
     }
     head = now[0];
   }

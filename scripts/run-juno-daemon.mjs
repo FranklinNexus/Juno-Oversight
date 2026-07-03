@@ -121,7 +121,8 @@ while (true) {
       const planner = JSON.parse(
         readFileSync(path.join(workbench, "state", "mission-planner.json"), "utf8"),
       );
-      if (planner.decision?.reason === "daily_iteration_cap") {
+      const reason = planner.decision?.reason ?? "exit_2";
+      if (reason === "daily_iteration_cap") {
         const waitMs = msUntilNextAutonomyDay(workbench);
         const nextAt = new Date(Date.now() + waitMs).toISOString();
         log(`daily cap reached (${planner.decision.detail ?? ""}) — sleep until next day (~${Math.round(waitMs / 60_000)} min, ~${nextAt})`);
@@ -143,10 +144,14 @@ while (true) {
         writeState({ status: "running", waitUntil: null });
         continue;
       }
+      log(`tick exit 2 (${reason}) — gate hold or human required; retry in ${intervalMs / 1000}s`);
     } catch {
-      /* ignore */
+      log(`tick exit 2 — retry in ${intervalMs / 1000}s`);
     }
-    log("escalate_human — sleeping until next interval");
+  }
+
+  if (r.status === 4) {
+    log("noop (empty queue) — not counting toward cap; retry after interval");
   }
 
   if (r.status === 0) {
