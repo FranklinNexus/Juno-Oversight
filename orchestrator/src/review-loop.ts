@@ -12,7 +12,7 @@ export interface ParsedReviewVerdict {
 
 export type QueueAdvanceAction =
   | { action: "dequeue" }
-  | { action: "hold"; reason: "review_pending" | "review_revise" }
+  | { action: "hold"; reason: "review_pending" | "review_revise" | "verify_pending" }
   | { action: "block" }
   | { action: "revise"; mustFix: string[] };
 
@@ -69,6 +69,9 @@ export function resolveQueueAdvance(
   checkpointText: string,
 ): QueueAdvanceAction {
   if (runKind === "verify") {
+    if (!/##\s*VERIFY_REPORT/i.test(checkpointText)) {
+      return { action: "hold", reason: "verify_pending" };
+    }
     if (isReviewBlocked(checkpointText)) {
       return { action: "block" };
     }

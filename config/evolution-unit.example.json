@@ -1,0 +1,35 @@
+{
+  "enabled": true,
+  "weights": {
+    "bookQuality": 10,
+    "hardening": 5,
+    "capUtilization": 2,
+    "apiHealth": 20,
+    "idlePenalty": 3
+  },
+  "mutationAllowlist": [
+    "config/mission-registry.json",
+    "config/self-optimize.json",
+    "config/mcp-servers.json",
+    "config/model-defaults.json",
+    "state/mcp-hints.json",
+    "state/workflow-selection.json",
+    "missions/juno-axiom-book-2026/quality-rubric.md"
+  ],
+  "mutationDenylist": [
+    "config/autonomy-charter.json",
+    "Vault",
+    ".git",
+    "git push --force",
+    "git reset --hard"
+  ],
+  "plannerFeedback": {
+    "enabled": true,
+    "rollingDays": 7,
+    "declineThresholdDays": 3,
+    "minDailyScores": 2,
+    "selfOptimizeOnDecline": true,
+    "escalateOnBackoffDecline": true
+  },
+  "notes": "Copy to AgentWorkbench/config/evolution-unit.json"
+}

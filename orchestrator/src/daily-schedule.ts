@@ -15,8 +15,8 @@ export interface DailyScheduleConfig {
   tickIntervalMs?: number;
   /** Override maxSelfIterationsPerDay; null = use autonomy defaults. */
   maxIterationsPerDay?: number | null;
-  /** Stop after N consecutive planner `stop` decisions (no work). */
-  maxIdleTicks?: number;
+  /** Stop after N consecutive planner `stop` decisions; null = only stop on daily cap. */
+  maxIdleTicks?: number | null;
   /** Isolated export root — NEVER Vault / repo / Workbench. */
   exportRoot?: string;
   /** Copy mission markdown + state snapshots for Obsidian reading. */
@@ -37,7 +37,7 @@ export const DEFAULT_DAILY_SCHEDULE: DailyScheduleConfig = {
   startHourLocal: 0,
   tickIntervalMs: 120_000,
   maxIterationsPerDay: null,
-  maxIdleTicks: 5,
+  maxIdleTicks: null,
   exportRoot: "E:\\JunoDailyExport",
   exportObsidianBundle: true,
   exportMissionIds: [],

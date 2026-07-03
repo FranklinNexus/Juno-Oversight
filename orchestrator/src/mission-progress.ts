@@ -19,6 +19,24 @@ export function readCheckpoint(workbench: string, runId: string): string {
   }
 }
 
+export function checkpointTextForAdvance(
+  workbench: string,
+  runId: string,
+  missionId?: string,
+): string {
+  const runText = readCheckpoint(workbench, runId);
+  if (/##\s*VERIFY_REPORT|REVIEW_VERDICT|STATUS:\s*COMPLETE/i.test(runText)) {
+    return runText;
+  }
+  if (missionId) {
+    const missionCp = path.join(workbench, "missions", missionId, "checkpoint.md");
+    if (existsSync(missionCp)) {
+      return readFileSync(missionCp, "utf8");
+    }
+  }
+  return runText;
+}
+
 export function readRunKind(workbench: string, runId: string): RunKind {
   const manifestPath = path.join(workbench, "runs", runId, "manifest.json");
   try {
@@ -48,8 +66,9 @@ export function readRunKind(workbench: string, runId: string): RunKind {
 export function evaluateCompletedRun(
   workbench: string,
   runId: string,
+  missionId?: string,
 ): QueueAdvanceAction {
-  const checkpoint = readCheckpoint(workbench, runId);
+  const checkpoint = checkpointTextForAdvance(workbench, runId, missionId);
   const runKind = readRunKind(workbench, runId);
   return resolveQueueAdvance(runKind, checkpoint);
 }

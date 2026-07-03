@@ -4,7 +4,10 @@ import { fetchLiveOhlcSeries } from "@/lib/market/live/klines";
 
 const TIMEFRAMES = new Set<ChartTimeframe>(["1m", "15m", "1h", "4h", "1d"]);
 
-/** Dev-only proxy: static `pnpm build` export omits Route Handlers. */
+/** Dev-only proxy: static `pnpm build` export omits Route Handlers unless marked static. */
+export const dynamic = "force-static";
+export const revalidate = false;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const symbol = url.searchParams.get("symbol")?.trim() ?? "";

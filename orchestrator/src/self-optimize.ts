@@ -11,6 +11,7 @@ import {
   type BookQualityScan,
 } from "./quality-gate.js";
 import { listSearchableWorkflows, selectBestWorkflow } from "./workflow-search.js";
+import { recordEvolutionTick, isMutationPathAllowed } from "./evolution-unit.js";
 
 export interface SelfOptimizeConfig {
   enabled?: boolean;
@@ -104,6 +105,7 @@ export function readQualityScan(workbench: string): BookQualityScan | null {
 function patchQualityRubric(workbench: string, scan: BookQualityScan): boolean {
   const rubricPath = path.join(workbench, "missions", BOOK_MISSION_ID, "quality-rubric.md");
   if (!existsSync(rubricPath)) return false;
+  if (!isMutationPathAllowed(workbench, rubricPath)) return false;
 
   let text = readFileSync(rubricPath, "utf8");
   const marker = "## 程序化门禁（self-optimize 自动追加）";
@@ -183,26 +185,39 @@ export function runSelfOptimize(workbench: string): SelfOptimizeReport {
     score: best.score,
     reasons: best.reasons,
   };
-  writeFileSync(
-    path.join(workbench, "state", "workflow-selection.json"),
-    `${JSON.stringify({ ...workflowSelection, updatedAt: new Date().toISOString() }, null, 2)}\n`,
-    "utf8",
-  );
-  recommendedActions.push(`workflow: use ${workflowSelection.workflowId} for next book mission`);
+  const workflowStatePath = path.join(workbench, "state", "workflow-selection.json");
+  if (isMutationPathAllowed(workbench, workflowStatePath)) {
+    writeFileSync(
+      workflowStatePath,
+      `${JSON.stringify({ ...workflowSelection, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+      "utf8",
+    );
+    recommendedActions.push(`workflow: use ${workflowSelection.workflowId} for next book mission`);
+  }
 
-  writeMcpHints(workbench, { missionId: BOOK_MISSION_ID, repoRoot: "juno-overseer", provider: "cursor_composer" });
-  recommendedActions.push("mcp: refreshed state/mcp-hints.json from config/mcp-servers.json");
+  const mcpHintsPath = path.join(workbench, "state", "mcp-hints.json");
+  let mcpHintsWritten = false;
+  if (isMutationPathAllowed(workbench, mcpHintsPath)) {
+    writeMcpHints(workbench, { missionId: BOOK_MISSION_ID, repoRoot: "juno-overseer", provider: "cursor_composer" });
+    mcpHintsWritten = true;
+    recommendedActions.push("mcp: refreshed state/mcp-hints.json from config/mcp-servers.json");
+  }
 
   const report: SelfOptimizeReport = {
     ranAt: new Date().toISOString(),
     qualityScan,
     workflowSelection,
     rubricPatched,
-    mcpHintsWritten: true,
+    mcpHintsWritten,
     recommendedActions,
   };
 
   writeFileSync(reportPath(workbench), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  try {
+    recordEvolutionTick(workbench, { trigger: "self_optimize", note: "self-optimize tick" });
+  } catch {
+    /* best-effort */
+  }
   return report;
 }
 

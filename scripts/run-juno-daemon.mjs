@@ -126,7 +126,19 @@ while (true) {
         const nextAt = new Date(Date.now() + waitMs).toISOString();
         log(`daily cap reached (${planner.decision.detail ?? ""}) — sleep until next day (~${Math.round(waitMs / 60_000)} min, ~${nextAt})`);
         writeState({ status: "waiting_midnight", waitUntil: nextAt, lastCapDetail: planner.decision.detail });
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        const chunkMs = 5 * 60_000;
+        let remaining = waitMs;
+        while (remaining > 0) {
+          const slice = Math.min(chunkMs, remaining);
+          await new Promise((resolve) => setTimeout(resolve, slice));
+          remaining -= slice;
+          writeState({
+            status: "waiting_midnight",
+            waitUntil: nextAt,
+            heartbeatAt: new Date().toISOString(),
+            waitRemainingMs: remaining,
+          });
+        }
         log("autonomy day reset — resume ticks");
         writeState({ status: "running", waitUntil: null });
         continue;

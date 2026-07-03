@@ -91,7 +91,7 @@ pnpm queue:restore-agi           # backlog → now
 | 限制 | 值 |
 |------|-----|
 | 日自主迭代 | ≤3 (`bounded-autonomy.json`) |
-| 自动排队 Mission | ≤1/日 |
+| 自动排队 Mission | ≤2/日 |
 | Scheduler | 需 loop-gate |
 | 禁止自动 | Vault 写、git destroy、force push |
 
@@ -115,6 +115,7 @@ pnpm autonomy:tick --execute    # 执行（排队 AGI 或跑 P2 loop）
 
 ## 6. 关联
 
+- [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) — 自指进化 v0（fitness + 突变白名单）
 - [juno-bounded-autonomy.md](./juno-bounded-autonomy.md)
 - [juno-agent-architecture.md](./juno-agent-architecture.md)
 - [architecture-loop.md](./architecture-loop.md)

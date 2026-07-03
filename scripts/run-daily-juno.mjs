@@ -155,7 +155,7 @@ if (!schedule.enabled) {
 const maxIter =
   schedule.maxIterationsPerDay ?? DEFAULT_AUTONOMY_LIMITS.maxSelfIterationsPerDay;
 const intervalMs = schedule.tickIntervalMs ?? 120_000;
-const maxIdle = schedule.maxIdleTicks ?? 5;
+const maxIdle = schedule.maxIdleTicks ?? null;
 
 log(`autonomyDate=${runReport.autonomyDate} maxIterations=${maxIter} interval=${intervalMs}ms`);
 
@@ -192,16 +192,20 @@ while (true) {
     /* ignore */
   }
 
-  if (r.status === 2 && plannerDecision?.reason === "auto_queue_cap") {
-    log(`auto_queue_cap — sleep and retry (${after.iterationsToday}/${maxIter})`);
+  if (r.status === 2) {
+    if (plannerDecision?.reason === "auto_queue_cap") {
+      log(`auto_queue_cap — sleep and retry (${after.iterationsToday}/${maxIter})`);
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      continue;
+    }
+    if (plannerDecision?.reason === "daily_iteration_cap") {
+      log(`daily cap filled via escalate (${after.iterationsToday}/${maxIter})`);
+      runReport.capFilled = true;
+      break;
+    }
+    log(`escalate (non-cap): ${plannerDecision?.reason ?? "?"} — sleep and retry`);
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
     continue;
-  }
-
-  if (r.status === 2) {
-    log(`escalate: ${plannerDecision?.reason ?? "?"} (${after.iterationsToday}/${maxIter})`);
-    runReport.capFilled = after.iterationsToday >= maxIter;
-    break;
   }
 
   if (r.status !== 0) {
@@ -211,8 +215,10 @@ while (true) {
   if (plannerDecision?.action === "stop") {
     idleStreak += 1;
     runReport.idleStreak = idleStreak;
-    log(`idle stop (${idleStreak}/${maxIdle}): ${plannerDecision.reason}`);
-    if (idleStreak >= maxIdle) {
+    log(
+      `idle stop (${idleStreak}${maxIdle != null ? `/${maxIdle}` : ", cap-only mode"}): ${plannerDecision.reason}`,
+    );
+    if (maxIdle != null && idleStreak >= maxIdle) {
       log("max idle ticks — stopping early (cap not fully used)");
       break;
     }

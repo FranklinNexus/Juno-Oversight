@@ -11,6 +11,7 @@
 | [whitepaper.md](./whitepaper.md) | 产品 / 新成员 | 愿景、10 Widget、架构、路线图 |
 | [architecture-loop.md](./architecture-loop.md) | 架构 | smoke → P0–P2 → AGI 1000 → 公理之书 |
 | [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI | 1000 篇 synthesis、初步 AGI 栈 |
+| [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) | 进化 v0 | 冯·诺依曼自指单元 · fitness · 突变白名单 |
 | [juno-bounded-autonomy.md](./juno-bounded-autonomy.md) | 自决策 | 日限额、决策流、daemon |
 | [juno-axiom-book-experiment.md](./juno-axiom-book-experiment.md) | 写书 | overnight 公理之书实验 |
 | [juno-self-optimize.md](./juno-self-optimize.md) | 自优化 | quality-gate、REVISE、MCP、workflow |
@@ -34,6 +35,7 @@
 | 1000 篇 AGI 文献无人值守 | [juno-bounded-autonomy.md](./juno-bounded-autonomy.md) · `pnpm agi:daemon` |
 | overnight 写书 | [juno-axiom-book-experiment.md](./juno-axiom-book-experiment.md) · `pnpm book:daemon` |
 | 修书稿 spaced-bold / quality | [juno-self-optimize.md](./juno-self-optimize.md) · `pnpm self:optimize` |
+| 跑 Von Neumann fitness | [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) · `pnpm evolution:tick` |
 | 防 API 429 | [api-gateway.md](./api-gateway.md) · `pnpm api:quota` |
 | 配 MCP / dev 分支 | [juno-self-optimize.md §6](./juno-self-optimize.md#6-mcp-与开发版) · `config/mcp-servers.example.json` |
 | 启动 24/7 Scheduler | [README §长任务](../README.md) · [orchestrator §7](./orchestrator.md) |

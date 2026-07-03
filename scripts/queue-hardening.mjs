@@ -1,60 +1,38 @@
 #!/usr/bin/env node
 /**
- * Restore juno-overseer-hardening queue (h07–h11) when now.yaml was cleared.
+ * Restore / repair juno-overseer-hardening queue (h07–h11) from progress.md.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
-const MISSION = "juno-overseer-hardening-2026";
 
-const phases = [
-  ["h07-promote-preview", "implement", "Promote diff preview UI/log"],
-  ["h08-review-promote", "review", "REVIEW_VERDICT on promote preview"],
-  ["h09-verify-all", "verify", "test+lint+cargo VERIFY_REPORT"],
-  ["h10-drift-audit", "review", "drift audit REVIEW_VERDICT"],
-  ["h11-final", "review", "final mission REVIEW_VERDICT"],
-];
+process.env.AGENT_WORKBENCH_ROOT = workbench;
+process.env.JUNO_OVERSIGHT_ROOT = repoRoot;
 
-const now = phases.map(([phase, kind, criteria]) => ({
-  id: `juno-${phase.replace(/-/g, "-")}`,
-  phase,
-  kind,
-  criteria,
-}));
+const build = spawnSync("pnpm", ["orchestrator:build"], {
+  cwd: repoRoot,
+  stdio: "inherit",
+  shell: true,
+});
+if (build.status !== 0) process.exit(build.status ?? 1);
 
-const yamlLines = [
-  `updated: ${new Date().toISOString()}`,
-  "now:",
-  ...now.map((p) =>
-    [
-      `  - id: juno-${p.phase}`,
-      "    horizon: mission",
-      `    kind: ${p.kind}`,
-      `    run_kind: ${p.kind}`,
-      "    repo_target: juno-overseer",
-      `    mission_id: ${MISSION}`,
-      `    phase_id: ${p.phase}`,
-      `    prompt: executor_${p.kind === "implement" ? "implement" : p.kind === "verify" ? "verify" : "review"}`,
-      "    provider: cursor_composer",
-      "    max_minutes: 25",
-      `    success_criteria: "${p.criteria}"`,
-    ].join("\n"),
-  ),
-  "backlog: []",
-  "",
-];
+const { repairHardeningQueue, bootstrapHardeningQueueFromSpecs } = await import(
+  "../orchestrator/dist/hardening-queue.js"
+);
 
-const queuePath = path.join(workbench, "queue", "now.yaml");
-if (existsSync(queuePath)) {
-  const existing = readFileSync(queuePath, "utf8");
-  if (/mission_id:\s*juno-overseer-hardening/.test(existing) && /now:\s*\n\s+-/.test(existing)) {
-    console.log("[queue:hardening] hardening queue already present");
-    process.exit(0);
-  }
+let result = repairHardeningQueue(workbench);
+if (!result.changed) {
+  result = bootstrapHardeningQueueFromSpecs(workbench);
 }
 
-writeFileSync(queuePath, yamlLines.join("\n"), "utf8");
-console.log(`[queue:hardening] restored h07–h11 → ${queuePath}`);
+if (result.changed) {
+  console.log(`[queue:hardening] ${result.reason}`);
+  if (result.addedPhases.length) {
+    console.log(`[queue:hardening] phases: ${result.addedPhases.join(", ")}`);
+  }
+} else {
+  console.log(`[queue:hardening] ${result.reason}`);
+}

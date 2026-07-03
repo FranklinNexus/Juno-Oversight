@@ -6,6 +6,7 @@ import { readMcpHints, writeMcpHints } from "./mcp-config.js";
 import { parseReviewVerdict } from "./review-loop.js";
 import { normalizeEvalProfile, evalProfileFromWorkflow } from "./eval-profile.js";
 import { loadWorkflow } from "./workflow.js";
+import { resolveComposerModel } from "./model-defaults.js";
 import type { QueueItem, RunManifest, RunState } from "./types.js";
 
 const EVENTS_TAIL_LINES = 40;
@@ -84,7 +85,7 @@ export function buildManifestFromQueue(item: QueueItem): RunManifest {
   const repoRoot = inferRepoTarget(item);
   const runKind = inferRunKind(item);
 
-  let workflowId = item.workflow_id;
+  const workflowId = item.workflow_id;
   let evalProfile = item.eval_profile;
   if (workflowId) {
     try {
@@ -118,7 +119,10 @@ export function buildManifestFromQueue(item: QueueItem): RunManifest {
     repoRoot,
     provider,
     providerRef: provider === "api_token" ? "openai" : "cursor_accounts.main",
-    model: provider === "api_token" ? "gpt-4o" : "composer-2.5",
+    model:
+      provider === "api_token"
+        ? "gpt-4o"
+        : resolveComposerModel(workbenchRoot(), item.model),
     promptTemplate: item.prompt,
     cwd,
     maxMinutes: item.max_minutes ?? 25,

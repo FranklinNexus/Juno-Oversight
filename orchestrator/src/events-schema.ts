@@ -6,7 +6,7 @@ import type { RunKind } from "./types.js";
 export type JunoEvent =
   | { ts: string; type: "status"; status: string; detail?: string }
   | { ts: string; type: "assistant"; text: string; partial?: boolean }
-  | { ts: string; type: "finished"; status: string; result?: string }
+  | { ts: string; type: "finished"; status: string; result?: string; model?: string }
   | { ts: string; type: "error"; message: string; retryable?: boolean }
   | { ts: string; type: "handoff"; from: RunKind | "queue"; to: RunKind; summary: string }
   | { ts: string; type: "verdict"; verdict: "PASS" | "REVISE" | "BLOCK"; notes?: string }

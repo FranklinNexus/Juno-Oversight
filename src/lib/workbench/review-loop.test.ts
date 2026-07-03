@@ -17,6 +17,20 @@ const sampleVerdict = `
 - reviewer_notes: ok
 `;
 
+const sampleVerifyPass = `
+## VERIFY_REPORT
+- pnpm test: PASS
+- pnpm lint: PASS
+- pnpm build: PASS
+
+## REVIEW_VERDICT
+- verdict: PASS
+- drift: none
+- scope_violations: []
+- must_fix_next_slot: []
+- reviewer_notes: ok
+`;
+
 describe("parseReviewVerdict", () => {
   it("parses PASS verdict fields", () => {
     const parsed = parseReviewVerdict(sampleVerdict);
@@ -65,7 +79,7 @@ describe("resolveQueueAdvance", () => {
   });
 
   it("blocks verify slot on BLOCK verdict", () => {
-    const blocked = sampleVerdict.replace("PASS", "BLOCK");
+    const blocked = sampleVerifyPass.replace("- verdict: PASS", "- verdict: BLOCK");
     expect(resolveQueueAdvance("verify", blocked)).toEqual({ action: "block" });
   });
 
@@ -78,7 +92,14 @@ describe("resolveQueueAdvance", () => {
   });
 
   it("dequeues verify slot on PASS", () => {
-    expect(resolveQueueAdvance("verify", sampleVerdict)).toEqual({ action: "dequeue" });
+    expect(resolveQueueAdvance("verify", sampleVerifyPass)).toEqual({ action: "dequeue" });
+  });
+
+  it("holds verify slot without VERIFY_REPORT", () => {
+    expect(resolveQueueAdvance("verify", sampleVerdict)).toEqual({
+      action: "hold",
+      reason: "verify_pending",
+    });
   });
 
   it("returns revise action with must_fix list", () => {

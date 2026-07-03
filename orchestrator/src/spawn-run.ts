@@ -19,6 +19,7 @@ import {
   saveRunState,
 } from "./manifest.js";
 import { writeMcpHints } from "./mcp-config.js";
+import { composerFallbackChain } from "./model-defaults.js";
 import type { RunManifest } from "./types.js";
 
 function parseArgs(argv: string[]): { manifestPath: string; dryRun: boolean } {
@@ -88,7 +89,7 @@ async function runComposerStreaming(
     maxWaitMs: 900_000,
   });
   if (!gate.ok) {
-    throw new Error(`API gateway blocked (${gate.reason}) — retry later`);
+    return { ok: false, text: `API gateway blocked (${gate.reason}) — retry later` };
   }
 
   const cwd =
@@ -102,7 +103,7 @@ async function runComposerStreaming(
     provider: manifest.provider,
   });
   const eventsPath = path.join(runDir, "events.jsonl");
-  const modelId = manifest.model ?? "composer-2.5";
+  const modelId = manifest.model ?? "auto";
 
   appendEvent(eventsPath, {
     ts: nowIso(),
@@ -142,14 +143,16 @@ async function runComposerStreaming(
 
     const result = await run.wait();
     if (result.status === "error") {
+      const errText = (result.result ?? streamed ?? "").slice(0, 2000) || "(empty error from API)";
       appendEvent(eventsPath, {
         ts: nowIso(),
         type: "finished",
         status: "error",
-        result: result.result,
+        result: errText,
+        model: modelId,
       });
-      recordApiFailure(workbench, providerId, { retryable: true, message: result.result });
-      return { ok: false, text: result.result ?? streamed };
+      recordApiFailure(workbench, providerId, { retryable: true, message: errText });
+      return { ok: false, text: errText };
     }
 
     const finalText = result.result ?? streamed;
@@ -158,6 +161,7 @@ async function runComposerStreaming(
       type: "finished",
       status: "finished",
       result: finalText.slice(0, 8000),
+      model: modelId,
     });
     recordApiSuccess(workbench, providerId, {
       tokens: estimatedTokens,
@@ -191,9 +195,36 @@ async function runSlot(manifest: RunManifest, workbench: string, runDir: string)
     const result = await runApiToken(manifest, workbench, runDir, prompt);
     ok = result.ok;
   } else if (manifest.provider === "cursor_composer") {
+    const chain = composerFallbackChain(workbench);
+    const primary = manifest.model ?? chain[0] ?? "auto";
+    const models = [primary, ...chain.filter((m) => m !== primary)];
+    let lastText = "";
     try {
-      const result = await runComposerStreaming(manifest, workbench, runDir, prompt);
-      ok = result.ok;
+      for (const modelId of models) {
+        appendEvent(path.join(runDir, "events.jsonl"), {
+          ts: nowIso(),
+          type: "status",
+          status: "model_try",
+          detail: modelId,
+        });
+        const attemptManifest = { ...manifest, model: modelId };
+        const result = await runComposerStreaming(attemptManifest, workbench, runDir, prompt);
+        if (result.ok) {
+          ok = true;
+          break;
+        }
+        lastText = result.text;
+        if (result.text.includes("API gateway blocked")) {
+          break;
+        }
+      }
+      if (!ok && lastText) {
+        appendEvent(path.join(runDir, "events.jsonl"), {
+          ts: nowIso(),
+          type: "error",
+          message: `all models failed; last: ${lastText.slice(0, 500)}`,
+        });
+      }
     } catch (err: unknown) {
       const eventsPath = path.join(runDir, "events.jsonl");
       if (err instanceof CursorAgentError) {

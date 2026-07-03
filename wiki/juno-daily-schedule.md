@@ -9,7 +9,7 @@
 
 | 阶段 | 行为 |
 |------|------|
-| **Autonomy 刷满** | 循环 tick 直到 `iterationsToday >= maxSelfIterationsPerDay`（**成功**才计次） |
+| **Autonomy 刷满** | 循环 tick 直到 `iterationsToday >= maxSelfIterationsPerDay`（**成功**才计次）；**仅 cap 停**（`maxIdleTicks: null` 默认不因 idle 提前退出） |
 | **Autonomy 日切** | `autonomyTimezone`（默认 `Asia/Shanghai`），07:00 任务与限额对齐 |
 | **全局锁** | `state/autonomy.lock.json` — `juno:daemon` 与 `daily:juno` 互斥 |
 | **隔离导出** | 复制 digest + mission markdown → `exportRoot/YYYY-MM-DD/` |
@@ -42,7 +42,19 @@ pnpm daily:juno:install -Hour 8      # 改时间
 pnpm daily:juno                      # 手动立即跑
 ```
 
+| `maxIdleTicks` | `null` | 连续 planner `stop` 后是否提前结束；`null` = 只认 cap |
+
 日志：`AgentWorkbench/state/daily-juno.json` · `daily-juno.log`
+
+---
+
+## 3b. 配置要点
+
+| 字段 | 默认 | 含义 |
+|------|------|------|
+| `maxIdleTicks` | `null` | 连续 idle 提前停；`null` = 刷满 cap 才停 |
+| `tickIntervalMs` | 120000 | tick 间隔 |
+| `maxIterationsPerDay` | null | 覆盖 autonomy 日限额（null = 12） |
 
 ---
 

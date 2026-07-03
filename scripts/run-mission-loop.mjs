@@ -31,6 +31,7 @@ const {
   readRunKind,
   shouldMarkPhaseDone,
   buildReviseImplementItem,
+  checkpointTextForAdvance,
 } = await import("../orchestrator/dist/mission-progress.js");
 const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotency.js");
 
@@ -40,7 +41,23 @@ if (now.length === 0) {
   process.exit(0);
 }
 
-const head = now[0];
+const { repairHardeningQueue, HARDENING_MISSION_ID } = await import(
+  "../orchestrator/dist/hardening-queue.js"
+);
+
+let head = now[0];
+if (head.mission_id === HARDENING_MISSION_ID) {
+  const repair = repairHardeningQueue(workbench);
+  if (repair.changed) {
+    log(`repaired hardening queue: ${repair.reason}`);
+    ({ now, backlog } = parseNowYaml(workbench));
+    if (now.length === 0) {
+      log("queue empty after repair");
+      process.exit(0);
+    }
+    head = now[0];
+  }
+}
 if (!process.env.CURSOR_API_KEY?.trim()) {
   log("blocked: CURSOR_API_KEY required for Live slot");
   process.exit(3);
@@ -69,8 +86,8 @@ if (!existsSync(cpPath)) {
   process.exit(1);
 }
 
-const cp = readFileSync(cpPath, "utf8");
-let action = evaluateCompletedRun(workbench, head.id);
+const cp = checkpointTextForAdvance(workbench, head.id, head.mission_id);
+let action = evaluateCompletedRun(workbench, head.id, head.mission_id);
 const runKind = readRunKind(workbench, head.id);
 
 if (action.action === "revise") {

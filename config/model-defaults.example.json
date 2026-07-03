@@ -1,0 +1,5 @@
+{
+  "cursorComposerDefault": "auto",
+  "cursorComposerFallback": ["auto", "composer-2.5", "composer-2"],
+  "notes": "Copy to AgentWorkbench/config/model-defaults.json. auto 在当前 API 账户上通常比 composer-2.5 更稳。"
+}

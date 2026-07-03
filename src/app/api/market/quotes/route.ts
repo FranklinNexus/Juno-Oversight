@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { fetchLiveMarketBatch } from "@/lib/market/live/fetch-quotes";
 
-/** Dev-only proxy: static `pnpm build` export omits Route Handlers. */
+/** Dev-only proxy: static `pnpm build` export omits Route Handlers unless marked static. */
+export const dynamic = "force-static";
+export const revalidate = false;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const symbols = (url.searchParams.get("symbols") ?? "")

@@ -7,6 +7,8 @@
 | [api-limits.example.json](./api-limits.example.json) | `api-limits.json` | Cursor/OpenAI RPM、并发、日 token 预算 |
 | [self-optimize.example.json](./self-optimize.example.json) | `self-optimize.json` | 自主优化：strict 字数、首选 workflow |
 | [mcp-servers.example.json](./mcp-servers.example.json) | `mcp-servers.json` | MCP 注册表；`devOnly` 仅 juno-overseer 任务 |
+| [evolution-unit.example.json](./evolution-unit.example.json) | `evolution-unit.json` | **Von Neumann v0** — fitness 权重、突变白名单 |
+| [model-defaults.example.json](./model-defaults.example.json) | `model-defaults.json` | Live 模型默认与 fallback 链 |
 | [autonomy-charter.example.json](./autonomy-charter.example.json) | `autonomy-charter.json` | **Juno 自主章程** — 不用逐 mission 指派 |
 | [daily-schedule.example.json](./daily-schedule.example.json) | `daily-schedule.json` | **每日自动批处理** — 刷满限额 + 隔离导出 + purge |
 
@@ -20,7 +22,7 @@
 
 ```bash
 pnpm daily:juno                  # 立即跑一轮
-pnpm daily:juno:install          # Windows 计划任务（默认 07:00）
+pnpm daily:juno:install          # Windows 计划任务（默认 0:00）
 pnpm daily:juno:uninstall
 ```
 

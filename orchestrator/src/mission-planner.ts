@@ -7,6 +7,7 @@ import path from "node:path";
 import type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
 import { evaluateLoopGate } from "./loop-gate.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
+import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
 
 export type LoopKind =
   | "local_loop"
@@ -40,6 +41,15 @@ export interface AutonomyCharter {
 }
 
 export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
+  {
+    missionId: "juno-von-neumann-unit-2026",
+    priority: 0,
+    loopKind: "generic_queue",
+    loopScript: "evolution:tick",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: false,
+  },
   {
     missionId: "juno-daily-autonomy-2026",
     priority: 1,
@@ -148,9 +158,11 @@ export function loadMissionRegistry(workbench: string): MissionSpec[] {
   const charter = loadAutonomyCharter(workbench);
   if (charter.missionPriority?.length) {
     const order = new Map(charter.missionPriority.map((id, i) => [id, i]));
+    /** Charter-listed missions sort first (0..n); others sort after at 1000+priority. */
+    const CHARTER_TIER = 1000;
     base = [...base].sort((a, b) => {
-      const pa = order.get(a.missionId) ?? a.priority;
-      const pb = order.get(b.missionId) ?? b.priority;
+      const pa = order.has(a.missionId) ? order.get(a.missionId)! : CHARTER_TIER + a.priority;
+      const pb = order.has(b.missionId) ? order.get(b.missionId)! : CHARTER_TIER + b.priority;
       return pa - pb;
     });
   }
@@ -288,6 +300,24 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
     };
   }
 
+  const fitnessEscalate = shouldEscalateForFitness(workbench);
+  if (fitnessEscalate.yes) {
+    return {
+      action: "escalate_human",
+      reason: "fitness_decline_with_api_backoff",
+      detail: fitnessEscalate.detail ?? "evolution feedback",
+    };
+  }
+
+  const fitnessMutate = shouldSelfOptimizeForFitness(workbench);
+  if (fitnessMutate.yes) {
+    return {
+      action: "run_self_optimize",
+      script: "self:optimize",
+      reason: `Evolution v1 — ${fitnessMutate.reason ?? "fitness declining"}`,
+    };
+  }
+
   // Special: book quality when scan fails (not a normal mission complete check)
   if (
     missionComplete(workbench, "juno-axiom-book-2026") &&
@@ -334,7 +364,11 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
   }
 
   for (const spec of registry) {
-    if (spec.missionId === "__self_optimize__" || spec.missionId === "juno-daily-autonomy-2026") {
+    if (
+      spec.missionId === "__self_optimize__" ||
+      spec.missionId === "juno-daily-autonomy-2026" ||
+      spec.missionId === "juno-von-neumann-unit-2026"
+    ) {
       continue;
     }
     if (!specEligible(workbench, spec, charter, limits)) continue;

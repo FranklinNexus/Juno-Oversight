@@ -3,6 +3,7 @@
   "charter": "Juno 自主推进 Overseer 硬化、质量修复与 AGI 栈闭合；人只保留 charter 与 promote，不逐 mission 指派。",
   "autoDiscoverMissions": true,
   "missionPriority": [
+    "juno-von-neumann-unit-2026",
     "juno-daily-autonomy-2026",
     "juno-book-quality-2026",
     "juno-overseer-hardening-2026",

@@ -122,6 +122,7 @@ pnpm queue:restore-literature
 | AGI 1000 篇 + north-star 定稿 | **完成** — `pnpm agi:loop` |
 | 公理之书实验 | **完成** — `pnpm book:loop` |
 | API Gateway + self-optimize | **完成** — `pnpm self:optimize` · [juno-self-optimize.md](./juno-self-optimize.md) |
+| Von Neumann 自指单元 v0 | **进行中** — `pnpm evolution:tick` · [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) |
 | CI 跑 `pnpm loop:smoke` | 待接 |
 | Tauri 启 daemon 前 UI 提示 gate | 待接 |
 

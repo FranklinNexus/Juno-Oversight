@@ -9,6 +9,7 @@ import {
 } from "./autonomy-types.js";
 import { todayAutonomyDate } from "./autonomy-day.js";
 import { planNextMission, writePlannerSnapshot } from "./mission-planner.js";
+import { recordEvolutionTick, loadEvolutionConfig } from "./evolution-unit.js";
 
 export type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
 export { DEFAULT_AUTONOMY_LIMITS, BOOK_EXPERIMENT_LIMITS } from "./autonomy-types.js";
@@ -107,5 +108,22 @@ export function recordAutonomyDecision(
   }
 
   writeAutonomyState(workbench, state);
+
+  try {
+    if (loadEvolutionConfig(workbench).enabled === false) return state;
+    // self-optimize records its own evolution entry (avoids double log)
+    if (decision.action === "run_self_optimize") return state;
+    const idlePenaltyCount = decision.action === "stop" ? 1 : 0;
+    recordEvolutionTick(workbench, {
+      trigger: "autonomy_tick",
+      action: decision.action,
+      missionId: "missionId" in decision ? decision.missionId : undefined,
+      idlePenaltyCount,
+      note: "reason" in decision ? decision.reason.slice(0, 120) : undefined,
+    });
+  } catch {
+    /* fitness is best-effort */
+  }
+
   return state;
 }
