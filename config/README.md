@@ -50,7 +50,7 @@ pnpm autonomy:tick --execute  # 执行
 pnpm juno:daemon                # 后台循环（推荐）
 ```
 
-见 [modules/runtime.md](../wiki/modules/runtime.md) · [juno-architecture.md](../wiki/juno-architecture.md) §2。
+见 [runtime.md](../wiki/runtime.md) · [juno-architecture.md](../wiki/juno-architecture.md) §2。
 
 ## evolution-unit.json
 
@@ -61,7 +61,7 @@ pnpm evolution:tick
 pnpm queue:von-neumann
 ```
 
-见 [modules/evolution.md](../wiki/modules/evolution.md)。
+见 [evolution.md](../wiki/evolution.md)。
 
 ## model-defaults.json
 
@@ -94,5 +94,5 @@ Obsidian Vault 仍被 `.cursor/hooks` 拦截，与 MCP 配置无关。
 
 ## 相关文档
 
-- [modules/runtime.md](../wiki/modules/runtime.md)
-- [modules/evolution.md](../wiki/modules/evolution.md)
+- [runtime.md](../wiki/runtime.md)
+- [evolution.md](../wiki/evolution.md)

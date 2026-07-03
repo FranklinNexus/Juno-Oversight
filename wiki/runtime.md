@@ -28,7 +28,7 @@ AGENT_WORKBENCH_ROOT/
 3. `evaluateCompletedRun` → dequeue / hold / block / revise
 4. `markMissionPhaseDone` → 更新 `progress.md`
 
-详见 [juno-architecture.md §4](../juno-architecture.md#4-执行平面slot-流水线)。
+详见 [juno-architecture.md §4](./juno-architecture.md#4-执行平面slot-流水线)。
 
 ---
 
@@ -49,7 +49,7 @@ pnpm mission:loop               # 队列头 Live slot
 
 **状态文件**：`bounded-autonomy.json` · `mission-planner.json` · `juno-daemon.json`
 
-Planner 优先级摘要见 [juno-architecture.md §2](../juno-architecture.md#2-控制平面bounded-autonomy--mission-planner)。
+Planner 优先级摘要见 [juno-architecture.md §2](./juno-architecture.md#2-控制平面bounded-autonomy--mission-planner)。
 
 **Daemon 行为（2026-07）**
 

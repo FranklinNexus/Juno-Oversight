@@ -2,7 +2,7 @@
 
 **最小自指单元 v0**：observe → plan → act → measure(fitness) → mutate(whitelist)
 
-见 [wiki/modules/evolution.md](../../../wiki/modules/evolution.md)
+见 [wiki/evolution.md](../../../wiki/evolution.md)
 
 ## 成功标准
 

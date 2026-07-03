@@ -95,7 +95,7 @@ flowchart TD
 7. Registry（charter 排序）→ 继续 / bootstrap
 8. auto-discover（progress 有 queued、队列为空）
 
-详见 [modules/runtime.md](./modules/runtime.md)（Bounded Autonomy）。
+详见 [runtime.md](./runtime.md)（Bounded Autonomy）。
 
 ---
 
@@ -126,7 +126,7 @@ Fitness 公式（默认权重）：
 score = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
 ```
 
-详见 [modules/evolution.md](./modules/evolution.md)（Von Neumann 自指单元）。
+详见 [evolution.md](./evolution.md)（Von Neumann 自指单元）。
 
 ---
 
@@ -258,7 +258,7 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 
 | 文档 | 内容 |
 |------|------|
-| [modules/README.md](./modules/README.md) | **五模块索引**（Runtime · Governance · Evolution · Product · Experiments） |
+| [README.md](./README.md) | **Wiki 索引**（Runtime · Governance · Evolution · Product · Experiments） |
 | [juno-architecture.md](./juno-architecture.md) | 本文 — 代码级真源 |
 | [overseer-quality.md](./overseer-quality.md) | REVIEW_VERDICT 权威 |
 | [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI 1000 篇交付 |

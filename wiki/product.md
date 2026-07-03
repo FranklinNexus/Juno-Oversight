@@ -24,7 +24,7 @@
 
 注册表：`src/lib/widget-registry.ts`。IPC：`src-tauri/`。
 
-**完整 Widget 表与交互** → [archive/whitepaper.md](../archive/whitepaper.md) · [archive/widgets.md](../archive/widgets.md)
+**完整 Widget 表与交互** → [whitepaper.md](./whitepaper.md) · [widgets.md](./widgets.md)
 
 ---
 

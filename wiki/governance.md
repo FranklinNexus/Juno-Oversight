@@ -2,7 +2,7 @@
 
 **合并自**：`overseer-quality.md`（摘要）· `mission-patterns.md`（索引）
 
-**权威全文** → [overseer-quality.md](../overseer-quality.md)
+**权威全文** → [overseer-quality.md](./overseer-quality.md)
 
 ---
 
@@ -55,4 +55,4 @@
 
 ## Mission 模式库
 
-完成 Mission 的模式可 promote 到 [mission-patterns.md](../mission-patterns.md)（`pnpm` promote-mission-wiki 脚本）。
+完成 Mission 的模式可 promote 到 [mission-patterns.md](./mission-patterns.md)（`pnpm` promote-mission-wiki 脚本）。

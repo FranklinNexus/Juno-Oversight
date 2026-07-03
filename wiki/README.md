@@ -1,31 +1,16 @@
 # Juno Wiki
 
-```
-wiki/
-├── README.md                 ← 你在这里
-├── modules/                  ← 日常阅读（5 模块）
-├── archive/                  ← 历史长文备份
-├── juno-architecture.md      ← 代码级真源
-├── overseer-quality.md       ← 门禁权威
-├── maintenance.md            ← 运维
-├── juno-agi-north-star.md      ← AGI 交付（脚本路径）
-├── smoke-loop.md             ← 试跑说明
-├── juno-agent-architecture.md  ← 文献架构交付
-├── agent-literature-index.md ← 文献索引
-└── mission-patterns.md       ← Mission 模式库（自动生成）
-```
+扁平目录 — 全部 `.md` 在 `wiki/` 根下，无子文件夹。
 
-## 五模块（从这里读）
+## 五模块（日常阅读）
 
 | 模块 | 文件 |
 |------|------|
-| Runtime | [modules/runtime.md](./modules/runtime.md) |
-| Governance | [modules/governance.md](./modules/governance.md) |
-| Evolution | [modules/evolution.md](./modules/evolution.md) |
-| Product | [modules/product.md](./modules/product.md) |
-| Experiments | [modules/experiments.md](./modules/experiments.md) |
-
-索引详情 → [modules/README.md](./modules/README.md)
+| Runtime | [runtime.md](./runtime.md) |
+| Governance | [governance.md](./governance.md) |
+| Evolution | [evolution.md](./evolution.md) |
+| Product | [product.md](./product.md) |
+| Experiments | [experiments.md](./experiments.md) |
 
 ## 锚点
 
@@ -34,5 +19,24 @@ wiki/
 | [juno-architecture.md](./juno-architecture.md) | 模块地图 · state 文件 |
 | [overseer-quality.md](./overseer-quality.md) | REVIEW_VERDICT 全文 |
 | [maintenance.md](./maintenance.md) | 打包 · 排错 |
+
+## 长文 / 实验备份
+
+| 文件 | 内容 |
+|------|------|
+| [architecture-loop.md](./architecture-loop.md) | P0–P2 loop 组件表 |
+| [whitepaper.md](./whitepaper.md) | HUD 产品白皮书 |
+| [widgets.md](./widgets.md) | Widget IPC 详表 |
+| [juno-axiom-book-experiment.md](./juno-axiom-book-experiment.md) | 公理之书实验 |
+
+## 交付物（脚本硬编码路径，勿删）
+
+| 文件 | 用途 |
+|------|------|
+| [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI loop 交付 |
+| [smoke-loop.md](./smoke-loop.md) | smoke 试跑 |
+| [juno-agent-architecture.md](./juno-agent-architecture.md) | 100 篇文献架构 |
+| [agent-literature-index.md](./agent-literature-index.md) | 文献索引 |
+| [mission-patterns.md](./mission-patterns.md) | Mission 模式库（自动生成） |
 
 配置 → [config/README.md](../config/README.md)
