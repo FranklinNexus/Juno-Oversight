@@ -43,7 +43,17 @@ writeFileSync(
 
 writeFileSync(
   path.join(stateDir, "juno-daemon.json"),
-  `${JSON.stringify({ status: "starting", overnight: true, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+  `${JSON.stringify(
+    {
+      status: "starting",
+      overnight: true,
+      updatedAt: new Date().toISOString(),
+      waitUntil: null,
+      waitRemainingMs: null,
+    },
+    null,
+    2,
+  )}\n`,
   "utf8",
 );
 
