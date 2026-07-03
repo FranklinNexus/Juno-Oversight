@@ -258,12 +258,11 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 
 | 文档 | 内容 |
 |------|------|
-| [architecture-loop.md](./architecture-loop.md) | 演进路线图 smoke → AGI → 公理之书 |
-| [juno-agi-north-star.md](./juno-agi-north-star.md) | 1000 篇 synthesis |
-| [orchestrator.md](./orchestrator.md) | scheduler-daemon、spawn 细节 |
+| [modules/README.md](./modules/README.md) | **五模块索引**（Runtime · Governance · Evolution · Product · Experiments） |
+| [juno-architecture.md](./juno-architecture.md) | 本文 — 代码级真源 |
 | [overseer-quality.md](./overseer-quality.md) | REVIEW_VERDICT 权威 |
-| [workbench.md](./workbench.md) | 目录布局 |
-| [config/README.md](../config/README.md) | Workbench 配置示例 |
+| [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI 1000 篇交付 |
+| [config/README.md](../config/README.md) | Workbench 配置 |
 
 ---
 
@@ -271,15 +270,11 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 
 | 项 | 值 |
 |----|-----|
-| **Hardening** | `juno-overseer-hardening-2026` COMPLETE（123 tests PASS） |
-| **活跃 Mission** | `juno-workbench-cleanup-2026` — c02 **done** → c03 review 在队列头 |
-| **Daemon** | `pnpm juno:daemon` pid 存活；`state/juno-daemon.json` heartbeat |
-| **日 tick** | ~9/12（`bounded-autonomy.json`） |
-| **Planner 决策** | 队列头 → `mission:loop` advance cleanup |
-| **下一 charter 目标** | cleanup COMPLETE 后 → von-neumann evolution / book-quality / AGI 栈（按 registry） |
+| **Hardening** | COMPLETE（h01–h11） |
+| **Workbench cleanup** | COMPLETE · `queue/now.yaml` 空 |
+| **Tests** | 127 passing |
+| **Daemon** | cap 满 → `waiting_midnight`（12/12）；0:00 后自动续跑 |
+| **Charter** | Runtime 叙事 · `landing-site-2026` forbidden |
+| **Planner 下一目标** | `evolution:tick`（von-neumann）· book-quality · self-optimize（按 priority） |
 
-**已知非阻塞项**：
-
-- `landing-site-2026` 在 Workbench 有 progress 但不在 `allowedMissionIds` — planner `incomplete` 已过滤
-- 文档 commit（`wiki/juno-architecture.md`、`README.md`）待 push
-- Von Neumann **v2**（MCP effector 扩展）在路线图，未开工
+**代码（2026-07-03）**：空队列 exit 4 不计 cap · auto-discover 用 `loopScript` · mission-loop skip-build。

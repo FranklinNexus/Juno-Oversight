@@ -17,6 +17,7 @@
 | [../juno-architecture.md](../juno-architecture.md) | 模块地图 · state 文件 · 代码真源 |
 | [../overseer-quality.md](../overseer-quality.md) | REVIEW_VERDICT 权威全文 |
 | [../maintenance.md](../maintenance.md) | 打包 · 排错 · LIVE 行情 |
+| [../archive/](../archive/README.md) | 收束前长文档备份 |
 
 **仍独立（脚本硬编码路径）**
 

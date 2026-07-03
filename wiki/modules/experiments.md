@@ -54,4 +54,4 @@ pnpm book:quality-loop
 
 ## 详细 loop 架构
 
-完整 P0/P1/P2 组件表 → [architecture-loop.md](../architecture-loop.md)
+完整 P0/P1/P2 组件表 → [archive/architecture-loop.md](../archive/architecture-loop.md)

@@ -1,15 +1,16 @@
 {
   "enabled": true,
-  "charter": "Juno 自主推进 Overseer 硬化、质量修复与 AGI 栈闭合；人只保留 charter 与 promote，不逐 mission 指派。",
+  "charter": "Juno AI Work Runtime — bounded autonomy for long-running missions: deterministic gates, checkpoint memory, human promote. You set charter; Runtime picks the next queued work.",
   "autoDiscoverMissions": true,
   "missionPriority": [
     "juno-von-neumann-unit-2026",
     "juno-daily-autonomy-2026",
     "juno-book-quality-2026",
-    "juno-overseer-hardening-2026",
+    "juno-self-iterate-p2-2026",
+    "juno-workbench-cleanup-2026",
     "juno-agi-literature-2026",
     "juno-axiom-book-2026"
   ],
-  "forbiddenMissionIds": [],
+  "forbiddenMissionIds": ["landing-site-2026"],
   "notes": "Copy to AgentWorkbench/config/autonomy-charter.json"
 }
