@@ -7,6 +7,8 @@ import path from "node:path";
 import type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
 import { DEFAULT_AUTONOMY_LIMITS } from "./autonomy-types.js";
 import { evaluateLoopGate } from "./loop-gate.js";
+import { parseNowYaml, saveNowQueue } from "./queue-io.js";
+import type { QueueItem } from "./types.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
 
@@ -198,12 +200,35 @@ export function missionHasQueuedPhases(workbench: string, missionId: string): bo
 }
 
 export function queueHeadMissionId(workbench: string): string | null {
-  const nowPath = path.join(workbench, "queue", "now.yaml");
-  if (!existsSync(nowPath)) return null;
-  const text = readFileSync(nowPath, "utf8");
-  const m = text.match(/mission_id:\s*(\S+)/);
-  return m?.[1] ?? null;
+  const { now } = parseNowYaml(workbench);
+  return now[0]?.mission_id ?? null;
 }
+
+/** Move now items whose mission_id is outside autonomy allow-list to backlog. */
+export function sanitizeAutonomyQueue(
+  workbench: string,
+  allowedMissionIds: string[],
+): { moved: string[]; changed: boolean } {
+  const allowed = new Set(allowedMissionIds);
+  const { now, backlog } = parseNowYaml(workbench);
+  const kept: QueueItem[] = [];
+  const moved: QueueItem[] = [];
+  for (const item of now) {
+    if (item.mission_id && !allowed.has(item.mission_id)) {
+      moved.push(item);
+    } else {
+      kept.push(item);
+    }
+  }
+  if (moved.length === 0) {
+    return { moved: [], changed: false };
+  }
+  saveNowQueue(workbench, kept, [...moved, ...backlog]);
+  return { moved: moved.map((i) => i.mission_id ?? i.id), changed: true };
+}
+
+/** Meta missions skipped by auto-discover (daemon/registry covers them). */
+const AUTO_DISCOVER_SKIP = new Set(["juno-daily-autonomy-2026"]);
 
 export function discoverIncompleteMissions(workbench: string): string[] {
   const missionsDir = path.join(workbench, "missions");
@@ -285,6 +310,7 @@ export interface PlannerInput {
 /** Core planner — replaces hand-assigned mission chain when charter enabled. */
 export function planNextMission(input: PlannerInput): AutonomyDecision {
   const { workbench, state, limits } = input;
+  sanitizeAutonomyQueue(workbench, limits.allowedMissionIds);
   const charter = loadAutonomyCharter(workbench);
   const gate = evaluateLoopGate(workbench);
   const registry = loadMissionRegistry(workbench);
@@ -426,6 +452,7 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
   // Auto-discover: incomplete missions with queued phases but empty now
   if (charter.autoDiscoverMissions !== false) {
     for (const missionId of discoverIncompleteMissions(workbench)) {
+      if (AUTO_DISCOVER_SKIP.has(missionId)) continue;
       if (charter.forbiddenMissionIds?.includes(missionId)) continue;
       if (
         !limits.allowedMissionIds.includes(missionId)

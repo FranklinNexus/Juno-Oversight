@@ -115,8 +115,8 @@ if (action.action === "revise") {
 
 if (action.action !== "dequeue") {
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "failed" });
-  log(`not dequeue-ready: ${action.action}`);
-  process.exit(2);
+  log(`not dequeue-ready: ${action.action} — retry when review gate clears`);
+  process.exit(3);
 }
 
 if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {

@@ -97,10 +97,16 @@ if (decision.action === "run_generic_loop") {
     });
   } else if (script.endsWith(".mjs")) {
     r = spawnSync("node", [`scripts/${script}`], { cwd: repoRoot, stdio: "inherit" });
+  } else if (script === "evolution:tick") {
+    r = spawnSync("node", ["scripts/run-evolution-tick.mjs", "--skip-build"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+    });
   } else {
     r = spawnSync("pnpm", [script], { cwd: repoRoot, stdio: "inherit", shell: true });
   }
-  // exit 4 = queue empty noop — do not burn daily cap
+  // exit 3 = gate hold · exit 4 = empty queue — neither burns daily cap
   finish(r.status === 0);
   process.exit(r.status ?? 1);
 }
@@ -133,7 +139,7 @@ if (decision.action === "queue_mission") {
 
 if (decision.action === "escalate_human") {
   finish(false);
-  console.error(`[autonomy] HUMAN REQUIRED: ${decision.reason} — ${decision.detail}`);
+  console.error(`[autonomy] paused: ${decision.reason} — ${decision.detail}`);
   process.exit(2);
 }
 
