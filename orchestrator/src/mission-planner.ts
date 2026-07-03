@@ -5,6 +5,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
+import { DEFAULT_AUTONOMY_LIMITS } from "./autonomy-types.js";
 import { evaluateLoopGate } from "./loop-gate.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
@@ -461,11 +462,12 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
 }
 
 export function writePlannerSnapshot(workbench: string, decision: AutonomyDecision): void {
+  const allowed = new Set(DEFAULT_AUTONOMY_LIMITS.allowedMissionIds);
   const snapshot = {
     decidedAt: new Date().toISOString(),
     charter: loadAutonomyCharter(workbench).charter?.slice(0, 200),
     registry: loadMissionRegistry(workbench).map((s) => s.missionId),
-    incomplete: discoverIncompleteMissions(workbench),
+    incomplete: discoverIncompleteMissions(workbench).filter((id) => allowed.has(id)),
     decision,
   };
   mkdirSync(path.join(workbench, "state"), { recursive: true });

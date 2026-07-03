@@ -32,6 +32,7 @@ const {
   shouldMarkPhaseDone,
   buildReviseImplementItem,
   checkpointTextForAdvance,
+  finalizeRunCheckpoint,
 } = await import("../orchestrator/dist/mission-progress.js");
 const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotency.js");
 
@@ -86,9 +87,13 @@ if (!existsSync(cpPath)) {
   process.exit(1);
 }
 
+const runKind = readRunKind(workbench, head.id);
+if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, runKind)) {
+  log(`mirrored mission checkpoint → runs/${head.id}/checkpoint.md`);
+}
+
 const cp = checkpointTextForAdvance(workbench, head.id, head.mission_id);
 let action = evaluateCompletedRun(workbench, head.id, head.mission_id);
-const runKind = readRunKind(workbench, head.id);
 
 if (action.action === "revise") {
   const fix = buildReviseImplementItem(head, Date.now(), action.mustFix ?? []);
@@ -100,6 +105,7 @@ if (action.action === "revise") {
 }
 
 if (action.action !== "dequeue") {
+  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "failed" });
   log(`not dequeue-ready: ${action.action}`);
   process.exit(2);
 }

@@ -26,6 +26,17 @@ function progressPath(workbench: string): string {
   return path.join(workbench, "missions", HARDENING_MISSION_ID, "progress.md");
 }
 
+function checkpointPath(workbench: string): string {
+  return path.join(workbench, "missions", HARDENING_MISSION_ID, "checkpoint.md");
+}
+
+/** True when hardening mission checkpoint contains STATUS: COMPLETE. */
+export function isHardeningMissionComplete(workbench: string): boolean {
+  const cp = checkpointPath(workbench);
+  if (!existsSync(cp)) return false;
+  return /STATUS:\s*COMPLETE/i.test(readFileSync(cp, "utf8"));
+}
+
 /** Queued hardening phases in progress table order (h07–h11 only). */
 export function parseHardeningProgressQueued(workbench: string): string[] {
   const allowed = new Set(HARDENING_PHASE_SPECS.map((s) => s.phaseId));
@@ -97,6 +108,17 @@ export interface HardeningQueueRepairResult {
  */
 export function repairHardeningQueue(workbench: string): HardeningQueueRepairResult {
   const { now, backlog } = parseNowYaml(workbench);
+
+  if (isHardeningMissionComplete(workbench)) {
+    return {
+      changed: false,
+      reason: "hardening mission complete — skip queue repair",
+      addedPhases: [],
+      now,
+      backlog,
+    };
+  }
+
   const queuedPhaseIds = parseHardeningProgressQueued(workbench);
 
   if (queuedPhaseIds.length === 0) {

@@ -11,9 +11,10 @@ import {
 import { materializeQueueRun, readJsonFile, writeJsonFile } from "./manifest.js";
 import {
   buildReviseImplementItem,
+  checkpointTextForAdvance,
   evaluateCompletedRun,
+  finalizeRunCheckpoint,
   markMissionPhaseDone,
-  readCheckpoint,
   readRunKind,
   shouldMarkPhaseDone,
 } from "./mission-progress.js";
@@ -146,27 +147,24 @@ function bumpRetry(runDir: string): void {
   writeJsonFile(p, state);
 }
 
-function isTaskComplete(runId: string): boolean {
-  const cp = path.join(workbench, "runs", runId, "checkpoint.md");
-  try {
-    const text = readFileSync(cp, "utf8");
-    return /STATUS:\s*COMPLETE/i.test(text);
-  } catch {
-    return false;
-  }
+function isTaskComplete(runId: string, missionId?: string): boolean {
+  const cp = checkpointTextForAdvance(workbench, runId, missionId);
+  return /STATUS:\s*COMPLETE/i.test(cp);
 }
 
 function handleCompletedRun(runId: string): void {
   const sched = loadSchedulerState();
-  const action: QueueAdvanceAction = evaluateCompletedRun(workbench, runId);
   const { now } = parseNowYaml(workbench);
   const head = now[0];
-  const checkpoint = readCheckpoint(workbench, runId);
+  const missionId = head?.mission_id;
+  const runKind = readRunKind(workbench, runId);
+  finalizeRunCheckpoint(workbench, runId, missionId, runKind);
+  const action: QueueAdvanceAction = evaluateCompletedRun(workbench, runId, missionId);
+  const checkpoint = checkpointTextForAdvance(workbench, runId, missionId);
 
   switch (action.action) {
     case "dequeue": {
-      const runKind = readRunKind(workbench, runId);
-      const ready = runKind === "implement" ? isTaskComplete(runId) : true;
+      const ready = runKind === "implement" ? isTaskComplete(runId, missionId) : true;
       if (ready) {
         dequeueNowHead();
         if (head?.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, checkpoint)) {

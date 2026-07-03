@@ -1,6 +1,6 @@
 # Juno Oversight Wiki
 
-**与代码同步至 2026-07-03** — 产品、编排、Workbench、质量门禁、AGI loop、自主优化。
+**与代码同步至 2026-07-03** — 产品、编排、Workbench、质量门禁、AGI loop、Von Neumann v1、Hardening COMPLETE。
 
 ---
 
@@ -8,7 +8,8 @@
 
 | 文档 | 读者 | 内容 |
 |------|------|------|
-| [whitepaper.md](./whitepaper.md) | 产品 / 新成员 | 愿景、10 Widget、架构、路线图 |
+| [**juno-architecture.md**](./juno-architecture.md) | **架构** | **系统总览、模块地图、状态文件、planner、安全边界** |
+| [whitepaper.md](./whitepaper.md) | 产品 / 新成员 | 愿景、10 Widget、路线图 |
 | [architecture-loop.md](./architecture-loop.md) | 架构 | smoke → P0–P2 → AGI 1000 → 公理之书 |
 | [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI | 1000 篇 synthesis、初步 AGI 栈 |
 | [juno-von-neumann-unit.md](./juno-von-neumann-unit.md) | 进化 v0 | 冯·诺依曼自指单元 · fitness · 突变白名单 |
@@ -31,6 +32,7 @@
 
 | 我想… | 去看 |
 |-------|------|
+| **理解整体架构** | [**juno-architecture.md**](./juno-architecture.md) |
 | 从零跑通最小 loop | [smoke-loop.md](./smoke-loop.md) · `pnpm loop:smoke` |
 | 1000 篇 AGI 文献无人值守 | [juno-bounded-autonomy.md](./juno-bounded-autonomy.md) · `pnpm agi:daemon` |
 | overnight 写书 | [juno-axiom-book-experiment.md](./juno-axiom-book-experiment.md) · `pnpm book:daemon` |

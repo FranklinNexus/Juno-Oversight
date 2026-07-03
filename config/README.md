@@ -16,7 +16,7 @@
 
 每日 Task Scheduler 调用 `pnpm daily:juno`：
 
-1. 循环 `autonomy:tick --execute` 直到**日限额刷满**或连续 idle
+1. 循环 `autonomy:tick --execute` 直到**日限额刷满**（`maxIdleTicks: null` 默认不因 idle 提前停）
 2. 复制 Mission 文档 + state 到 **隔离目录**（默认 `E:\JunoDailyExport`，**非 Vault**）
 3. 自动 purge `runs/`、`staging/`（保留最近 3 个 run）
 
@@ -50,7 +50,22 @@ pnpm autonomy:tick --execute  # 执行
 pnpm juno:daemon                # 后台循环（推荐）
 ```
 
-见 [juno-bounded-autonomy.md](../wiki/juno-bounded-autonomy.md) §8。
+见 [juno-bounded-autonomy.md](../wiki/juno-bounded-autonomy.md) §8 · [juno-architecture.md](../wiki/juno-architecture.md) §2。
+
+## evolution-unit.json
+
+Von Neumann 自指单元 — fitness 权重、`plannerFeedback`（7d MA、连续下降 → self-optimize）：
+
+```bash
+pnpm evolution:tick
+pnpm queue:von-neumann
+```
+
+见 [juno-von-neumann-unit.md](../wiki/juno-von-neumann-unit.md)。
+
+## model-defaults.json
+
+Live Composer 默认模型与 fallback 链（默认 `auto` → `composer-2.5` → `composer-2`）。由 `spawn-run.ts` 读取。
 
 ## api-limits.json
 
@@ -79,5 +94,6 @@ Obsidian Vault 仍被 `.cursor/hooks` 拦截，与 MCP 配置无关。
 
 ## 相关文档
 
+- [juno-architecture.md](../wiki/juno-architecture.md)
 - [api-gateway.md](../wiki/api-gateway.md)
 - [juno-self-optimize.md](../wiki/juno-self-optimize.md)

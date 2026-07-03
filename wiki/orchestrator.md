@@ -45,7 +45,12 @@ flowchart LR
 | 文件 | 职责 |
 |------|------|
 | `scheduler-daemon.ts` | 5s tick；读 `now.yaml`；spawn slot；watchdog（heartbeat 5min / maxMinutes+1）；`handleCompletedRun` 门禁 |
-| `spawn-run.ts` | CLI `--manifest [--dry-run]`；provider：`cursor_composer` / `api_token` |
+| `mission-planner.ts` | charter + registry → 下一 action；fitness v1 反馈 |
+| `bounded-autonomy.ts` | 日限额、`recordAutonomyDecision`、evolution tick |
+| `evolution-unit.ts` | fitness、evolution-log、planner 反馈、mutation allowlist |
+| `hardening-queue.ts` | progress.md ↔ now.yaml 队列修复 |
+| `model-defaults.ts` | Live 模型默认 + fallback 链 |
+| `spawn-run.ts` | CLI `--manifest [--dry-run]`；model fallback；api-gateway |
 | `manifest.ts` | QueueItem → RunManifest；`buildUserPrompt`（mission + quality + safety + checkpoint + events tail） |
 | `review-loop.ts` | 解析 `REVIEW_VERDICT`；`resolveQueueAdvance` |
 | `mission-progress.ts` | `evaluateCompletedRun`；`shouldMarkPhaseDone`；`markMissionPhaseDone` |
@@ -55,6 +60,19 @@ flowchart LR
 | `safety-doctrine.ts` | 破坏性 shell 分类（与 hook 同步） |
 | `api-token.ts` | OpenAI 兼容 HTTP fallback |
 | `types.ts` | 共享类型 |
+| `bounded-autonomy.ts` | 日限额、`recordAutonomyDecision`、evolution 挂钩 |
+| `mission-planner.ts` | charter + registry → 下一 action；fitness v1 反馈 |
+| `evolution-unit.ts` | fitness、evolution-log、mutation allowlist |
+| `hardening-queue.ts` | progress.md ↔ now.yaml 修复（mission COMPLETE 时跳过） |
+| `model-defaults.ts` | Live 模型默认 + fallback 链 |
+| `api-gateway.ts` | RPM / 并发 / backoff |
+| `workbench-purge.ts` | runs/staging 安全清理 |
+| `autonomy-lock.ts` | daemon ↔ daily-juno 互斥 |
+| `loop-gate.ts` | smoke/meta 24h stamp |
+| `quality-gate.ts` | 书稿 scan、spaced-bold |
+| `self-optimize.ts` | scan → rubric → workflow → MCP hints |
+
+完整模块地图见 [juno-architecture.md §5](./juno-architecture.md#5-orchestrator-模块地图)。
 
 ---
 

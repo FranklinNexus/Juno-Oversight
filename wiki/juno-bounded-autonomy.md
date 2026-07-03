@@ -139,4 +139,13 @@ pnpm autonomy:tick              # 看 Juno 会选什么
 pnpm juno:daemon                # 让它自己动
 ```
 
-当前 Workbench 状态（2026-07）：公理之书 COMPLETE → planner 倾向 **book quality REVISE** 或 **hardening h09–h11**。`queue:hardening` 与 `mission:loop` 会按 `progress.md` **修复残缺队列**（例如 h09 丢失而 h10 仍在 now.yaml）。
+当前 Workbench 状态（2026-07-03）：
+
+| Mission | 状态 | Planner 行为 |
+|---------|------|--------------|
+| `juno-overseer-hardening-2026` | **COMPLETE**（h01–h11） | `requiresIncomplete` 跳过；`repairHardeningQueue` 不再改队列 |
+| `juno-workbench-cleanup-2026` | **进行中**（c01 done → c02 execute） | 队列头 → `mission:loop` |
+| `juno-von-neumann-unit-2026` | 元 mission（永不完结） | `evolution:tick` 挂 fitness，不占 generic 槽 |
+| `juno-axiom-book-2026` | COMPLETE | quality scan 失败时 → `book:quality-loop` |
+
+Daemon（`pnpm juno:daemon`）约 **9/12** 日 tick；cap 满后长睡至上海时区 0:00。详见 [juno-architecture.md §11](./juno-architecture.md#11-当前运行态-2026-07-03)。

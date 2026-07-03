@@ -88,12 +88,14 @@ stateDiagram-v2
 
 ### 3.2 当前 Mission 示例
 
-| mission_id | 用途 |
-|------------|------|
-| `juno-smoke-loop-2026` | 最小 implement→review→verify 试跑 |
-| `juno-overseer-hardening-2026` | Orchestrator 硬化 backlog |
-| `juno-agent-literature-2026` | Agent 文献调研 |
-| `landing-site-2026` | 落地页（若存在） |
+| mission_id | 用途 | 状态（2026-07） |
+|------------|------|-----------------|
+| `juno-overseer-hardening-2026` | Orchestrator 硬化 h01–h11 | **COMPLETE** |
+| `juno-workbench-cleanup-2026` | runs/staging 安全 purge | 进行中 |
+| `juno-von-neumann-unit-2026` | fitness / evolution 元 mission | 永不完结 |
+| `juno-axiom-book-2026` | 公理之书实验 | COMPLETE |
+| `juno-smoke-loop-2026` | 最小 implement→review→verify 试跑 | COMPLETE |
+| `landing-site-2026` | 落地页（若存在） | 不在 charter 白名单 |
 
 ---
 
@@ -166,6 +168,21 @@ Copy-Item queue\now.yaml.bak-* queue\now.yaml
 ```
 
 `enabled` 仅由人类或面板切换；daemon **启动时不再强制 true**。
+
+### bounded-autonomy.json / mission-planner.json / juno-daemon.json
+
+自主 tick 与 planner 决策快照（`pnpm autonomy:tick` / `juno:daemon`）：
+
+| 文件 | 关键字段 |
+|------|----------|
+| `bounded-autonomy.json` | `iterationsToday`、`lastAction`、`lastMissionId` |
+| `mission-planner.json` | `registry`、`incomplete`（仅 charter 白名单）、`decision` |
+| `juno-daemon.json` | `status`（running / waiting_midnight）、`waitUntil` |
+| `evolution-fitness.json` | 当前 fitness score |
+| `evolution-feedback.json` | 7d MA、trend、planner 触发依据 |
+| `autonomy.lock.json` | daemon ↔ daily-juno 互斥 |
+
+完整列表见 [juno-architecture.md §6](./juno-architecture.md#6-workbench-状态文件)。
 
 ---
 

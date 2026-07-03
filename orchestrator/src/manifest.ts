@@ -308,7 +308,7 @@ export function buildUserPrompt(
     "## Recent events (tail)",
     eventsTail,
     "",
-    `${vaultNote} 本 slot 结束前更新 checkpoint.md。`,
+    `${vaultNote} 本 slot 结束前更新 runs/${manifest.runId}/checkpoint.md（implement 须含 STATUS: COMPLETE + ## CHANGES）。`,
   ]
     .filter(Boolean)
     .join("\n");

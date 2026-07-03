@@ -122,7 +122,7 @@ Planner 优先级（charter）：daily-autonomy → book-quality → **hardening
 | **v0e** | hardening queue 按 progress 修复（h09 缺口） | `hardening-queue.ts` |
 | **v0d** | spawn-run 错误可观测 | events.jsonl |
 | **v1** | fitness → planner（7d MA + decline → self-optimize） | **完成** |
-| **v1b** | h09–h11 promote 链 PASS | hardening mission |
+| **v1b** | h09–h11 promote 链 PASS | **完成** — hardening COMPLETE |
 | **v2** | MCP effector 注册表扩展 + GAIA 子集 eval | 待接 |
 | **v3** | orchestrator 自改 + verify 自证 | 冯·诺依曼 constructor 完整 |
 

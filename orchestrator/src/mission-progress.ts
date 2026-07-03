@@ -37,6 +37,40 @@ export function checkpointTextForAdvance(
   return runText;
 }
 
+/** Run checkpoint still at materialize stub (no gate markers). */
+export function isRunCheckpointStub(checkpointText: string): boolean {
+  return !/##\s*VERIFY_REPORT|REVIEW_VERDICT|STATUS:\s*COMPLETE/i.test(checkpointText);
+}
+
+/**
+ * When Live Agent wrote mission-level checkpoint but left run checkpoint as stub,
+ * mirror mission content into runs/<id>/checkpoint.md and ensure STATUS: COMPLETE for implement.
+ */
+export function finalizeRunCheckpoint(
+  workbench: string,
+  runId: string,
+  missionId: string | undefined,
+  runKind: RunKind,
+): boolean {
+  if (runKind !== "implement" || !missionId) return false;
+
+  const runCpPath = path.join(workbench, "runs", runId, "checkpoint.md");
+  const runText = readCheckpoint(workbench, runId);
+  if (!isRunCheckpointStub(runText)) return false;
+
+  const missionCpPath = path.join(workbench, "missions", missionId, "checkpoint.md");
+  if (!existsSync(missionCpPath)) return false;
+  const missionText = readFileSync(missionCpPath, "utf8");
+  if (!/##\s*CHANGES/i.test(missionText)) return false;
+
+  let body = missionText.trim();
+  if (!/STATUS:\s*COMPLETE/i.test(body)) {
+    body += "\n\nSTATUS: COMPLETE\n";
+  }
+  writeFileSync(runCpPath, `${body}\n`, "utf8");
+  return true;
+}
+
 export function readRunKind(workbench: string, runId: string): RunKind {
   const manifestPath = path.join(workbench, "runs", runId, "manifest.json");
   try {
