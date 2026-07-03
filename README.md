@@ -5,68 +5,105 @@
 <h1 align="center">Juno</h1>
 
 <p align="center">
-  <strong>AI Work Runtime</strong> — long-running agent work with checkpoints, review gates, and bounded autonomy<br/>
+  <strong>The Runtime for AI Work.</strong>
+</p>
+
+<p align="center">
+  <strong>LLMs write. Juno governs.</strong><br/>
   <em>Models generate. Gates decide.</em>
 </p>
 
 <p align="center">
+  Long-running AI work with deterministic checkpoints, review gates, and bounded autonomy.
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tests-127_passing-success" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-128_passing-success" alt="tests" />
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
 </p>
 
 ---
 
-## Turn Cursor into an overnight worker
-
-**Juno makes AI work resumable.**
-
-Most tools stop at *Agent finished → Done.*
-
-Juno stops at *Agent finished → **Review** → **Verify** → **Human promote** → Vault.*
-
 ```text
-Chat          Chat          Chat          Chat     →  context dies, no audit
-
-implement  →  review  →  verify  →  promote     →  checkpoint memory, gates decide
+Agent finished
+      │
+      ▼
+   Review  ──►  PASS · REVISE · BLOCK
+      │
+      ▼
+   Verify  ──►  tests · lint · build
+      │
+      ▼
+  Promote  ──►  human confirm
+      │
+      ▼
+    Vault
 ```
 
-Run a **Mission** overnight. Wake up to a queue that either moved forward — or **blocked** with a machine-readable reason.
-
-<p align="center">
-  <img src="docs/assets/juno-flow-diagram.png" alt="Mission → spawn → checkpoint → review → verify → promote" width="720" />
-  <br/>
-  <sub>Mission queue · Live spawn · checkpoint · REVIEW_VERDICT · Promote preview · Vault</sub>
-</p>
-
-> **Demo GIF** — [`docs/assets/`](docs/assets/) (add `juno-demo.gif` here). Until then, run `pnpm loop:smoke` locally for a 2-minute end-to-end pass.
+**This is not another chat loop. This is a Pull Request for AI work.**
 
 ```bash
 git clone https://github.com/FranklinNexus/Juno-Oversight.git && cd Juno-Oversight
-pnpm install && pnpm loop:smoke    # no API key · implement → review → verify
+pnpm install && pnpm loop:smoke
 ```
+
+No API key. Two minutes. `implement → review → verify`.
+
+<p align="center">
+  <img src="docs/assets/juno-flow-diagram.png" alt="Mission → spawn → checkpoint → review → verify → promote" width="720" />
+</p>
+
+> **GitHub manages source code. Juno manages AI work.**
+
+```text
+Git  →  GitHub  →  Juno
+code     collaboration   AI work
+```
+
+Not competitors. **Git** versions files. **GitHub** versions collaboration. **Juno** versions *AI work* — checkpoints, gates, replay, promote.
 
 ---
 
 ## Why
 
+**Without Juno**
+
+```text
+Agent finished.
+
+Trust me.
+```
+
+**With Juno**
+
+```text
+Agent finished.
+
+PASS · BLOCK · REVISE
+
+Machine-readable.
+Replayable.
+Auditable.
+```
+
 | Without Juno | With Juno |
 |--------------|-----------|
-| Context lost between sessions | **Checkpoint** is the only memory across runs |
-| “Looks done” with no proof | **Deterministic gates** — code decides dequeue, not the model |
+| Context dies between sessions | **Checkpoint** is durable memory |
+| Model says “done” | **Oversight** decides dequeue |
 | Agents edit anything | **Scope lock** per mission |
-| 24/7 = unbounded spend & risk | **Bounded autonomy** — daily cap, API backoff, escalate to human |
-| Vault / repo accidents | **Hooks** block Vault writes & destructive shell/git |
+| 24/7 = unbounded risk | **Bounded autonomy** — cap, backoff, escalate |
+| Vault accidents | **Hooks** block writes & destructive ops |
 
-**Juno is not another agent framework.** It is a **workflow runtime**: queue, spawn, gate, replay, promote.
+Juno is not an agent framework. It is an **AI Work Runtime** — queue, spawn, gate, replay, promote.
 
 ---
 
-## The sell: machine governance (Oversight)
+## Oversight
 
-Every serious engineering team uses **Pull Requests**. Long-running AI work needs the same — but machine-readable.
+Every engineering team uses **Pull Requests**. Long-running AI work needs the same — but machine-readable.
 
-After each run, the **Review gate** emits a verdict:
+After each run, the **Oversight layer** emits a verdict:
 
 ```markdown
 ## REVIEW_VERDICT
@@ -84,49 +121,46 @@ After each run, the **Review gate** emits a verdict:
 
 **Implement** requires `STATUS: COMPLETE` + `## CHANGES`. **Verify** requires `## VERIFY_REPORT`. Empty checkpoint → **hold**.
 
-> **LLM proposes. Code decides.**
+> **Models are probabilistic. Oversight isn't.**
 
-Most stacks (AutoGen, CrewAI, OpenHands, LangGraph, …) end at *task complete*. Juno adds **audit · replay · resume · promote** — closer to **GitHub PR + CI** than to another chat loop.
+Most stacks (AutoGen, CrewAI, OpenHands, LangGraph, …) end at *task complete*. Juno adds **audit · replay · resume · promote** — closer to **CI for AI work** than to another chat loop.
+
+Full spec → [wiki/overseer-quality.md](./wiki/overseer-quality.md)
 
 ---
 
-## What you can run
+## Showcase
 
-| Workload | What Juno gives you |
-|----------|---------------------|
-| Overnight writing / synthesis | Mission queue, quality gates, cap limits |
-| Large research batches | Checkpoint resume, scoped paths |
-| Orchestrator / repo hardening | implement → review → verify pipeline (126 tests) |
-| Staging → knowledge base | **Promote preview** → human confirm → Vault |
+| Workload | Status |
+|----------|--------|
+| Overnight book (公理之书) | ✅ |
+| Repo hardening (h01–h11) | ✅ |
+| Literature synthesis (1000 papers) | ✅ |
+| Workbench cleanup | ✅ |
+| Self-iteration (P0–P2 loops) | 🟡 |
+| Von Neumann evolution (fitness v1) | 🟡 |
+| Multi-agent debate slot | 🚧 |
+| Weighted Governance Score | 🚧 |
 
-One **`pnpm juno:daemon`** loop: charter in, gated work out — no hand-assigning every mission.
+One **`pnpm juno:daemon`**: charter in, gated work out — no hand-assigning every mission.
 
 ---
 
 ## Architecture
 
-Not “HUD → Orchestrator → folder.” **Governance first:**
+**Conceptual**
 
 ```text
-                    Constitution
-                   (charter · hooks)
-                          │
-                   Mission Planner
-                          │
-         ┌────────────────┴────────────────┐
-         │                                 │
-    Implement                         Review
-         │                                 │
-         └────────────────┬────────────────┘
-                          │
-                       Verify
-                          │
-                  Human Promote
-                          │
-                       Vault
+Policy  →  Planning  →  Execution  →  Oversight  →  Approval
 ```
 
-**Three layers (only three):**
+**Implementation**
+
+```text
+charter  →  planner  →  implement  →  review  →  verify  →  promote  →  Vault
+              │              │            │
+         (hooks)        (spawn)     (REVIEW_VERDICT)
+```
 
 | Layer | Role |
 |-------|------|
@@ -141,7 +175,16 @@ Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT` · `CURSOR_API_KEY`
 ## Quick start
 
 ```bash
-pnpm install && pnpm test
+git clone https://github.com/FranklinNexus/Juno-Oversight.git
+cd Juno-Oversight
+pnpm install
+pnpm loop:smoke          # no API · end-to-end pass
+```
+
+<details>
+<summary><strong>Advanced — daemon, HUD, Live runs</strong></summary>
+
+```bash
 cp .env.example .env.local
 .\scripts\scaffold-workbench.ps1          # Windows; see wiki/runtime.md
 node scripts/sync-workbench-hooks.mjs
@@ -153,12 +196,14 @@ pnpm autonomy:tick                        # Preview next mission (dry-run)
 
 | You want… | Command |
 |-----------|---------|
-| Zero-API smoke test | `pnpm loop:smoke` |
 | Run queue head (Live) | `pnpm mission:loop` |
 | Safe cleanup | `pnpm workbench:purge` |
 | Full desktop gate | `pnpm verify:desktop` |
+| Evolution fitness tick | `pnpm evolution:tick` |
 
-Config templates → [config/README.md](./config/README.md). Troubleshooting → [wiki/maintenance.md](./wiki/maintenance.md).
+Config → [config/README.md](./config/README.md) · Troubleshooting → [wiki/maintenance.md](./wiki/maintenance.md)
+
+</details>
 
 ---
 
@@ -176,6 +221,7 @@ Everything else is implementation detail.
 | **Charter** | Your rules — what Juno may do autonomously |
 | **Promote** | Human-approved copy into Vault |
 | **Runtime** | Juno itself — not the LLM |
+| **Oversight** | The layer that decides PASS / BLOCK / REVISE |
 
 ---
 
@@ -184,9 +230,9 @@ Everything else is implementation detail.
 <details>
 <summary><strong>For readers who want the “why it’s built this way” story</strong></summary>
 
-### Deterministic governance
+### Deterministic oversight
 
-Intelligence is probabilistic. **Governance is deterministic.** Juno separates *generation* (Cursor / MCP) from *permission to proceed* (TypeScript gates, hooks, caps).
+Intelligence is probabilistic. **Oversight is deterministic.** Juno separates *generation* (Cursor / MCP) from *permission to proceed* (TypeScript gates, hooks, caps).
 
 ### Bounded autonomy (not “AGI”)
 
@@ -212,6 +258,16 @@ fitness = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) 
 
 Workbench holds ephemeral runs/staging; Vault stays read-only. Agent proposes next mission; human keeps **charter** and **promote**. Amodei-style oversight without unbounded AutoGPT loops.
 
+### The category
+
+Docker invented **containers**. GitHub invented the **Pull Request**. Terraform invented **IaC**. Kubernetes invented **desired state**.
+
+**Juno invents the AI Work Runtime** — the layer where long-running agent work gets checkpoints, gates, and replay. We want teams to say:
+
+> *"We run our agents on Juno Runtime."*
+
+> *"This project needs an AI Work Runtime."*
+
 Deep dives → [evolution.md](./wiki/evolution.md) · [overseer-quality.md](./wiki/overseer-quality.md)
 
 </details>
@@ -222,10 +278,9 @@ Deep dives → [evolution.md](./wiki/evolution.md) · [overseer-quality.md](./wi
 
 | When you need… | Link |
 |----------------|------|
-| Module map & state files | [wiki/runtime.md](./wiki/runtime.md) · [juno-architecture.md](./wiki/juno-architecture.md) |
-| Gate spec (authoritative) | [overseer-quality.md](./wiki/overseer-quality.md) |
-| Full wiki index | [wiki/README.md](./wiki/README.md) |
-| Full index | [wiki/README.md](./wiki/README.md) |
+| Wiki index | [wiki/README.md](./wiki/README.md) |
+| Module map & state | [wiki/runtime.md](./wiki/runtime.md) · [juno-architecture.md](./wiki/juno-architecture.md) |
+| Oversight spec (authoritative) | [overseer-quality.md](./wiki/overseer-quality.md) |
 
 ---
 
@@ -236,5 +291,5 @@ MIT-style — [FranklinNexus/Juno-Oversight](https://github.com/FranklinNexus/Ju
 <p align="center">
   <img src="docs/assets/juno-architecture-loop.png" alt="" width="48" />
   <br/>
-  <sub><strong>Juno</strong> — AI Work Runtime · Models generate. Gates decide.</sub>
+  <sub><strong>Juno</strong> — The Runtime for AI Work · LLMs write. Juno governs.</sub>
 </p>
