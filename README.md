@@ -1,327 +1,260 @@
 <p align="center">
-  <img src="docs/assets/juno-overseer-banner.png" alt="Juno Overseer — Long-horizon agent orchestrator on Cursor" width="720" />
+  <img src="docs/assets/juno-overseer-banner.png" alt="Juno Overseer" width="720" />
+</p>
+
+<h1 align="center">Juno Oversight</h1>
+
+<p align="center">
+  <strong>长时任务 Agent 编排器</strong> — 机构终端 HUD + 可审计的 implement → review → verify 流水线<br/>
+  人定章程 · Juno 自主跑 slot · 人验收 Promote
 </p>
 
 <p align="center">
-  <strong>Juno Oversight</strong> — 机构终端风格 HUD + 长任务 Agent 编排层<br/>
-  <em>人定 North Star · Juno 跑 slot · 人验收 Promote</em>
-</p>
-
-<p align="center">
-  <a href="https://github.com/FranklinNexus/Juno-Oversight">GitHub</a> ·
-  <a href="./wiki/README.md">Wiki</a> ·
-  <a href="./wiki/juno-architecture.md">系统架构</a> ·
-  <a href="./wiki/whitepaper.md">白皮书</a>
-</p>
-
-<p align="center">
+  <a href="https://github.com/FranklinNexus/Juno-Oversight"><img src="https://img.shields.io/github/stars/FranklinNexus/Juno-Oversight?style=social" alt="GitHub stars" /></a>
+  &nbsp;
   <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white" alt="Next.js" />
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
   <img src="https://img.shields.io/badge/tests-126_passing-success" alt="tests" />
 </p>
 
----
-
-## 这是什么
-
-**Juno Oversight** 把 Cursor Agent 从「单次对话」升级为 **可审计的长时任务系统**：
-
-| 层 | 职责 |
-|----|------|
-| **HUD** | 战术看板 — Run Queue、Active Run、Scheduler、Mission Board、Promote |
-| **Overseer** | 编排内核 — `implement → review → verify`，checkpoint 跨 slot 记忆 |
-| **AgentWorkbench** | 运行时状态 — queue、missions、runs（不进 git） |
-| **Von Neumann v1** | fitness 度量 + planner 反馈 — 自指进化闭环 |
-
-同一套门禁可跑：smoke → P0–P2 自迭代 → **1000 篇 AGI 文献** → **overnight 写书** → quality REVISE → **Overseer 硬化（已 COMPLETE）** → 自主 cleanup / 下一 mission。
-
 <p align="center">
-  <img src="docs/assets/juno-flow-diagram.png" alt="Juno orchestration flow" width="800" />
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#核心能力">能力</a> ·
+  <a href="#文档">文档</a> ·
+  <a href="./wiki/whitepaper.md">白皮书</a> ·
+  <a href="./wiki/juno-architecture.md">架构</a>
 </p>
 
-> **架构细节** → [wiki/juno-architecture.md](./wiki/juno-architecture.md)（模块地图、状态文件、planner 优先级、Von Neumann 闭环）
+---
+
+## 一句话
+
+**Juno** 把 Cursor Agent 从「聊完就散」变成 **可续跑、可审查、可限流** 的长任务系统：每个 slot 有 scope、checkpoint 和出队门禁；你在 HUD 里看队列与 Run，在 Promote 面板里决定是否进 Vault。
+
+适合：overnight 写书、大规模文献 synthesis、Orchestrator 自迭代、以及任何需要 **Review 签字才能前进** 的 builder 工作流。
 
 ---
 
-## 架构一图（2026-07）
+## 为什么不是「多开几个 Cursor 窗口」
 
-```mermaid
-flowchart TB
-  subgraph human [人保留]
-    CH[autonomy-charter.json]
-    PR[Promote / Vault]
-  end
-  subgraph juno [Juno 自主]
-    DA[juno:daemon]
-    MP[mission-planner]
-    SR[spawn-run]
-    EU[evolution-unit]
-  end
-  subgraph wb [AgentWorkbench]
-    Q[queue/now.yaml]
-    RUNS[runs/]
-    ST[state/]
-  end
-  CH --> MP
-  DA --> MP
-  MP --> SR
-  SR --> RUNS
-  MP --> EU
-  EU --> ST
-  SR --> Q
-  PR -.->|只读 Vault| human
+| 痛点 | Juno 的做法 |
+|------|-------------|
+| 对话上下文会丢 | **checkpoint.md** 跨 slot 唯一记忆 |
+| Agent 改飞范围 | 每 Mission **scope-lock** 限定路径 |
+| 改完就算完 | **REVIEW_VERDICT** / **VERIFY_REPORT** 机器可读门禁 |
+| 7×24 不可控 | **日迭代上限** + API Gateway backoff |
+| Vault 被误写 | **Hook 防火墙** — Agent 只读 Obsidian |
+| 不知道系统在干嘛 | **HUD**：Queue · Active Run · Mission Board · Promote |
+
+---
+
+## 怎么工作
+
+```text
+  ┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+  │  你：章程    │ ──▶ │  Juno：选 Mission │ ──▶ │ Cursor Agent │
+  │  charter    │     │  排队 · spawn     │     │  implement   │
+  └─────────────┘     └──────────────────┘     └──────┬──────┘
+         ▲                        ▲                    │
+         │                        │                    ▼
+  ┌──────┴──────┐     ┌───────────┴────────┐   review → verify
+  │ Promote 进   │     │ Workbench 状态      │        │
+  │ Vault（人）  │     │ queue · runs · log  │◀───────┘
+  └─────────────┘     └────────────────────┘
 ```
+
+1. **你** 写 North Star / scope-lock，或只改 `autonomy-charter.json` 定方向  
+2. **Planner** 从 registry 选下一 Mission，写入 `queue/now.yaml`  
+3. **Spawn** 拉起 Live Composer slot；Agent 只改允许路径并更新 checkpoint  
+4. **门禁** 通过才出队；BLOCK 则队列停住等你  
+5. **Promote**（可选）把 staging 内容预览 diff 后复制进 Vault  
+
+<p align="center">
+  <img src="docs/assets/juno-flow-diagram.png" alt="Orchestration flow" width="720" />
+</p>
+
+> 模块级细节 → [wiki/juno-architecture.md](./wiki/juno-architecture.md)
 
 ---
 
 ## 核心能力
 
-<table>
-<tr>
-<td width="50%" valign="top">
+### 编排内核（Overseer）
 
-### 编排与门禁
+- 统一 **implement → review → verify** 流水线，本地 runner 与 Live API 共用门禁  
+- **Model fallback**：`auto` → `composer-2.5` → `composer-2`  
+- **Hardening 已闭合**（h01–h11）：promote 预览、verify:desktop、漂移审计  
 
-- **REVIEW_VERDICT** 机器可读 — BLOCK 不出队
-- **VERIFY_REPORT** 必填 — 空 checkpoint 不出队
-- **scope-lock** 每 Mission 限定可改路径
-- **Quality Gate** — spaced-bold、字数（程序化 + LLM）
-- **API Gateway** — RPM / 并发 / 日 token / backoff
-- **Model fallback** — `auto` → `composer-2.5` → `composer-2`
+### 有限自主（Bounded Autonomy）
 
-</td>
-<td width="50%" valign="top">
+- `pnpm juno:daemon` — 后台按章程推进，**默认 12 次/日**，cap 满睡到 0:00  
+- **Mission Planner** — 队列头优先，不必人工逐条 assign  
+- **Evolution fitness** — 7 日滑动；连续下降触发 self-optimize  
 
-### 自主与进化
+### 安全默认
 
-- **Mission Planner** — 章程驱动，自选下一任务
-- **`pnpm juno:daemon`** — 后台 bounded autonomy（cap 满睡到 0:00）
-- **Evolution fitness** — 7d MA；连续下降 → self-optimize
-- **Hardening queue repair** — progress.md 同步 now.yaml
-- **Vault / destructive 防火墙** — `.cursor/hooks`
-- **Daily export** — 隔离目录，不碰 Vault
+- Vault **只读** · 禁止 `git reset --hard` / 递归删盘  
+- Promote **默认需人确认**  
+- Workbench purge **仅** `runs/`、`staging/`，且要 `--i-understand`  
 
-</td>
-</tr>
-</table>
+### 战术 HUD（桌面 / 浏览器）
+
+Next.js + Tauri：**Run Queue · Active Run · Scheduler · Mission Board · Promote 预览** — 与行情 / GitHub / Jupiter 等 Widget 同屏。
+
+<p align="center">
+  <img src="docs/assets/juno-hud-orbit.png" alt="Juno HUD" width="640" />
+</p>
 
 ---
 
 ## 快速开始
 
-### 1 · 克隆与安装
+### 环境
+
+| 工具 | 版本 |
+|------|------|
+| Node.js | ≥ 22.13 |
+| pnpm | 10+ |
+| Rust | 1.77+（仅桌面打包） |
+
+### 1. 安装
 
 ```bash
 git clone https://github.com/FranklinNexus/Juno-Oversight.git
 cd Juno-Oversight
 pnpm install
-pnpm dev          # http://localhost:3000
-pnpm test         # 126 tests
+pnpm test          # 126 tests
+pnpm dev           # http://localhost:3000
 ```
 
-| 工具 | 版本 |
-|------|------|
-| Node.js | **≥ 22.13** |
-| pnpm | 10+ |
-| Rust | 1.77+（仅 `tauri:dev` / 桌面打包） |
-
-### 2 · 环境变量
+### 2. 配置
 
 ```bash
 cp .env.example .env.local
 ```
 
-| 变量 | 必需 | 说明 |
-|------|:----:|------|
-| `AGENT_WORKBENCH_ROOT` | ✓ | 运行时目录，如 `E:\AgentWorkbench` |
-| `JUNO_OVERSIGHT_ROOT` | ✓ | 本仓库绝对路径 |
-| `CURSOR_API_KEY` | Live | Cursor Composer spawn |
-| `OPENAI_API_KEY` | — | `provider: api_token` fallback |
+| 变量 | 说明 |
+|------|------|
+| `AGENT_WORKBENCH_ROOT` | 运行时目录，如 `E:\AgentWorkbench` |
+| `JUNO_OVERSIGHT_ROOT` | 本仓库绝对路径 |
+| `CURSOR_API_KEY` | Live Composer（`mission:loop` / daemon） |
 
-### 3 · 初始化 Workbench（一次）
+### 3. 初始化 Workbench（一次）
 
 ```powershell
 .\scripts\scaffold-workbench.ps1
 node scripts/sync-workbench-hooks.mjs
-
-$config = "E:\AgentWorkbench\config"
-Copy-Item config\api-limits.example.json           $config\api-limits.json
-Copy-Item config\self-optimize.example.json       $config\self-optimize.json
-Copy-Item config\mcp-servers.example.json         $config\mcp-servers.json
-Copy-Item config\autonomy-charter.example.json   $config\autonomy-charter.json
-Copy-Item config\evolution-unit.example.json     $config\evolution-unit.json
-Copy-Item config\model-defaults.example.json     $config\model-defaults.json
-Copy-Item config\daily-schedule.example.json      $config\daily-schedule.json
 ```
 
-详见 [config/README.md](./config/README.md)。
+从 `config/*.example.json` 复制到 Workbench `config/` — 清单见 [config/README.md](./config/README.md)。
 
-### 4 · Orchestrator + 桌面 HUD
+### 4. 验证与桌面 HUD
 
 ```bash
 pnpm orchestrator:build
-pnpm verify:desktop    # test + lint + build + orchestrator + cargo
-pnpm tauri:dev         # HUD + Workbench 快照
-```
-
----
-
-## 让 Juno 自己动起来
-
-```bash
-pnpm autonomy:tick              # 预览 mission-planner 决策
-pnpm autonomy:tick --execute    # 执行一轮
-pnpm juno:daemon                # 后台循环（推荐）
-pnpm evolution:tick             # 写 fitness + evolution-log（无 API）
-```
-
-### 每日自动（刷满 cap + 隔离导出 + purge）
-
-```bash
-pnpm daily:juno                 # 立即跑（仅 cap 停，默认不因 idle 提前退出）
-pnpm daily:juno:install         # Windows 计划任务 0:00
-```
-
-导出到 **隔离目录**（默认 `E:\JunoDailyExport`）。详见 [juno-daily-schedule.md](./wiki/juno-daily-schedule.md)。
-
-**Planner 优先级**（摘要）：cap → fitness/backoff → quality → self-optimize → 队列头 → registry。
-
----
-
-## 命令速查
-
-<details>
-<summary><strong>开发与验证</strong></summary>
-
-```bash
-pnpm dev | build | test | lint
 pnpm verify:desktop
-pnpm loop:smoke
-pnpm orchestrator:build
-pnpm orchestrator:test:live
-pnpm api:quota
+pnpm tauri:dev
 ```
 
-</details>
-
-<details>
-<summary><strong>自主 · 进化 · Mission</strong></summary>
+### 5. 让 Juno 自己跑
 
 ```bash
-pnpm juno:daemon
-pnpm autonomy:tick --execute
-pnpm mission:loop              # generic Live slot
-pnpm evolution:tick
-pnpm queue:von-neumann
-pnpm self:optimize
-pnpm queue:hardening           # 按 progress 修复 h07–h11 队列
-pnpm queue:cleanup
-pnpm workbench:purge
+pnpm autonomy:tick              # 预览 planner 下一动作
+pnpm juno:daemon                # 推荐：后台 bounded autonomy
+pnpm evolution:tick             # 写 fitness（不耗 API）
 ```
 
-</details>
+---
+
+## 常用命令
+
+| 场景 | 命令 |
+|------|------|
+| 最小闭环试跑 | `pnpm loop:smoke` |
+| 跑队列头 Live slot | `pnpm mission:loop` |
+| 书稿质量修复 | `pnpm book:quality-loop` |
+| 自优化一轮 | `pnpm self:optimize` |
+| 每日 cap + 隔离导出 | `pnpm daily:juno` |
+| Workbench 安全清理 | `pnpm workbench:purge` |
+| 全量桌面门禁 | `pnpm verify:desktop` |
 
 <details>
-<summary><strong>AGI · 公理之书 · 自迭代</strong></summary>
+<summary>更多命令（AGI · 公理之书 · 自迭代）</summary>
 
 ```bash
 pnpm queue:agi-literature && pnpm agi:loop
 pnpm queue:axiom-book && pnpm book:loop
-pnpm book:quality-loop && pnpm book:quality-fix
 pnpm loop:self-iterate-p2-run
+pnpm queue:von-neumann && pnpm queue:hardening
 ```
+
+演进路线图 → [wiki/architecture-loop.md](./wiki/architecture-loop.md)
 
 </details>
 
 ---
 
-## 推荐路径
+## 仓库结构
 
 ```text
-loop:smoke → loop:self-iterate-p2-run
-  → queue:agi-literature → agi:loop
-  → queue:axiom-book → book:daemon
-  → queue:von-neumann → juno:daemon
-  → self:optimize → mission:loop（cleanup / 下一 mission）
-```
+Juno-Oversight/          ← 本仓库（git）
+├── src/                 HUD（Next.js）
+├── src-tauri/           桌面壳（Tauri）
+├── orchestrator/src/    编排内核
+├── scripts/             daemon · loop · bootstrap
+├── wiki/                产品与架构文档
+└── config/              Workbench 配置示例
 
-完整演进见 [architecture-loop.md](./wiki/architecture-loop.md)。
-
----
-
-## 目录结构
-
-```text
-src/                      Next.js HUD + Overseer Widgets
-src-tauri/                Tauri IPC（Promote、orchestrator 控制）
-orchestrator/src/         编排内核（见 wiki/juno-architecture.md §5）
-scripts/                  loop runners · daemon · bootstrap
-wiki/                     产品与架构文档
-config/                   Workbench 配置示例
-missions-templates/       Mission 脚手架
-docs/assets/              README 插图
-.cursor/hooks/            Vault + destructive-ops 防火墙
-```
-
-**运行时**（`AgentWorkbench/`，不进 git）：
-
-```text
-queue/now.yaml     当前 slot 队列
-runs/<id>/         checkpoint · events.jsonl · manifest
-missions/<id>/     progress · scope-lock · north-star
-state/             autonomy · planner · evolution · api-quota
-config/            charter · api-limits · evolution-unit
+AgentWorkbench/          ← 运行时（不进 git）
+├── queue/now.yaml       当前 slot 队列
+├── runs/<id>/           checkpoint · events.jsonl
+├── missions/<id>/       north-star · scope-lock · progress
+└── state/               autonomy · planner · evolution
 ```
 
 ---
 
-## 文档索引
+## 文档
 
-| 文档 | 说明 |
-|------|------|
-| [**系统架构**](./wiki/juno-architecture.md) | **模块地图、状态文件、planner、Von Neumann** |
-| [Wiki 索引](./wiki/README.md) | 全文档地图 |
-| [Von Neumann 单元](./wiki/juno-von-neumann-unit.md) | fitness · 突变白名单 |
-| [Bounded Autonomy](./wiki/juno-bounded-autonomy.md) | 日限额 · daemon |
-| [Overseer 质量门禁](./wiki/overseer-quality.md) | REVIEW_VERDICT 权威 |
-| [Orchestrator](./wiki/orchestrator.md) | spawn · scheduler |
-| [Workbench](./wiki/workbench.md) | 运行时目录 |
-| [维护手册](./wiki/maintenance.md) | 排错 · 打包 |
+|  |  |
+|--|--|
+| [系统架构](./wiki/juno-architecture.md) | 模块地图、状态文件、Planner、Von Neumann |
+| [Wiki 索引](./wiki/README.md) | 全文档目录 |
+| [质量门禁](./wiki/overseer-quality.md) | REVIEW_VERDICT 规范 |
+| [Bounded Autonomy](./wiki/juno-bounded-autonomy.md) | 日限额与 daemon |
+| [维护手册](./wiki/maintenance.md) | 排错与打包 |
 
 ---
 
 ## 安全边界
 
-| 规则 | 机制 |
+| 规则 | 实现 |
 |------|------|
-| 禁止读写 Obsidian Vault | `vault-gate` hook |
-| 禁止 destructive git / shell | `destructive-ops-gate` + `safety-doctrine` |
-| Promote 进 Vault | 默认 `require_human: true` |
-| 自主迭代日上限 | `state/bounded-autonomy.json`（默认 12/日） |
-| orchestrator 无 `file:..` 父依赖 | `check-orchestrator-deps.mjs` |
-| Live API burst | `api-gateway` + backoff |
+| 禁止读写 Obsidian Vault | `.cursor/hooks/vault-gate` |
+| 禁止 destructive git / shell | `destructive-ops-gate` |
+| 自主迭代日上限 | `bounded-autonomy.json`（默认 12/日） |
+| Live API 限流 | `api-gateway` + backoff |
 
 ---
 
 ## 桌面发布
 
 ```bash
-pnpm build              # 静态 export → out/
-pnpm tauri build
+pnpm build && pnpm tauri build
 ```
 
-静态包不含动态 `/api/market`；LIVE 行情需 MOCK 或外置代理（见 [maintenance.md](./wiki/maintenance.md)）。
+静态 export 不含动态 `/api/market`；LIVE 行情见 [maintenance.md](./wiki/maintenance.md)。
 
 ---
 
 ## 许可
 
-MIT 风格开源协作 — [FranklinNexus/Juno-Oversight](https://github.com/FranklinNexus/Juno-Oversight)。  
-行为以 `orchestrator/src/` 与 Wiki 为准；冲突时 **代码 + [juno-architecture.md](./wiki/juno-architecture.md)** 优先。
+MIT 风格开源 — [FranklinNexus/Juno-Oversight](https://github.com/FranklinNexus/Juno-Oversight)。  
+行为以 `orchestrator/src/` 与 Wiki 为准；冲突时以代码 + [juno-architecture.md](./wiki/juno-architecture.md) 为真源。
 
 <p align="center">
-  <img src="docs/assets/juno-architecture-loop.png" alt="Juno" width="80" />
+  <img src="docs/assets/juno-architecture-loop.png" alt="" width="64" />
   <br/>
-  <sub>Juno Overseer · Observe · Plan · Act · Measure · Mutate</sub>
+  <sub>Observe · Plan · Act · Measure · Mutate</sub>
 </p>
