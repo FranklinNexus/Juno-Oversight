@@ -172,8 +172,8 @@ Copy-Item queue\now.yaml.bak-* queue\now.yaml
 ## 7. Promote 流程
 
 1. Agent 写入 `staging/<subdir>/`  
-2. **WIDGET-P** 列出 staging 条目  
-3. 人类确认 → Tauri `promote_to_vault`  
+2. **WIDGET-P** 列出 staging 条目；选中后 **干跑** `preview_promote_to_vault`（diff 摘要 + 目标 Vault 路径）  
+3. 人类确认 → Tauri `promote_to_vault`；`state/promote.log` 记录 PREVIEW/PROMOTE  
 4. 复制到 Obsidian Vault（hook 仍禁止 Agent 直接写 Vault）
 
 ---

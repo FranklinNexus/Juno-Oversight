@@ -64,6 +64,20 @@ export type PromoteRule = {
   requireConfirm: boolean;
 };
 export type PromoteResult = { ok: boolean; copiedTo: string; message: string };
+export type PromotePreview = {
+  sourcePath: string;
+  destPath: string;
+  action: "create" | "update" | "unchanged";
+  sourceBytes: number;
+  destBytes: number | null;
+  sourceLines: number;
+  destLines: number | null;
+  linesAdded: number;
+  linesRemoved: number;
+  willAddFrontmatter: boolean;
+  diffLines: string[];
+  summary: string;
+};
 
 export async function startSchedulerDaemon(): Promise<SchedulerStatus> {
   return invoke<SchedulerStatus>("start_scheduler_daemon");
@@ -94,6 +108,33 @@ export async function promoteToVault(
   relativePath: string,
 ): Promise<PromoteResult> {
   return invoke<PromoteResult>("promote_to_vault", { ruleId, relativePath });
+}
+
+export async function previewPromoteToVault(
+  ruleId: string,
+  relativePath: string,
+): Promise<PromotePreview> {
+  return invoke<PromotePreview>("preview_promote_to_vault", { ruleId, relativePath });
+}
+
+export async function readPromoteLog(maxLines = 40): Promise<string[]> {
+  return invoke<string[]>("read_promote_log", { maxLines });
+}
+
+export function formatPromotePreviewSummary(preview: PromotePreview): string {
+  const header = `[${preview.action.toUpperCase()}] ${preview.summary}`;
+  const meta = [
+    preview.willAddFrontmatter ? "frontmatter: will inject promoted_from/promoted_at" : null,
+    preview.destBytes != null
+      ? `dest: ${preview.destBytes} bytes (${preview.destLines ?? 0} lines)`
+      : "dest: (new file)",
+    `source: ${preview.sourceBytes} bytes (${preview.sourceLines} lines)`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const diff =
+    preview.diffLines.length > 0 ? preview.diffLines.join("\n") : "(no diff — unchanged)";
+  return `${header}\n${meta}\n---\n${diff}`;
 }
 
 export async function readRunEvents(

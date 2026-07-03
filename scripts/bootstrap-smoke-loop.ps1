@@ -155,3 +155,8 @@ Write-Host "Mission $missionId ready: 3 slots (implement -> review -> verify)."
 Write-Host "Hardening h06+ moved to backlog."
 Write-Host "Ensure: pnpm dev --port 3000 running before sl02 verify."
 Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."
+"Ensure: pnpm dev --port 3000 running before sl02 verify."
+Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."
+
+"Ensure: pnpm dev --port 3000 running before sl02 verify."
+Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."

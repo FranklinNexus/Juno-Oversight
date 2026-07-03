@@ -66,7 +66,7 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 ### WIDGET-P — Promote
 
 - **文件**：`PromotePanel.tsx`  
-- **能力**：列出 `staging/`，规则化复制到 Vault  
+- **能力**：列出 `staging/`，**Promote 前 diff 预览**（`preview_promote_to_vault`），规则化复制到 Vault；`state/promote.log` 可审计  
 - **门禁**：`promote.require_human`  
 
 ---
@@ -139,7 +139,9 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 | `get_missions_snapshot` | — | MissionSummary[] | Mission Board |
 | `list_staging_entries` | — | StagingEntry[] | Promote |
 | `list_promote_rules` | — | PromoteRule[] | Promote |
+| `preview_promote_to_vault` | ruleId, relativePath | PromotePreview | Promote 前 diff 干跑 |
 | `promote_to_vault` | ruleId, relativePath | PromoteResult | 复制到 Vault |
+| `read_promote_log` | maxLines? | string[] | promote.log tail |
 
 前端桥接：`src/lib/workbench/orchestrator-client.ts`
 

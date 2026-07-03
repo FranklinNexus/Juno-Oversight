@@ -1,10 +1,25 @@
-use serde::{Deserialize, Serialize};
+mod missions;
+mod orchestrator;
+mod promote;
+
+use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::System;
 use tauri::Manager;
-use tauri::Manager;
 use tauri::State;
+
+use orchestrator::{OrchestratorRuntime, SchedulerDaemon};
+
+pub fn workbench_root_path() -> PathBuf {
+  if let Ok(from_env) = std::env::var("AGENT_WORKBENCH_ROOT") {
+    if !from_env.trim().is_empty() {
+      return PathBuf::from(from_env);
+    }
+  }
+  PathBuf::from(r"E:\AgentWorkbench")
+}
 
 struct HudSystemState(Mutex<System>);
 
@@ -67,12 +82,114 @@ fn get_jupiter_telemetry() -> JupiterTelemetry {
   }
 }
 
+#[tauri::command]
+fn list_staging_entries() -> Result<Vec<promote::StagingEntry>, String> {
+  promote::list_staging_entries()
+}
+
+#[tauri::command]
+fn list_promote_rules() -> Vec<promote::PromoteRule> {
+  promote::list_promote_rules()
+}
+
+#[tauri::command]
+fn preview_promote_to_vault(
+  rule_id: String,
+  relative_path: String,
+) -> Result<promote::PromotePreview, String> {
+  promote::preview_promote_to_vault(rule_id, relative_path)
+}
+
+#[tauri::command]
+fn promote_to_vault(
+  rule_id: String,
+  relative_path: String,
+) -> Result<promote::PromoteResult, String> {
+  promote::promote_to_vault(rule_id, relative_path)
+}
+
+#[tauri::command]
+fn read_promote_log(max_lines: Option<u32>) -> Result<Vec<String>, String> {
+  promote::read_promote_log(max_lines)
+}
+
+#[tauri::command]
+fn spawn_agent_run(
+  runtime: State<'_, OrchestratorRuntime>,
+  manifest_path: String,
+  dry_run: Option<bool>,
+) -> Result<orchestrator::SpawnRunResult, String> {
+  orchestrator::spawn_agent_run(&runtime, manifest_path, dry_run)
+}
+
+#[tauri::command]
+fn kill_agent_run(runtime: State<'_, OrchestratorRuntime>) -> Result<(), String> {
+  orchestrator::kill_agent_run(&runtime)
+}
+
+#[tauri::command]
+fn read_run_events(
+  run_id: String,
+  max_lines: Option<u32>,
+) -> Result<orchestrator::RunEventsResult, String> {
+  orchestrator::read_run_events(run_id, max_lines)
+}
+
+#[tauri::command]
+fn get_scheduler_status() -> Result<orchestrator::SchedulerStatus, String> {
+  orchestrator::get_scheduler_status()
+}
+
+#[tauri::command]
+fn start_scheduler_daemon(
+  daemon: State<'_, SchedulerDaemon>,
+) -> Result<orchestrator::SchedulerStatus, String> {
+  orchestrator::start_scheduler_daemon(&daemon)
+}
+
+#[tauri::command]
+fn stop_scheduler_daemon(daemon: State<'_, SchedulerDaemon>) -> Result<(), String> {
+  orchestrator::stop_scheduler_daemon(&daemon)
+}
+
+#[tauri::command]
+fn get_missions_snapshot() -> Result<Vec<missions::MissionSummary>, String> {
+  missions::get_missions_snapshot()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .manage(HudSystemState(Mutex::new(System::new())))
-    .invoke_handler(tauri::generate_handler![get_hud_system_snapshot, get_jupiter_telemetry])
+    .manage(OrchestratorRuntime::new())
+    .manage(SchedulerDaemon::new())
+    .invoke_handler(tauri::generate_handler![
+      get_hud_system_snapshot,
+      get_jupiter_telemetry,
+      list_staging_entries,
+      list_promote_rules,
+      preview_promote_to_vault,
+      promote_to_vault,
+      read_promote_log,
+      spawn_agent_run,
+      kill_agent_run,
+      read_run_events,
+      get_scheduler_status,
+      start_scheduler_daemon,
+      stop_scheduler_daemon,
+      get_missions_snapshot,
+    ])
     .setup(|app| {
+      let handle = app.handle().clone();
+      std::thread::spawn(move || {
+        loop {
+          std::thread::sleep(Duration::from_secs(15));
+          if let Some(runtime) = handle.try_state::<OrchestratorRuntime>() {
+            let _ = orchestrator::watchdog_tick(&runtime);
+          }
+        }
+      });
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
