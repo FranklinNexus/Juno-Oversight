@@ -470,15 +470,13 @@ export function runDriveTick(
   };
 
   if (opts.autoQueue && top) {
-    if (top.action === "bootstrap" && top.bootstrap && top.missionId) {
-      result.queued = true;
-      result.missionId = top.missionId;
-    } else if (top.action === "compile_brief" && top.briefText) {
+    if (top.action === "compile_brief" && top.briefText) {
       const plan = compileBriefFromText(top.briefText);
       writeBriefMission(workbench, plan);
       result.queued = true;
       result.missionId = plan.missionId;
     }
+    /* bootstrap actions: planner/autonomy-tick runs queue_mission + bootstrap script */
   }
 
   result.digestPath = writeDriveDigest(workbench, result);
