@@ -139,6 +139,11 @@ if (decision.action === "queue_mission") {
       cwd: repoRoot,
       stdio: "inherit",
     });
+  } else if (decision.bootstrap === "queue:wisdomechoes-blog") {
+    r = spawnSync("node", ["scripts/bootstrap-wisdomechoes-blog.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
   } else {
     finish(false);
     process.exit(1);

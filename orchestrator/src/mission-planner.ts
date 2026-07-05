@@ -64,6 +64,16 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     autoQueue: false,
   },
   {
+    missionId: "juno-wisdomechoes-axiom-blog-2026",
+    priority: 1,
+    bootstrap: "queue:wisdomechoes-blog",
+    loopKind: "generic_queue",
+    loopScript: "mission:loop",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: true,
+  },
+  {
     missionId: "juno-daily-inbox-2026",
     priority: 2,
     bootstrap: "queue:daily-inbox",
