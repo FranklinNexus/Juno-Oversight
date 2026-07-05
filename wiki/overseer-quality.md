@@ -41,6 +41,40 @@ Review slot 结束时在 `checkpoint.md` 写入：
 
 ---
 
+## 2.1 METACOGNITION（2026-07）
+
+**代码**：`orchestrator/src/metacognition.ts` · **配置**：`config/metacognition.json`
+
+Implement / Review / Verify / Drive tick 前，Agent 必须诚实回答（注入于 `manifest.buildUserPrompt`）：
+
+1. 我真正理解 north-star / 创始人目标了吗？
+2. Review 够深了吗？有没有偷懒 PASS？
+3. 有没有 **具体** 的新 angle 或风险？
+
+Review slot checkpoint **必须**含：
+
+```markdown
+## METACOGNITION
+- understood: yes|partial|no
+- understanding_gaps: []
+- reviewed: yes|no
+- review_depth: shallow|adequate|deep
+- new_angles: ["至少 1 条可行动 alternative"]
+- should_revisit: true|false
+- confidence: 0.0-1.0
+- notes: ...
+```
+
+| 规则 | 程序行为 |
+|------|----------|
+| Review 无 METACOGNITION | `evaluateCompletedRun` → hold |
+| `reviewed: no` 或 `new_angles` 不足 | 不得 PASS |
+| `understood: no` | 应 REVISE，不得 PASS |
+
+详见 [juno-drive-architecture.md §6](./juno-drive-architecture.md#6-metacognition元认知门禁)。
+
+---
+
 ## 3. 三态 Run Kind
 
 | kind | prompt | 允许 |
@@ -91,8 +125,9 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 
 ### 7.2 Review (`executor_review`)
 
-- 只读 + REVIEW_VERDICT；检查 §4 + **§11 破坏性命令**  
+- 只读 + **METACOGNITION** + REVIEW_VERDICT；检查 §4 + **§11 破坏性命令**  
 - major drift 或安全违规 → BLOCK
+- 无 METACOGNITION → 程序 hold，不出队
 
 ### 7.3 Verify (`executor_verify`)
 

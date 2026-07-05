@@ -1,8 +1,9 @@
-# Runtime — 队列 · Spawn · 自主 · API
+# Runtime — 队列 · Spawn · 自主 · Drive · API
 
 **合并自**：`orchestrator.md` · `workbench.md` · `juno-bounded-autonomy.md` · `api-gateway.md` · `juno-daily-schedule.md`
 
-Juno **Runtime** = `orchestrator/src/` + `scripts/` + Workbench 磁盘状态。
+Juno **Runtime** = `orchestrator/src/` + `scripts/` + Workbench 磁盘状态。  
+**Agent Mind 详解** → [juno-drive-architecture.md](./juno-drive-architecture.md)
 
 ---
 
@@ -14,10 +15,22 @@ AGENT_WORKBENCH_ROOT/
 ├── runs/<id>/          # checkpoint · events.jsonl · manifest
 ├── missions/<id>/      # north-star · scope-lock · progress
 ├── state/              # autonomy · planner · evolution · api-quota
-└── config/             # charter · api-limits · evolution-unit
+└── config/             # charter · constitution · founder-alignment · metacognition
 ```
 
-不进 git。HUD 只读快照。
+---
+
+## Agent Mind 命令（2026-07）
+
+```bash
+pnpm drive:tick [--execute]     # scan → Vault digest + proposal
+pnpm juno:brief "..."           # NL → mission（--execute 写入 queue）
+pnpm juno:autonomy:start        # daemon + daily 0:00
+```
+
+- **Drive**：`drive-engine.ts` — constitution gap + founder alignment
+- **Auto-push**：verify dequeue 后 `git-promote.ts`（`config/auto-push.json`）
+- **Digest**：`Vault/Juno/inbox/digest-YYYY-MM-DD.md`
 
 ---
 

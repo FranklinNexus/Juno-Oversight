@@ -17,11 +17,17 @@ observe state → plan (charter) → act (spawn) → measure (fitness) → mutat
 
 ---
 
-## Fitness（当前 v1）
+## Fitness（v1.1 — 2026-07-05）
 
 ```
-fitness = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
+fitness = bookQuality + hardening + capRatio + apiHealth + driveScan(+4) + initiative(+6) - idlePenalty(-3)
 ```
+
+| 项 | 含义 |
+|----|------|
+| `driveScanTerm` | autonomy tick 执行 drive scan |
+| `initiativeTerm` | drive engine 自 queue mission |
+| `idlePenalty` | stop 且未 scan |
 
 | 触发 | 行为 |
 |------|------|

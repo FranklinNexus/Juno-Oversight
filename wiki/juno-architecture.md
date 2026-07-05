@@ -1,8 +1,8 @@
 # Juno 系统架构 — 详细参考
 
-**最后更新**：2026-07-03  
+**最后更新**：2026-07-05  
 **代码真源**：`orchestrator/src/` · `scripts/` · `src/`（HUD）  
-**状态**：Hardening mission **COMPLETE**（h01–h11）· Von Neumann v0–v1 **已落地**
+**状态**：Hardening COMPLETE · **Agent Mind v1**（drive / founder / metacognition）· 141 tests passing
 
 ---
 
@@ -70,6 +70,8 @@ flowchart TD
   DEC -->|fitness 3d↓| SO[self:optimize]
   DEC -->|queue head| ML[mission:loop]
   DEC -->|registry| BOOT[bootstrap queue]
+  DEC -->|charter idle| DRV[planFromDriveEngine]
+  DRV -->|proposal| BOOT
   DEC -->|cap 满| ESC[escalate_human]
   BA --> REC[recordAutonomyDecision]
   REC --> EU[evolution-unit fitness]
@@ -94,8 +96,9 @@ flowchart TD
 6. **`now.yaml` 队列头** → `mission:loop` 或专用 loop
 7. Registry（charter 排序）→ 继续 / bootstrap
 8. auto-discover（progress 有 queued、队列为空）
+9. **Drive Engine**（`constitution.json` 存在且 idle）→ scan → proposal → `queue_mission` / `run_drive_tick`
 
-详见 [runtime.md](./runtime.md)（Bounded Autonomy）。
+详见 [juno-drive-architecture.md §3](./juno-drive-architecture.md#3-drive-engine好奇心--野心)。
 
 ---
 
@@ -123,8 +126,10 @@ flowchart LR
 Fitness 公式（默认权重）：
 
 ```
-score = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
+score = bookQuality + hardening + capRatio + apiHealth + driveScan(+4) + initiative(+6) - idlePenalty(-3)
 ```
+
+（v1.1 2026-07-05：`driveScanTerm` · `initiativeTerm` — 见 `evolution-unit.ts`）
 
 详见 [evolution.md](./evolution.md)（Von Neumann 自指单元）。
 
@@ -151,8 +156,8 @@ sequenceDiagram
 
 | RunKind | 出队条件 | 失败行为 |
 |---------|----------|----------|
-| **implement** | `STATUS: COMPLETE` | hold → review |
-| **review** | `REVIEW_VERDICT: PASS` | BLOCK 不出队；REVISE → fix slot |
+| **implement** | `STATUS: COMPLETE` + 可选 `METACOGNITION` | hold → review |
+| **review** | `METACOGNITION` + `REVIEW_VERDICT: PASS` | BLOCK / REVISE |
 | **verify** | `VERIFY_REPORT` 存在且无 FAIL | BLOCK 保留队列 |
 | **debate** | PASS（P2 workflow） | 同 review |
 
@@ -188,6 +193,13 @@ sequenceDiagram
 | **Gate** | `loop-gate.ts` | smoke/meta 24h stamp |
 | **Events** | `events-schema.ts` | events.jsonl 契约 |
 | **Safety** | `safety-doctrine.ts` · `safety-verify.ts` | 与 hooks 对齐 |
+| **Drive** | `drive-engine.ts` | scan → proposal → digest |
+| **Constitution** | `constitution.ts` | ambition gaps |
+| **Founder** | `founder-context.ts` | `_profile.md` + alignment boost |
+| **Metacognition** | `metacognition.ts` | METACOGNITION 门禁 + prompt 注入 |
+| **Brief** | `mission-brief.ts` | NL → mission compiler |
+| **Git promote** | `git-promote.ts` | verify 后 auto-push |
+| **MCP provision** | `mcp-provision.ts` | serial-boards scaffold |
 
 ---
 
@@ -204,7 +216,13 @@ sequenceDiagram
 | `state/juno-daemon.json` | juno:daemon | heartbeat、cap 长睡 |
 | `state/autonomy.lock.json` | autonomy-lock | daemon 互斥 |
 | `state/quality-scan.json` | self-optimize | 书稿 scan |
-| `state/orchestrator.json` | spawn-run | activeRunId |
+| `state/drive-engine.json` | drive-engine | 最近 scan |
+| `state/founder-context.json` | founder-context | profile 快照 |
+| `state/git-promote-log.jsonl` | git-promote | push 审计 |
+| `state/drive-log.jsonl` | drive-engine | proposal 历史 |
+| `config/constitution.json` | 人 + Juno | 野心 metrics |
+| `config/founder-alignment.json` | 人 | 主题 → mission 映射 |
+| `config/metacognition.json` | 人 | review 门禁 |
 
 Mission 级：`missions/<id>/progress.md` · `checkpoint.md` · `scope-lock.md` · `north-star.md`
 
@@ -218,6 +236,9 @@ Mission 级：`missions/<id>/progress.md` · `checkpoint.md` · `scope-lock.md` 
 | 每日批处理 | `pnpm daily:juno` | `run-daily-juno.mjs` |
 | 单轮决策 | `pnpm autonomy:tick --execute` | `juno-autonomy-tick.mjs` |
 | Generic Live slot | `pnpm mission:loop` | `run-mission-loop.mjs` |
+| Drive scan | `pnpm drive:tick` | `run-drive-tick.mjs` |
+| NL brief | `pnpm juno:brief` | `juno-brief.mjs` |
+| Agent mind research | `pnpm queue:agent-drive-research` | `bootstrap-agent-drive-research.mjs` |
 | Fitness 度量 | `pnpm evolution:tick` | `run-evolution-tick.mjs` |
 | Von Neumann bootstrap | `pnpm queue:von-neumann` | `bootstrap-von-neumann.mjs` |
 | Hardening 队列修复 | `pnpm queue:hardening` | `queue-hardening.mjs` |
@@ -261,20 +282,20 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 | [README.md](./README.md) | **Wiki 索引**（Runtime · Governance · Evolution · Product · Experiments） |
 | [juno-architecture.md](./juno-architecture.md) | 本文 — 代码级真源 |
 | [overseer-quality.md](./overseer-quality.md) | REVIEW_VERDICT 权威 |
-| [juno-agi-north-star.md](./juno-agi-north-star.md) | AGI 1000 篇交付 |
+| [juno-drive-architecture.md](./juno-drive-architecture.md) | Agent Mind 层 |
+| [code-review-2026-07.md](./code-review-2026-07.md) | 最新审阅 |
 | [config/README.md](../config/README.md) | Workbench 配置 |
 
 ---
 
-## 11. 当前运行态（2026-07-03）
+## 11. 当前运行态（2026-07-05）
 
 | 项 | 值 |
 |----|-----|
-| **Hardening** | COMPLETE（h01–h11） |
-| **Workbench cleanup** | COMPLETE · `queue/now.yaml` 空 |
-| **Tests** | 127 passing |
-| **Daemon** | cap 满 → `waiting_midnight`（12/12）；0:00 后自动续跑 |
-| **Charter** | Runtime 叙事 · `landing-site-2026` forbidden |
-| **Planner 下一目标** | `evolution:tick`（von-neumann）· book-quality · self-optimize（按 priority） |
+| **Tests** | 141 passing |
+| **Agent Mind** | drive + constitution + founder + metacognition **已落地** |
+| **Active missions** | wisdomechoes w01–w05 · agent-drive-research（待填 papers）· hardware-mcp |
+| **Charter** | constitution-driven autonomy |
+| **Wiki 真源** | [juno-drive-architecture.md](./juno-drive-architecture.md) |
 
-**代码（2026-07-03）**：空队列 exit 4 不计 cap · auto-discover 用 `loopScript` · mission-loop skip-build。
+**代码（2026-07-05）**：Review 无 METACOGNITION 不出队 · drive digest 写 Vault · verify 后 auto-push。
