@@ -213,6 +213,7 @@ export function scanEnvironment(
   if (inbox && existsSync(inbox)) {
     for (const name of readdirSync(inbox)) {
       if (name.startsWith(".") || name.startsWith("digest-")) continue;
+      if (name === "_profile.md") continue;
       if (name === "brief.md") {
         const text = readFileSync(path.join(inbox, name), "utf8");
         if (text.includes("（在下方写你的任务）") || text.trim().length < 200) continue;
