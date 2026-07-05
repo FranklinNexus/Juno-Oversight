@@ -3,7 +3,7 @@
  * Start next dev on a free port, GET /, fail on 500 or Turbopack error strings.
  * Catches stale-cache regressions that `next build` alone misses.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { repairDevCache } from "./check-dev-cache.mjs";
@@ -27,7 +27,36 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function fetchWithTimeout(url, ms) {
+  const res = await fetch(url, {
+    redirect: "follow",
+    signal: AbortSignal.timeout(ms),
+  });
+  return res;
+}
+
+/** Windows: Ready can fire before HTTP accepts; retry with bounded timeout. */
+async function fetchRootWithRetry(url, { attempts = 5, timeoutMs = 10_000, delayMs = 800 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) await sleep(delayMs);
+    try {
+      return await fetchWithTimeout(url, timeoutMs);
+    } catch (err) {
+      lastErr = err;
+      log(`retry ${i + 1}/${attempts}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 repairDevCache({ quiet: true });
+
+spawnSync("node", ["scripts/free-port.mjs", String(PORT)], {
+  cwd: root,
+  stdio: "inherit",
+  shell: false,
+});
 
 const child = spawn("pnpm", ["exec", "next", "dev", "-p", String(PORT)], {
   cwd: root,
@@ -70,8 +99,9 @@ try {
     process.exit(1);
   }
 
+  await sleep(500);
   log(`GET ${URL}`);
-  const res = await fetch(URL, { redirect: "follow" });
+  const res = await fetchRootWithRetry(URL);
   const body = await res.text();
 
   if (res.status !== 200) {

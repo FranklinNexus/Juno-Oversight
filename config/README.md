@@ -11,6 +11,20 @@
 | [model-defaults.example.json](./model-defaults.example.json) | `model-defaults.json` | Live 模型默认与 fallback 链 |
 | [autonomy-charter.example.json](./autonomy-charter.example.json) | `autonomy-charter.json` | **Juno 自主章程** — 不用逐 mission 指派 |
 | [daily-schedule.example.json](./daily-schedule.example.json) | `daily-schedule.json` | **每日自动批处理** — 刷满限额 + 隔离导出 + purge |
+| [daily-inbox.example.json](./daily-inbox.example.json) | `daily-inbox.json` | **Vault 每日任务** — 写入 `{vault}/Juno/inbox/`（见 `config.yaml` `vault_juno_root`） |
+
+## Vault 隔离（Juno 写入）
+
+Workbench `config.yaml`：
+
+```yaml
+vault_path: "E:/Obsidian Vault"
+vault_juno_root: "Juno"   # Juno 写 Vault 的唯一根目录
+```
+
+- 每日任务 → `Juno/inbox/YYYY-MM-DD-每日任务.md`（次日删）
+- 用户偏好 → `Juno/inbox/_profile.md`（常驻）
+- **禁止**写 `Juno/` 以外 Vault 路径
 
 ## daily-schedule.json
 

@@ -64,6 +64,16 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     autoQueue: false,
   },
   {
+    missionId: "juno-daily-inbox-2026",
+    priority: 2,
+    bootstrap: "queue:daily-inbox",
+    loopKind: "generic_queue",
+    loopScript: "mission:loop",
+    requiresComplete: ["juno-runtime-overnight-2026"],
+    requiresIncomplete: true,
+    autoQueue: true,
+  },
+  {
     missionId: "juno-daily-autonomy-2026",
     priority: 1,
     loopKind: "generic_queue",

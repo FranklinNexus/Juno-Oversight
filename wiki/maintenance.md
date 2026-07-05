@@ -1,6 +1,6 @@
 # Juno Oversight — 维护手册
 
-**最后更新**：2026-07-03（Self-optimize + API Gateway + quality-gate）
+**最后更新**：2026-07-04（dev-smoke / next-dev 工具链同步）
 
 ---
 
@@ -19,8 +19,9 @@
 
 ```bash
 pnpm install          # 安装依赖
-pnpm dev              # 释放 3000 + 修复 Turbopack cache + next dev
-pnpm dev:smoke        # 临时起 dev 并 HTTP 冒烟（verify:desktop 已包含）
+pnpm dev              # next-dev.mjs：repairDevCache + free-port 3000 + next dev
+pnpm dev:smoke        # dev-smoke.mjs：端口 3099 临时 dev + HTTP 冒烟（verify:desktop 第 4 步）
+pnpm ui:smoke         # ui-smoke.mjs：对已运行的 localhost:3000 做同样检查（需先 pnpm dev）
 pnpm tauri:dev        # 桌面壳 + Next 热更新（需先能访问 localhost:3000）
 pnpm clean            # 删除 out/ 与 .next/（排错时用；勿在 dev 跑着时 clean）
 pnpm build            # clean + 静态导出到 out/（仅 production 启用 export）
@@ -43,7 +44,7 @@ node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 | http://localhost:3000 | 主 HUD（`pnpm dev`） |
 | http://localhost:3000/dev/components | UI 组件目录（**仅 development**） |
 
-`predev` 会尝试结束占用 **3000** 的旧进程（`scripts/free-port.mjs`）。若仍失败，手动 `taskkill` 后重试。不要用 `next start`（已改为 `pnpm preview`）。
+`pnpm dev`（`scripts/next-dev.mjs`）启动前会自动：`repairDevCache()`（删坏的 `.next/dev`）→ `free-port.mjs 3000`（Windows 下 `taskkill` LISTENING 进程）→ `next dev -p 3000`。若仍占端口，手动 `netstat -ano | findstr :3000` 后 `taskkill /PID <pid> /F`，或 `node scripts/free-port.mjs 3000`。
 
 ### 桌面打包（Tauri）
 
@@ -57,7 +58,27 @@ node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 
 ## 3. Next 配置要点（必读）
 
-`next.config.ts` 行为：
+### 3.0 Dev 启动与冒烟脚本
+
+| 脚本 | 入口 | 行为 |
+|------|------|------|
+| `check-dev-cache.mjs` | `repairDevCache()`；诊断 `node scripts/check-dev-cache.mjs` | App Router 项目若 `.next/dev/server/pages/_document.js` 存在但缺少 `[turbopack]_runtime.js`（Obsidian 同步 / 中断 dev 常见），判定 cache 损坏；`repairDevCache` 删除整个 `.next/` |
+| `next-dev.mjs` | `pnpm dev` | `repairDevCache()` → `free-port.mjs 3000` → `next dev -p 3000` |
+| `free-port.mjs` | 被 `next-dev.mjs` 调用 | Windows：`netstat -ano \| findstr :<port>` + `taskkill /PID <pid> /F`；端口空闲则 no-op |
+| `dev-smoke.mjs` | `pnpm dev:smoke`；`verify:desktop` 第 4 步 | `repairDevCache({ quiet: true })` → 在 **3099**（`JUNO_DEV_SMOKE_PORT`）起临时 `next dev` → 等 `Ready in`（≤30s）→ `GET /` |
+| `ui-smoke.mjs` | `pnpm ui:smoke` | 对已运行 dev（`JUNO_DEV_URL`，默认 `http://localhost:3000`）做 HTTP 检查；**不**启动服务器 |
+
+`dev-smoke` 与 `ui-smoke` 共用禁止正文子串（命中即 FAIL）：
+
+- `Internal Server Error`
+- `Runtime Error`
+- `Cannot find module`
+- `Turbopack error`
+- `[turbopack]_runtime.js`
+
+`verify:desktop` 顺序：`pnpm test` → `pnpm lint` → `pnpm build` → **dev-smoke** → `orchestrator:build` → `cargo check`。
+
+### 3.1 `next.config.ts` 行为
 
 | 命令 | `output: "export"` | 输出目录 |
 |------|-------------------|----------|
@@ -72,12 +93,16 @@ node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 **排错标准流程**：
 
 ```bash
-# 1. 结束占用 3000 的旧 Next 进程（Windows 示例）
-# 任务管理器结束 node，或: netstat -ano | findstr :3000 后 taskkill /PID <pid> /F
+# 1. 释放 3000（next-dev.mjs 已自动调用 free-port；手动示例）
+node scripts/free-port.mjs 3000
+
+# 2. 诊断 Turbopack cache（exit 1 = 损坏；pnpm dev 会自动 repair）
+node scripts/check-dev-cache.mjs
 
 pnpm clean
 pnpm dev
 # 浏览器打开 http://localhost:3000 应看到 HUD，而非纯文本 Internal Server Error
+# 或另开终端：pnpm ui:smoke
 
 # 桌面开发
 pnpm tauri:dev
@@ -233,8 +258,11 @@ Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review
 
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
-| **Runtime Error: Cannot find module … [turbopack]_runtime.js** | `.next/dev` 里残留坏的 `pages/_document.js`（Obsidian 同步 / 中断 dev） | `pnpm clean` → `pnpm dev`（现会自动清 cache + 释放 3000） |
-| **Internal Server Error**（白底一行字） | dev 时误开 `output: "export"`；或 3000 上跑着坏掉的旧 Next | `pnpm clean` → `pnpm dev` |
+| **Runtime Error: Cannot find module … [turbopack]_runtime.js** | `.next/dev` 残留 `pages/_document.js` 但无 `[turbopack]_runtime.js`（Obsidian 同步 / 中断 dev） | `node scripts/check-dev-cache.mjs`（exit 1 = 损坏）；`pnpm dev` 或 `pnpm dev:smoke` 会自动 `repairDevCache`；仍失败则 `pnpm clean` → `pnpm dev` |
+| **Internal Server Error**（白底一行字） | dev 时误开 `output: "export"`；或 3000 上跑着坏掉的旧 Next | `node scripts/free-port.mjs 3000` → `pnpm clean` → `pnpm dev`；用 `pnpm ui:smoke` 复验 |
+| **`pnpm dev:smoke` FAIL: body contains "…"** | 与 §3.0 禁止串一致；Turbopack 回归 | `node scripts/check-dev-cache.mjs`；`pnpm clean` → `pnpm dev:smoke` |
+| **`pnpm dev:smoke` FAIL: dev server did not become ready** | 3099 被占或编译挂起 | 检查 `JUNO_DEV_SMOKE_PORT`；`netstat -ano \| findstr :3099` 后释放端口 |
+| **`pnpm ui:smoke` FAIL: fetch** | 未起 dev 或端口不是 3000 | 另开终端 `pnpm dev`；或 `JUNO_DEV_URL=http://127.0.0.1:3000 pnpm ui:smoke` |
 | Tauri 开发窗口报错但浏览器正常 | `devUrl` 端口不对（3000 vs 3001） | 只保留一个 `pnpm dev` |
 | Tauri 白屏 | 未 build 或 `out/` 无 `index.html` | `pnpm build` 后检查 `out/index.html` |
 | `out/dev/server` 或 `out/dev/cache` | 曾在 export 模式下跑过 `next dev` | `pnpm clean` 后重来 |
@@ -269,6 +297,12 @@ node orchestrator/dist/spawn-run.js --manifest E:\AgentWorkbench\runs\<id>\manif
 ---
 
 ## 11. 变更记录
+
+### 2026-07-04（dev-smoke / next-dev 文档同步）
+
+- §3.0 — 记录 `check-dev-cache.mjs`、`next-dev.mjs`、`free-port.mjs`、`dev-smoke.mjs`、`ui-smoke.mjs` 行为与 `verify:desktop` 顺序
+- §9 — 排错表对齐 dev-smoke 禁止串、`JUNO_DEV_SMOKE_PORT`、cache 诊断命令
+- 移除过时 `predev` 描述，改为 `next-dev.mjs` 启动链
 
 ### 2026-07-03（Self-optimize + Quality Gate）
 

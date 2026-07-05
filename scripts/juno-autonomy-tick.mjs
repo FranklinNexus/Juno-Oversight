@@ -134,6 +134,11 @@ if (decision.action === "queue_mission") {
       cwd: repoRoot,
       stdio: "inherit",
     });
+  } else if (decision.bootstrap === "queue:daily-inbox") {
+    r = spawnSync("node", ["scripts/bootstrap-daily-inbox.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
   } else {
     finish(false);
     process.exit(1);

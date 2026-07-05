@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "vaultJunoRoot": "Juno",
+  "inboxSubdir": "inbox",
+  "filenamePattern": "{date}-每日任务.md",
+  "profileFile": "_profile.md",
+  "deletePreviousDay": true,
+  "vaultReadGlobs": ["20_Projects/**/*.md"],
+  "vaultDenyGlobs": ["学校/**", "发票/**", ".obsidian/**", "Juno/**"],
+  "maxVaultNotesScanned": 20,
+  "notes": "All Juno Vault writes go under {vault_path}/{vaultJunoRoot}/ only. Daily tasks: {vaultJunoRoot}/inbox/. See config.yaml vault_juno_root."
+}

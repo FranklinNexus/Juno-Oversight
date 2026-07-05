@@ -53,6 +53,7 @@
     "workbench:purge": "node scripts/run-workbench-purge.mjs",
     "queue:cleanup": "node scripts/bootstrap-workbench-cleanup.mjs",
     "queue:runtime-overnight": "node scripts/bootstrap-runtime-overnight.mjs --force-queue",
+    "queue:daily-inbox": "node scripts/bootstrap-daily-inbox.mjs --force-queue",
     "overnight:start": "node scripts/start-overnight.mjs",
     "daily:juno": "node scripts/run-daily-juno.mjs",
     "daily:juno:install": "powershell -ExecutionPolicy Bypass -File scripts/install-daily-task.ps1",
