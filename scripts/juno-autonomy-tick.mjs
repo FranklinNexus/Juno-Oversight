@@ -144,6 +144,16 @@ if (decision.action === "queue_mission") {
       cwd: repoRoot,
       stdio: "inherit",
     });
+  } else if (decision.bootstrap === "queue:nl-brief") {
+    r = spawnSync("node", ["scripts/bootstrap-nl-brief.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+  } else if (decision.bootstrap === "queue:hardware-mcp") {
+    r = spawnSync("node", ["scripts/bootstrap-hardware-mcp.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
   } else {
     finish(false);
     process.exit(1);

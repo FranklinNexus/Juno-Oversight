@@ -81,6 +81,26 @@ log(`live spawn ${head.id} (${head.phase_id}) mission=${head.mission_id}`);
 const runDir = path.join(workbench, "runs", head.id);
 const cpPath = path.join(runDir, "checkpoint.md");
 
+function maybeAutoPushAfterVerify(runKind, head) {
+  if (runKind !== "verify" || !head.mission_id) return;
+  import("../orchestrator/dist/git-promote.js")
+    .then(({ tryAutoGitPush }) =>
+      tryAutoGitPush(workbench, {
+        missionId: head.mission_id,
+        phaseId: head.phase_id,
+        verifyPassed: true,
+      }),
+    )
+    .then((pushResults) => {
+      for (const pr of pushResults) {
+        if (pr.pushed) log(`git-push ${pr.repoId} → ${pr.commit}`);
+        else if (pr.skipped) log(`git-push ${pr.repoId} skip: ${pr.skipped}`);
+        else if (pr.error) log(`git-push ${pr.repoId} err: ${pr.error}`);
+      }
+    })
+    .catch((e) => log(`git-push skipped: ${e instanceof Error ? e.message : String(e)}`));
+}
+
 function tryAdvanceWithoutSpawn() {
   if (!existsSync(cpPath)) return false;
   const runKind = readRunKind(workbench, head.id);
@@ -107,6 +127,7 @@ function tryAdvanceWithoutSpawn() {
   ({ now, backlog } = parseNowYaml(workbench));
   saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  maybeAutoPushAfterVerify(runKind, head);
   log(`done ${head.id} (advance-only)`);
   process.exit(0);
 }
@@ -182,4 +203,5 @@ if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {
 ({ now, backlog } = parseNowYaml(workbench));
 saveNowQueue(workbench, now.slice(1), backlog);
 mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+maybeAutoPushAfterVerify(runKind, head);
 log(`done ${head.id}`);

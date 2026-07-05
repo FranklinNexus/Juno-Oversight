@@ -1,0 +1,4 @@
+{
+  "wisdomechoesRoot": "C:/Users/kfr34/Desktop/Entrepreneurship/WisdomEchoes.net",
+  "notes": "Copy to AgentWorkbench/config/wisdomechoes-site.json. Canonical local site — NO git clone, NO second checkout. Mirror in config.yaml wisdomechoes_root."
+}

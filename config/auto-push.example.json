@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "requireVerifyPass": true,
+  "maxFilesPerPush": 80,
+  "repos": [
+    {
+      "id": "juno-overseer",
+      "root": "C:/Users/kfr34/Desktop/Entrepreneurship/Juno Oversight",
+      "remote": "origin",
+      "branch": "main"
+    },
+    {
+      "id": "wisdomechoes",
+      "root": "C:/Users/kfr34/Desktop/Entrepreneurship/WisdomEchoes.net",
+      "remote": "origin",
+      "missions": ["juno-wisdomechoes-axiom-blog-2026"]
+    }
+  ],
+  "notes": "Copy to AgentWorkbench/config/auto-push.json. Push only after verify slot PASS; never force-push."
+}
