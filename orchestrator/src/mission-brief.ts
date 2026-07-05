@@ -228,6 +228,9 @@ export function routeBriefToKnownMission(text: string): string | null {
   if (/开发板|两块板|serial|esp32|stm32|hardware|gpio|外接硬件/.test(t)) {
     return "juno-hardware-mcp-2026";
   }
+  if (/100.*论文|drive.*research|好奇心|野心|自主性|自我思维|agent.?mind/.test(t)) {
+    return "juno-agent-drive-research-2026";
+  }
   if (/nl.brief|自然语言.*mission|brief.*compiler/.test(t)) return "juno-nl-brief-2026";
   return null;
 }

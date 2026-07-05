@@ -154,12 +154,27 @@ if (decision.action === "queue_mission") {
       cwd: repoRoot,
       stdio: "inherit",
     });
+  } else if (decision.bootstrap === "queue:agent-drive-research") {
+    r = spawnSync("node", ["scripts/bootstrap-agent-drive-research.mjs", "--force-queue"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
   } else {
     finish(false);
     process.exit(1);
   }
   finish(r.status === 0);
   process.exit(r.status ?? 1);
+}
+
+if (decision.action === "run_drive_tick") {
+  const r = spawnSync("node", ["scripts/run-drive-tick.mjs", "--execute", "--skip-build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+  });
+  finish(r.status === 0);
+  process.exit(r.status ?? 0);
 }
 
 if (decision.action === "escalate_human") {

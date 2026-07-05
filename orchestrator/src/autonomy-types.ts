@@ -25,6 +25,11 @@ export const DEFAULT_AUTONOMY_LIMITS: AutonomyLimits = {
     "juno-book-quality-2026",
     "juno-overseer-hardening-2026",
     "juno-workbench-cleanup-2026",
+    "juno-wisdomechoes-axiom-blog-2026",
+    "juno-hardware-mcp-2026",
+    "juno-nl-brief-2026",
+    "juno-daily-inbox-2026",
+    "juno-agent-drive-research-2026",
   ],
 };
 
@@ -50,6 +55,7 @@ export type AutonomyDecision =
   | { action: "run_book_quality_loop"; missionId: string; script: string; reason: string }
   | { action: "run_generic_loop"; missionId: string; script: string; reason: string }
   | { action: "run_self_optimize"; script: string; reason: string }
+  | { action: "run_drive_tick"; reason: string }
   | { action: "queue_mission"; missionId: string; bootstrap: string; reason: string }
   | { action: "stop"; reason: string }
   | { action: "escalate_human"; reason: string; detail: string };

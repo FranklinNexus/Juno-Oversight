@@ -11,6 +11,8 @@ import { parseNowYaml, saveNowQueue } from "./queue-io.js";
 import type { QueueItem } from "./types.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
+import { loadConstitution } from "./constitution.js";
+import { scanEnvironment, observationsToProposals } from "./drive-engine.js";
 
 export type LoopKind =
   | "local_loop"
@@ -64,6 +66,16 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     autoQueue: false,
   },
   {
+    missionId: "juno-agent-drive-research-2026",
+    priority: 1,
+    bootstrap: "queue:agent-drive-research",
+    loopKind: "generic_queue",
+    loopScript: "mission:loop",
+    requiresComplete: [],
+    requiresIncomplete: true,
+    autoQueue: false,
+  },
+  {
     missionId: "juno-nl-brief-2026",
     priority: 10,
     bootstrap: "queue:nl-brief",
@@ -81,7 +93,7 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     loopScript: "mission:loop",
     requiresComplete: [],
     requiresIncomplete: true,
-    autoQueue: true,
+    autoQueue: false,
   },
   {
     missionId: "juno-wisdomechoes-axiom-blog-2026",
@@ -91,7 +103,7 @@ export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
     loopScript: "mission:loop",
     requiresComplete: [],
     requiresIncomplete: true,
-    autoQueue: true,
+    autoQueue: false,
   },
   {
     missionId: "juno-daily-inbox-2026",
@@ -538,9 +550,55 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
     return { action: "stop", reason: `loop_gate: ${gate.reason}` };
   }
 
+  const driveDecision = planFromDriveEngine(workbench, state, limits);
+  if (driveDecision) return driveDecision;
+
   return {
     action: "stop",
     reason: "all charter missions complete — Juno idle (edit config/autonomy-charter.json to add goals)",
+  };
+}
+
+function planFromDriveEngine(
+  workbench: string,
+  state: AutonomyState,
+  limits: AutonomyLimits,
+): AutonomyDecision | null {
+  const constitution = loadConstitution(workbench);
+  if (!constitution) return null;
+
+  const junoRoot = process.env.JUNO_OVERSIGHT_ROOT;
+  if (!junoRoot) return null;
+  const obs = scanEnvironment(workbench, junoRoot, constitution);
+  const proposals = observationsToProposals(obs, constitution);
+  const threshold = constitution.autoQueueThreshold ?? 0.55;
+  const top = proposals.find((p) => p.score >= threshold && !p.needsHumanApproval);
+  if (!top) {
+    return {
+      action: "run_drive_tick",
+      reason: `Drive scan: ${obs.length} observations, no proposal above ${threshold}`,
+    };
+  }
+
+  if (top.action === "bootstrap" && top.bootstrap && top.missionId) {
+    if (!limits.allowedMissionIds.includes(top.missionId)) return null;
+    if (state.autoQueuedToday >= limits.maxAutoQueueMissions) {
+      return {
+        action: "run_drive_tick",
+        reason: `Drive wants ${top.missionId} but auto_queue_cap reached`,
+      };
+    }
+    return {
+      action: "queue_mission",
+      missionId: top.missionId,
+      bootstrap: top.bootstrap,
+      reason: `Drive engine — ${top.hypothesis}`,
+    };
+  }
+
+  return {
+    action: "run_drive_tick",
+    reason: `Drive engine — ${top.hypothesis}`,
   };
 }
 

@@ -108,6 +108,7 @@ export function recordAutonomyDecision(
       decision.action === "run_book_quality_loop" ||
       decision.action === "run_generic_loop" ||
       decision.action === "run_self_optimize" ||
+      decision.action === "run_drive_tick" ||
       decision.action === "queue_mission");
 
   if (countsAsIteration) state.iterationsToday += 1;
@@ -126,11 +127,15 @@ export function recordAutonomyDecision(
     // self-optimize records its own evolution entry (avoids double log)
     if (decision.action === "run_self_optimize") return state;
     const idlePenaltyCount = decision.action === "stop" ? 1 : 0;
+    const driveScanned = decision.action === "run_drive_tick" || decision.action === "queue_mission";
+    const selfQueued = succeeded && decision.action === "queue_mission" && decision.reason.includes("Drive engine");
     recordEvolutionTick(workbench, {
       trigger: "autonomy_tick",
       action: decision.action,
       missionId: "missionId" in decision ? decision.missionId : undefined,
-      idlePenaltyCount,
+      idlePenaltyCount: driveScanned ? 0 : idlePenaltyCount,
+      driveScanned,
+      selfQueued,
       note: "reason" in decision ? decision.reason.slice(0, 120) : undefined,
     });
   } catch {

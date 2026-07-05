@@ -12,6 +12,10 @@ export interface EvolutionWeights {
   capUtilization: number;
   apiHealth: number;
   idlePenalty: number;
+  /** Reward environment scan / drive tick */
+  driveScan?: number;
+  /** Reward self-queued missions from drive engine */
+  initiative?: number;
 }
 
 export interface EvolutionUnitConfig {
@@ -43,6 +47,8 @@ export interface EvolutionFitnessComponents {
   capTerm: number;
   apiHealthTerm: number;
   idlePenalty: number;
+  driveScanTerm: number;
+  initiativeTerm: number;
   failedChapters: number;
   hardeningPhasesDone: number;
   iterationsToday: number;
@@ -85,6 +91,8 @@ const DEFAULT_WEIGHTS: EvolutionWeights = {
   capUtilization: 2,
   apiHealth: 20,
   idlePenalty: 3,
+  driveScan: 4,
+  initiative: 6,
 };
 
 const DEFAULT_DENYLIST = [
@@ -355,7 +363,12 @@ function apiInBackoff(workbench: string): boolean {
 
 export function computeEvolutionFitness(
   workbench: string,
-  opts: { idlePenaltyCount?: number; maxIterationsPerDay?: number } = {},
+  opts: {
+    idlePenaltyCount?: number;
+    maxIterationsPerDay?: number;
+    driveScanned?: boolean;
+    selfQueued?: boolean;
+  } = {},
 ): EvolutionFitnessSnapshot {
   const cfg = loadEvolutionConfig(workbench);
   const w = { ...DEFAULT_WEIGHTS, ...cfg.weights };
@@ -367,6 +380,8 @@ export function computeEvolutionFitness(
   const capRatio = maxDay > 0 ? autonomy.iterationsToday / maxDay : 0;
   const backoff = apiInBackoff(workbench);
   const idleN = opts.idlePenaltyCount ?? 0;
+  const driveScan = opts.driveScanned === true;
+  const selfQueued = opts.selfQueued === true;
 
   const components: EvolutionFitnessComponents = {
     bookQualityTerm: -w.bookQuality * failed,
@@ -374,6 +389,8 @@ export function computeEvolutionFitness(
     capTerm: w.capUtilization * capRatio,
     apiHealthTerm: backoff ? -w.apiHealth : 0,
     idlePenalty: -w.idlePenalty * idleN,
+    driveScanTerm: driveScan ? (w.driveScan ?? 0) : 0,
+    initiativeTerm: selfQueued ? (w.initiative ?? 0) : 0,
     failedChapters: failed,
     hardeningPhasesDone: hardeningDone,
     iterationsToday: autonomy.iterationsToday,
@@ -386,7 +403,9 @@ export function computeEvolutionFitness(
     components.hardeningTerm +
     components.capTerm +
     components.apiHealthTerm +
-    components.idlePenalty;
+    components.idlePenalty +
+    components.driveScanTerm +
+    components.initiativeTerm;
 
   return {
     scoredAt: new Date().toISOString(),
@@ -446,11 +465,15 @@ export function recordEvolutionTick(
     action?: string;
     missionId?: string;
     idlePenaltyCount?: number;
+    driveScanned?: boolean;
+    selfQueued?: boolean;
     note?: string;
   },
 ): EvolutionFitnessSnapshot {
   const snap = computeEvolutionFitness(workbench, {
     idlePenaltyCount: opts.idlePenaltyCount,
+    driveScanned: opts.driveScanned,
+    selfQueued: opts.selfQueued,
   });
   writeEvolutionFitness(workbench, snap);
   appendEvolutionLog(workbench, {

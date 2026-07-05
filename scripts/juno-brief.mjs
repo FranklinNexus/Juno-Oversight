@@ -65,7 +65,9 @@ if (known) {
           ? "bootstrap-daily-inbox.mjs"
           : known === "juno-hardware-mcp-2026"
             ? "bootstrap-hardware-mcp.mjs"
-            : known === "juno-nl-brief-2026"
+            : known === "juno-agent-drive-research-2026"
+              ? "bootstrap-agent-drive-research.mjs"
+              : known === "juno-nl-brief-2026"
               ? "bootstrap-nl-brief.mjs"
               : null;
     if (boot) {

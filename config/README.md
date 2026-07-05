@@ -13,6 +13,8 @@
 | [daily-schedule.example.json](./daily-schedule.example.json) | `daily-schedule.json` | **每日自动批处理** — 刷满限额 + 隔离导出 + purge |
 | [daily-inbox.example.json](./daily-inbox.example.json) | `daily-inbox.json` | **Vault 每日任务** — 写入 `{vault}/Juno/inbox/`（见 `config.yaml` `vault_juno_root`） |
 | [wisdomechoes-site.example.json](./wisdomechoes-site.example.json) | `wisdomechoes-site.json` | **WisdomEchoes 本地站** — 仅 `config.yaml` `wisdomechoes_root`，禁止 clone 到其它路径 |
+| [constitution.example.json](./constitution.example.json) | `constitution.json` | **Juno 宪法** — 长期野心 + metrics；drive-engine 测 gap 并自 queue |
+| [auto-push.example.json](./auto-push.example.json) | `auto-push.json` | verify PASS 后 bounded git push |
 
 ## Vault 隔离（Juno 写入）
 
