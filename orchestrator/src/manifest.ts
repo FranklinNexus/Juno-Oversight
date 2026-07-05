@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import path from "node:path";
 import { junoProjectRoot, nowIso, workbenchRoot } from "./env.js";
 import { getSafetyDoctrineExcerpt } from "./safety-doctrine.js";
+import { buildMetacognitionPromptBlock } from "./metacognition.js";
 import { readMcpHints, writeMcpHints } from "./mcp-config.js";
 import { parseReviewVerdict } from "./review-loop.js";
 import { normalizeEvalProfile, evalProfileFromWorkflow } from "./eval-profile.js";
@@ -208,12 +209,12 @@ function loadQualityExcerpt(): string {
 
 function runKindGuard(runKind: RunManifest["runKind"]): string {
   if (runKind === "review") {
-    return "本 slot 为 **Review**：禁止新功能与大重构；只写 REVIEW_VERDICT 与 checkpoint。";
+    return "本 slot 为 **Review**：禁止新功能与大重构；必须写 **METACOGNITION** + **REVIEW_VERDICT**（无 METACOGNITION 不得 PASS）。";
   }
   if (runKind === "verify") {
-    return "本 slot 为 **Verify**：只跑测试并写 VERIFY_REPORT；不修代码。";
+    return "本 slot 为 **Verify**：只跑测试并写 VERIFY_REPORT + METACOGNITION；不修代码。";
   }
-  return "本 slot 为 **Implement**：可改代码，但必须在 scope-lock 允许路径内。";
+  return "本 slot 为 **Implement**：可改代码，但必须在 scope-lock 允许路径内；结束前自问 METACOGNITION。";
 }
 
 export function materializeQueueRun(item: QueueItem): string {
@@ -263,6 +264,7 @@ export function buildUserPrompt(
   const mcpCtx = loadMcpContext(manifest, workbench);
   const eventsTail = tailEvents(runDir, EVENTS_TAIL_LINES);
   const kindGuard = runKindGuard(manifest.runKind);
+  const metacogBlock = buildMetacognitionPromptBlock(manifest.runKind ?? "implement", workbench);
 
   const retryNote =
     runState.retryCount > 0
@@ -291,6 +293,7 @@ export function buildUserPrompt(
     "",
     kindGuard,
     retryNote,
+    metacogBlock,
     getSafetyDoctrineExcerpt(),
     "## Quality doctrine (excerpt)",
     qualityExcerpt,

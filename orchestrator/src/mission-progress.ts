@@ -7,6 +7,7 @@ import {
   resolveQueueAdvance,
   type QueueAdvanceAction,
 } from "./review-loop.js";
+import { validateMetacognitionForAdvance } from "./metacognition.js";
 import type { QueueItem, RunKind } from "./types.js";
 
 export function readCheckpoint(workbench: string, runId: string): string {
@@ -103,6 +104,10 @@ export function evaluateCompletedRun(
 ): QueueAdvanceAction {
   const checkpoint = checkpointTextForAdvance(workbench, runId, missionId);
   const runKind = readRunKind(workbench, runId);
+  const metaCheck = validateMetacognitionForAdvance(runKind, checkpoint, workbench);
+  if (!metaCheck.ok) {
+    return { action: "hold", reason: "review_pending" };
+  }
   return resolveQueueAdvance(runKind, checkpoint);
 }
 

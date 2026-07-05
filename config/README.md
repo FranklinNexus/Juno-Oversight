@@ -15,6 +15,7 @@
 | [wisdomechoes-site.example.json](./wisdomechoes-site.example.json) | `wisdomechoes-site.json` | **WisdomEchoes 本地站** — 仅 `config.yaml` `wisdomechoes_root`，禁止 clone 到其它路径 |
 | [constitution.example.json](./constitution.example.json) | `constitution.json` | **Juno 宪法** — 长期野心 + metrics；drive-engine 测 gap 并自 queue |
 | [founder-alignment.example.json](./founder-alignment.example.json) | `founder-alignment.json` | **创始人对齐** — `_profile.md` 主题 → Juno mission 加权（不必 1:1） |
+| [metacognition.example.json](./metacognition.example.json) | `metacognition.json` | **元认知门禁** — review 必须 METACOGNITION + new_angles |
 | [auto-push.example.json](./auto-push.example.json) | `auto-push.json` | verify PASS 后 bounded git push |
 
 ## Vault 隔离（Juno 写入）

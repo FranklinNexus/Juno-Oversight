@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "requireOnReviewPass": true,
+  "requireOnImplementComplete": false,
+  "minNewAnglesOnReview": 1,
+  "notes": "Review slot must include ## METACOGNITION with reviewed:yes and >=1 new_angles before PASS"
+}

@@ -15,6 +15,7 @@ import {
   writeFounderContextSnapshot,
   type FounderContext,
 } from "./founder-context.js";
+import { buildDriveMetacognitionSummary } from "./metacognition.js";
 
 export type TensionKind =
   | "ambition_gap"
@@ -422,6 +423,14 @@ export function writeDriveDigest(
     }
     lines.push("");
   }
+  lines.push("## 元认知自问", "");
+  for (const line of buildDriveMetacognitionSummary(
+    result.observations,
+    result.topProposal?.hypothesis,
+  )) {
+    lines.push(`- ${line}`);
+  }
+  lines.push("");
   lines.push(
     "## Proposals",
     ...result.proposals.map(
