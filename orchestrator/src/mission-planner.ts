@@ -13,6 +13,7 @@ import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, sync
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
 import { loadConstitution } from "./constitution.js";
 import { scanEnvironment, observationsToProposals } from "./drive-engine.js";
+import { loadFounderContext } from "./founder-context.js";
 
 export type LoopKind =
   | "local_loop"
@@ -569,8 +570,9 @@ function planFromDriveEngine(
 
   const junoRoot = process.env.JUNO_OVERSIGHT_ROOT;
   if (!junoRoot) return null;
-  const obs = scanEnvironment(workbench, junoRoot, constitution);
-  const proposals = observationsToProposals(obs, constitution);
+  const founderCtx = loadFounderContext(workbench);
+  const obs = scanEnvironment(workbench, junoRoot, constitution, founderCtx);
+  const proposals = observationsToProposals(obs, constitution, founderCtx);
   const threshold = constitution.autoQueueThreshold ?? 0.55;
   const top = proposals.find((p) => p.score >= threshold && !p.needsHumanApproval);
   if (!top) {

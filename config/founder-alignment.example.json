@@ -1,0 +1,43 @@
+{
+  "themes": [
+    {
+      "id": "juno-product",
+      "label": "Juno Runtime 产品化",
+      "keywords": ["juno", "runtime", "自治", "产品化", "overseer"],
+      "ambitions": ["agent-mind", "public-surface", "revenue"],
+      "missions": [
+        "juno-wisdomechoes-axiom-blog-2026",
+        "juno-agent-drive-research-2026",
+        "juno-nl-brief-2026"
+      ],
+      "junoRole": "改代码、公开发布、drive 架构 — 不是你的学业/投资替身"
+    },
+    {
+      "id": "investment",
+      "label": "投资研究 LRIF / AI 周期",
+      "keywords": ["投资", "lrif", "ai 周期", "space", "watch"],
+      "ambitions": ["revenue"],
+      "missions": ["juno-daily-inbox-2026"],
+      "junoRole": "只读 Vault 20_Projects/投资；每日 inbox 摘要节奏，不自动改你的研报"
+    },
+    {
+      "id": "hardware",
+      "label": "开发板 / RISC-V / 硬件",
+      "keywords": ["开发板", "jupiter", "risc-v", "fpga", "硬件", "milk-v"],
+      "ambitions": ["hardware-sovereignty", "revenue"],
+      "missions": ["juno-hardware-mcp-2026"],
+      "junoRole": "MCP 控板、原型验证 — 对齐 Jinstone/LASZLO 硬件线"
+    },
+    {
+      "id": "school",
+      "label": "学业 MES",
+      "keywords": ["mes105", "mes102", "学业", "学校", "coursework"],
+      "ambitions": [],
+      "missions": ["juno-daily-inbox-2026"],
+      "junoRole": "仅 daily inbox 排期提醒，不自动写作业"
+    }
+  ],
+  "readOnlyVaultPaths": ["20_Projects"],
+  "maxRecentNotes": 8,
+  "notes": "Maps founder _profile.md themes → Juno ambitions (aligned, not identical)"
+}

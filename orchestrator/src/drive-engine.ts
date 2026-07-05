@@ -8,6 +8,13 @@ import { computeAmbitionGaps, loadConstitution, type JunoConstitution } from "./
 import { parseNowYaml } from "./queue-io.js";
 import { compileBriefFromText, writeBriefMission } from "./mission-brief.js";
 import { listWindowsComPorts } from "./mcp-provision.js";
+import {
+  alignmentBoostForAmbition,
+  alignmentBoostForMission,
+  loadFounderContext,
+  writeFounderContextSnapshot,
+  type FounderContext,
+} from "./founder-context.js";
 
 export type TensionKind =
   | "ambition_gap"
@@ -15,7 +22,8 @@ export type TensionKind =
   | "queue_idle"
   | "human_inbox"
   | "research_gap"
-  | "regression";
+  | "regression"
+  | "founder_alignment";
 
 export interface DriveObservation {
   source: string;
@@ -48,6 +56,7 @@ export interface DriveTickResult {
   digestPath?: string;
   queued: boolean;
   missionId?: string;
+  founderContext?: FounderContext;
 }
 
 function workbenchConfigPath(workbench: string): string {
@@ -163,6 +172,7 @@ export function scanEnvironment(
   workbench: string,
   junoRepoRoot: string,
   constitution: JunoConstitution | null,
+  founderCtx?: FounderContext,
 ): DriveObservation[] {
   const obs: DriveObservation[] = [];
   const { now } = parseNowYaml(workbench);
@@ -240,12 +250,28 @@ export function scanEnvironment(
   if (constitution) {
     const evidence = collectAmbitionEvidence(workbench, junoRepoRoot);
     for (const gap of computeAmbitionGaps(constitution, evidence)) {
+      let score = Math.min(1, gap.gapScore);
+      if (founderCtx) {
+        score = Math.min(1, score + alignmentBoostForAmbition(gap.ambitionId, founderCtx));
+      }
       obs.push({
         source: "constitution",
         kind: "ambition_gap",
         summary: `${gap.ambitionId}: ${gap.openMetrics.map((m) => m.id).join(", ")} open`,
-        score: Math.min(1, gap.gapScore),
+        score,
         meta: { ambitionId: gap.ambitionId, open: gap.openMetrics.length },
+      });
+    }
+  }
+
+  if (founderCtx?.activeThemes.length) {
+    for (const theme of founderCtx.activeThemes) {
+      obs.push({
+        source: "founder",
+        kind: "founder_alignment",
+        summary: `Founder focus "${theme.label}" → ambitions [${(theme.ambitions ?? []).join(", ")}]`,
+        score: 0.65,
+        meta: { themeId: theme.id, missions: theme.missions },
       });
     }
   }
@@ -256,6 +282,7 @@ export function scanEnvironment(
 export function observationsToProposals(
   observations: DriveObservation[],
   constitution: JunoConstitution | null,
+  founderCtx?: FounderContext,
 ): DriveProposal[] {
   const proposals: DriveProposal[] = [];
   const threshold = constitution?.autoQueueThreshold ?? 0.55;
@@ -311,6 +338,36 @@ export function observationsToProposals(
     });
   }
 
+  if (founderCtx?.activeThemes.some((t) => t.id === "juno-product")) {
+    proposals.push({
+      id: `prop-we-${Date.now()}`,
+      hypothesis: "Founder building Juno product — advance WisdomEchoes public surface",
+      tensionKinds: ["founder_alignment", "ambition_gap"],
+      score: 0.82,
+      confidence: 0.88,
+      needsHumanApproval: false,
+      action: "bootstrap",
+      missionId: "juno-wisdomechoes-axiom-blog-2026",
+      bootstrap: "queue:wisdomechoes-blog",
+      createdAt: ts,
+    });
+  }
+
+  if (founderCtx?.activeThemes.some((t) => t.id === "investment" || t.id === "school")) {
+    proposals.push({
+      id: `prop-inbox-daily-${Date.now()}`,
+      hypothesis: "Founder focus includes 投资/学业 — personalized daily inbox serves business rhythm",
+      tensionKinds: ["founder_alignment"],
+      score: 0.58,
+      confidence: 0.75,
+      needsHumanApproval: false,
+      action: "bootstrap",
+      missionId: "juno-daily-inbox-2026",
+      bootstrap: "queue:daily-inbox",
+      createdAt: ts,
+    });
+  }
+
   if (has("queue_idle") && !has("research_gap") && !has("hardware_opportunity")) {
     proposals.push({
       id: `prop-explore-${Date.now()}`,
@@ -324,6 +381,14 @@ export function observationsToProposals(
         "Juno drive tick: scan environment, close highest ambition gap, write digest to Vault Juno/inbox/",
       createdAt: ts,
     });
+  }
+
+  if (founderCtx) {
+    for (const p of proposals) {
+      if (p.missionId) {
+        p.score = Math.min(1, p.score + alignmentBoostForMission(p.missionId, founderCtx));
+      }
+    }
   }
 
   return proposals.sort((a, b) => b.score - a.score);
@@ -346,6 +411,18 @@ export function writeDriveDigest(
     "## Observations",
     ...result.observations.slice(0, 12).map((o) => `- [${o.kind}] (${o.score.toFixed(2)}) ${o.summary}`),
     "",
+  ];
+  if (result.founderContext?.alignmentSummary.length) {
+    lines.push("## 与你的目标对齐", "");
+    for (const line of result.founderContext.alignmentSummary) {
+      lines.push(`- ${line}`);
+    }
+    if (result.founderContext.ambitionText) {
+      lines.push("", `> ${result.founderContext.ambitionText.split("\n")[0]?.slice(0, 200)}`);
+    }
+    lines.push("");
+  }
+  lines.push(
     "## Proposals",
     ...result.proposals.map(
       (p) =>
@@ -358,9 +435,9 @@ export function writeDriveDigest(
     "",
     result.missionId ? `Mission: \`${result.missionId}\`` : "",
     "",
-    "_Generated by drive-engine v1 — amend `config/constitution.json` to steer ambitions._",
+    "_Generated by drive-engine v1 — edit `Juno/inbox/_profile.md` + `config/founder-alignment.json`._",
     "",
-  ];
+  );
   writeFileSync(digestPath, lines.join("\n"), "utf8");
   return digestPath;
 }
@@ -376,8 +453,10 @@ export function runDriveTick(
   opts: ExecuteDriveOpts = {},
 ): DriveTickResult {
   const constitution = loadConstitution(workbench);
-  const observations = scanEnvironment(workbench, junoRepoRoot, constitution);
-  const proposals = observationsToProposals(observations, constitution);
+  const founderContext = loadFounderContext(workbench);
+  writeFounderContextSnapshot(workbench, founderContext);
+  const observations = scanEnvironment(workbench, junoRepoRoot, constitution, founderContext);
+  const proposals = observationsToProposals(observations, constitution, founderContext);
   const minScore = opts.minScore ?? constitution?.autoQueueThreshold ?? 0.55;
   const top = proposals.find((p) => p.score >= minScore && !p.needsHumanApproval) ?? null;
 
@@ -387,6 +466,7 @@ export function runDriveTick(
     proposals,
     topProposal: top,
     queued: false,
+    founderContext,
   };
 
   if (opts.autoQueue && top) {
