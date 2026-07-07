@@ -295,12 +295,17 @@ runReport.status = "complete";
 writeFileSync(runStatePath, `${JSON.stringify(runReport, null, 2)}\n`, "utf8");
 
 const { appendDailySummary } = await import("./lib/vault-bridge-core.mjs");
+const { updateWeeklyKpi } = await import("./lib/kpi-weekly.mjs");
 appendDailySummary(workbench, {
   ticks: runReport.ticks,
   capFilled: runReport.capFilled,
   exportDir: runReport.export?.exportDir,
   purgeDeleted: runReport.purge?.deleted,
 });
+const kpi = updateWeeklyKpi(workbench, runReport.autonomyDate);
+if (!kpi.ok) {
+  log(`kpi update skipped: ${kpi.reason ?? "unknown"}`);
+}
 
 cleanup();
 log("done");

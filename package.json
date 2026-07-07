@@ -58,6 +58,7 @@
     "juno:brief": "node scripts/juno-brief.mjs",
     "juno:vault:sync": "node scripts/juno-vault-bridge.mjs",
     "daily:inbox": "node scripts/run-daily-inbox.mjs",
+    "kpi:daily": "node -e \"import('./scripts/lib/kpi-weekly.mjs').then(m=>console.log(JSON.stringify(m.updateWeeklyKpi(process.env.AGENT_WORKBENCH_ROOT||'E:/AgentWorkbench'), null, 2)))\"",
     "drive:tick": "node scripts/run-drive-tick.mjs",
     "queue:agent-drive-research": "node scripts/bootstrap-agent-drive-research.mjs --force-queue",
     "queue:nl-brief": "node scripts/bootstrap-nl-brief.mjs --force-queue",
