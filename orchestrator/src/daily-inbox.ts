@@ -54,6 +54,31 @@ export function renderDailyInboxDate(d = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
+function renderDateInTimezone(d: Date, timezone: string): string {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return dtf.format(d);
+  } catch {
+    return renderDailyInboxDate(d);
+  }
+}
+
+function readAutonomyTimezone(workbench: string): string {
+  const p = path.join(workbench, "config", "daily-schedule.json");
+  if (!existsSync(p)) return "Asia/Shanghai";
+  try {
+    const cfg = JSON.parse(readFileSync(p, "utf8")) as { autonomyTimezone?: string };
+    return cfg.autonomyTimezone?.trim() || "Asia/Shanghai";
+  } catch {
+    return "Asia/Shanghai";
+  }
+}
+
 function resolveOutFile(workbench: string, date: string): string | null {
   const yaml = readCfgYaml(workbench);
   if (!yaml) return null;
@@ -115,14 +140,18 @@ function buildBody(workbench: string, date: string): string {
   return lines.join("\n");
 }
 
-function deletePreviousDayFile(workbench: string, todayFile: string): string[] {
+function deletePreviousDayFile(workbench: string, todayFile: string, todayDate: string): string[] {
   const cfg = loadDailyInboxConfig(workbench);
   if (cfg.deletePreviousDay === false) return [];
   const dir = path.dirname(todayFile);
   if (!existsSync(dir)) return [];
+  const d = new Date(`${todayDate}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  const previousDate = renderDailyInboxDate(d);
+  const previousName = `${previousDate}-每日任务.md`;
   const deleted: string[] = [];
   for (const name of readdirSync(dir)) {
-    if (!name.endsWith("-每日任务.md")) continue;
+    if (name !== previousName) continue;
     const full = path.join(dir, name);
     if (path.resolve(full) === path.resolve(todayFile)) continue;
     try {
@@ -135,16 +164,17 @@ function deletePreviousDayFile(workbench: string, todayFile: string): string[] {
   return deleted;
 }
 
-export function generateDailyInbox(workbench: string, date = renderDailyInboxDate()): DailyInboxResult {
+export function generateDailyInbox(workbench: string, date?: string): DailyInboxResult {
   const cfg = loadDailyInboxConfig(workbench);
   if (cfg.enabled === false) return { status: "disabled", reason: "daily-inbox disabled" };
-  const out = resolveOutFile(workbench, date);
+  const todayDate = date ?? renderDateInTimezone(new Date(), readAutonomyTimezone(workbench));
+  const out = resolveOutFile(workbench, todayDate);
   if (!out) return { status: "error", reason: "vault path invalid or outside Juno root" };
   if (existsSync(out)) return { status: "skipped", filePath: out, reason: "already generated today" };
 
   mkdirSync(path.dirname(out), { recursive: true });
-  const content = buildBody(workbench, date);
+  const content = buildBody(workbench, todayDate);
   writeFileSync(out, content, "utf8");
-  const deleted = deletePreviousDayFile(workbench, out);
+  const deleted = deletePreviousDayFile(workbench, out, todayDate);
   return { status: "created", filePath: out, deleted };
 }

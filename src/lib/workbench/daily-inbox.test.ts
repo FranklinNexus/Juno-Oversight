@@ -50,10 +50,12 @@ describe("daily-inbox", () => {
     mkdirSync(inboxDir, { recursive: true });
     writeFileSync(path.join(inboxDir, "_profile.md"), "## 当前重心\n\n- Juno Runtime 产品化\n");
     writeFileSync(path.join(inboxDir, "2026-07-06-每日任务.md"), "old");
+    writeFileSync(path.join(inboxDir, "2026-07-01-每日任务.md"), "older");
 
     const result = generateDailyInbox(wb, "2026-07-07");
     expect(result.status).toBe("created");
     expect((result.deleted ?? []).some((p) => p.endsWith("2026-07-06-每日任务.md"))).toBe(true);
+    expect((result.deleted ?? []).some((p) => p.endsWith("2026-07-01-每日任务.md"))).toBe(false);
   });
 
   it("date helper returns YYYY-MM-DD", () => {
