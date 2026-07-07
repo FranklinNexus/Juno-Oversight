@@ -153,8 +153,8 @@ describe("vault-bridge-core", () => {
     expect(status).toMatch(/m-1/);
   });
 
-  it("extractBriefBody takes content after ---", () => {
-    const md = "# title\n\n---\n\nactual task text\n";
-    expect(extractBriefBody(md)).toBe("actual task text");
+  it("extractBriefBody ignores placeholder-only body", () => {
+    const md = "# t\n\n---\n\n（在下方写你的任务）\n";
+    expect(extractBriefBody(md)).toBe("");
   });
 });

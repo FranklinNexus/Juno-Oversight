@@ -497,13 +497,17 @@ export function syncInboxIngest(workbench, repoRoot) {
 export function extractBriefBody(markdown) {
   const withoutTag = markdown.replace(/\s*<!--\s*juno:ingested[^>]+-->\s*$/i, "").trim();
   const parts = withoutTag.split(/^---\s*$/m);
+  let body = "";
   if (parts.length >= 2) {
-    return parts[parts.length - 1].trim();
+    body = parts[parts.length - 1].trim();
+  } else {
+    const lines = withoutTag.split(/\r?\n/);
+    const start = lines.findIndex((l) => l.includes("在下方写你的任务"));
+    body = start >= 0 ? lines.slice(start + 1).join("\n").trim() : withoutTag.trim();
   }
-  const lines = withoutTag.split(/\r?\n/);
-  const start = lines.findIndex((l) => l.includes("在下方写你的任务"));
-  if (start >= 0) return lines.slice(start + 1).join("\n").trim();
-  return withoutTag.trim();
+  if (/^[（(]在下方写你的任务[）)]\s*$/u.test(body)) return "";
+  if (body.length < 12) return "";
+  return body;
 }
 
 export function syncBriefIngest(workbench, repoRoot) {
