@@ -332,6 +332,16 @@ function readAutonomySnapshot(workbench) {
   }
 }
 
+function readDriveSnapshot(workbench) {
+  const p = path.join(workbench, "state", "drive-engine.json");
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function parseQueueHead(workbench) {
   const file = path.join(workbench, "queue/now.yaml");
   if (!existsSync(file)) return null;
@@ -589,6 +599,7 @@ export function refreshStatusBoard(workbench) {
   const state = loadState(paths.stateFile);
   const orch = readOrchestratorSnapshot(workbench);
   const autonomy = readAutonomySnapshot(workbench);
+  const drive = readDriveSnapshot(workbench);
   const head = parseQueueHead(workbench);
   const date = today();
   const ts = nowIso();
@@ -611,6 +622,7 @@ export function refreshStatusBoard(workbench) {
     `| orchestrator | ${orch.activeRunStatus ?? "idle"} |`,
     `| active run | ${orch.activeRunId ?? "—"} |`,
     `| 今日迭代 | ${autonomy?.iterationsToday ?? "?"} / ${autonomy?.maxIterationsPerDay ?? "?"} |`,
+    `| drive strategy | ${drive?.driveStrategy ?? "balanced"} |`,
     "",
     "## 队列头",
     "",
@@ -657,6 +669,17 @@ export function refreshStatusBoard(workbench) {
       "## brief.md",
       "",
       `最近摄入：\`${state.briefIngest.missionId}\` @ ${state.briefIngest.ingestedAt ?? "?"}`,
+      "",
+    );
+  }
+
+  if (drive?.lastScanAt || drive?.lastTopHypothesis) {
+    lines.push(
+      "## Drive",
+      "",
+      `- 最后扫描：${drive?.lastScanAt ?? "—"}`,
+      `- Top proposal：${drive?.lastTopHypothesis ?? "—"}`,
+      `- Top mission：${drive?.lastTopMissionId ?? "—"}`,
       "",
     );
   }

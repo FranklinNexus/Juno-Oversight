@@ -60,6 +60,24 @@ export interface DriveTickResult {
   founderContext?: FounderContext;
 }
 
+function strategyExploreBrief(strategy: "balanced" | "wisdomechoes" | "lrif"): string {
+  if (strategy === "wisdomechoes") {
+    return [
+      "Juno drive tick (wisdomechoes mode):",
+      "Prioritize a public-facing WisdomEchoes deliverable this cycle.",
+      "Target: concise shippable update with verify-ready acceptance criteria and publication notes.",
+    ].join(" ");
+  }
+  if (strategy === "lrif") {
+    return [
+      "Juno drive tick (lrif mode):",
+      "Prioritize LRIF execution cadence.",
+      "Target: daily inbox task pack with investment watch summary, trigger list, and next-step checklist.",
+    ].join(" ");
+  }
+  return "Juno drive tick: scan environment, close highest ambition gap, write digest to Vault Juno/inbox/";
+}
+
 function workbenchConfigPath(workbench: string): string {
   return path.join(workbench, "config.yaml");
 }
@@ -454,8 +472,7 @@ export function observationsToProposals(
       confidence: 0.5,
       needsHumanApproval: false,
       action: "compile_brief",
-      briefText:
-        "Juno drive tick: scan environment, close highest ambition gap, write digest to Vault Juno/inbox/",
+      briefText: strategyExploreBrief(strategy),
       createdAt: ts,
     });
   }
@@ -585,6 +602,9 @@ export function runDriveTick(
   writeDriveState(workbench, {
     lastScanAt: result.scannedAt,
     lastProposalId: top?.id,
+    driveStrategy: founderContext.driveStrategy,
+    lastTopHypothesis: top?.hypothesis,
+    lastTopMissionId: top?.missionId,
     lastObservations: observations.length,
     lastQueued: result.queued,
   });

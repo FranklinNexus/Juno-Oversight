@@ -146,11 +146,23 @@ describe("vault-bridge-core", () => {
       `updated: now\nnow:\n  - id: run-1\n    mission_id: m-1\n    phase_id: p1\n    run_kind: implement\nbacklog:\n  []\n`,
       "utf8",
     );
+    writeFileSync(
+      path.join(wb, "state", "drive-engine.json"),
+      JSON.stringify({
+        driveStrategy: "lrif",
+        lastScanAt: "2026-07-07T00:00:00.000Z",
+        lastTopHypothesis: "h1",
+        lastTopMissionId: "juno-daily-inbox-2026",
+      }),
+      "utf8",
+    );
     const paths = bridgePaths(wb)!;
     refreshStatusBoard(wb);
     const status = readFileSync(paths.statusFile, "utf8");
     expect(status).toMatch(/run-1/);
     expect(status).toMatch(/m-1/);
+    expect(status).toMatch(/drive strategy \| lrif/);
+    expect(status).toMatch(/Top proposal：h1/);
   });
 
   it("extractBriefBody ignores placeholder-only body", () => {

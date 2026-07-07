@@ -96,4 +96,18 @@ describe("drive-engine", () => {
     });
     expect(proposals[0]?.missionId).toBe("juno-daily-inbox-2026");
   });
+
+  it("strategy wisdomechoes injects explicit route proposal", () => {
+    const proposals = observationsToProposals([], null, {
+      loadedAt: new Date().toISOString(),
+      currentFocus: ["Juno Runtime 产品化"],
+      ambitionText: "",
+      themes: [],
+      activeThemes: [],
+      recentNotes: [],
+      alignmentSummary: [],
+      driveStrategy: "wisdomechoes",
+    });
+    expect(proposals[0]?.missionId).toBe("juno-wisdomechoes-axiom-blog-2026");
+  });
 });
