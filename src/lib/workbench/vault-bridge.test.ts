@@ -6,9 +6,14 @@ import {
   appendLogEntry,
   bridgePaths,
   completeInboxMission,
+  extractBriefBody,
   loadState,
   missionHash,
   parseInboxLines,
+  recordEscalation,
+  reconcileStaleInProgress,
+  refreshStatusBoard,
+  resolveMissionId,
   saveState,
 } from "../../../scripts/lib/vault-bridge-core.mjs";
 
@@ -71,5 +76,85 @@ describe("vault-bridge-core", () => {
     const text = readFileSync(logFile, "utf8");
     expect(text).toMatch(/## 2026-07-07/);
     expect(text).toMatch(/hello/);
+  });
+
+  it("resolveMissionId reads last-brief-plan when stdout missing", () => {
+    const wb = mkdtempSync(path.join(os.tmpdir(), "juno-vb-plan-"));
+    mkdirSync(path.join(wb, "state"), { recursive: true });
+    const text = "ship the feature";
+    writeFileSync(
+      path.join(wb, "state", "last-brief-plan.json"),
+      `${JSON.stringify({ missionId: "m-ship", sourceText: text })}\n`,
+      "utf8",
+    );
+    expect(resolveMissionId(wb, text, "unknown-abc")).toBe("m-ship");
+  });
+
+  it("reconcileStaleInProgress resets orphan [/]", () => {
+    const vault = mkdtempSync(path.join(os.tmpdir(), "juno-vb-recon-"));
+    const wb = mkdtempSync(path.join(os.tmpdir(), "juno-vb-recon-wb-"));
+    mkdirSync(path.join(wb, "state"), { recursive: true });
+    writeFileSync(
+      path.join(wb, "config.yaml"),
+      `vault_path: "${vault.replace(/\\/g, "/")}"\nvault_juno_root: "Juno"\n`,
+      "utf8",
+    );
+    const paths = bridgePaths(wb)!;
+    mkdirSync(path.dirname(paths.missionFile), { recursive: true });
+    writeFileSync(paths.missionFile, "- [/] orphan task <!-- juno:aaa -->\n", "utf8");
+    writeFileSync(paths.logFile, "# log\n\n", "utf8");
+
+    const state = loadState(paths.stateFile);
+    const { fixed } = reconcileStaleInProgress(wb, paths, state);
+    expect(fixed).toBeGreaterThan(0);
+    const inbox = readFileSync(paths.missionFile, "utf8");
+    expect(inbox).toMatch(/- \[ \] orphan task/);
+  });
+
+  it("recordEscalation writes Human_Escalations", () => {
+    const vault = mkdtempSync(path.join(os.tmpdir(), "juno-vb-esc-"));
+    const wb = mkdtempSync(path.join(os.tmpdir(), "juno-vb-esc-wb-"));
+    mkdirSync(path.join(wb, "state"), { recursive: true });
+    writeFileSync(
+      path.join(wb, "config.yaml"),
+      `vault_path: "${vault.replace(/\\/g, "/")}"\nvault_juno_root: "Juno"\n`,
+      "utf8",
+    );
+    const paths = bridgePaths(wb)!;
+    mkdirSync(path.dirname(paths.escalationsFile), { recursive: true });
+    writeFileSync(paths.escalationsFile, "# Human Escalations\n\n", "utf8");
+    writeFileSync(paths.logFile, "# log\n\n", "utf8");
+
+    expect(recordEscalation(wb, { kind: "test", reason: "unit", missionId: "m-1" })).toBe(true);
+    const esc = readFileSync(paths.escalationsFile, "utf8");
+    expect(esc).toMatch(/test/);
+    expect(esc).toMatch(/m-1/);
+  });
+
+  it("refreshStatusBoard writes queue head", () => {
+    const vault = mkdtempSync(path.join(os.tmpdir(), "juno-vb-st-"));
+    const wb = mkdtempSync(path.join(os.tmpdir(), "juno-vb-st-wb-"));
+    mkdirSync(path.join(wb, "state"), { recursive: true });
+    mkdirSync(path.join(wb, "queue"), { recursive: true });
+    writeFileSync(
+      path.join(wb, "config.yaml"),
+      `vault_path: "${vault.replace(/\\/g, "/")}"\nvault_juno_root: "Juno"\n`,
+      "utf8",
+    );
+    writeFileSync(
+      path.join(wb, "queue/now.yaml"),
+      `updated: now\nnow:\n  - id: run-1\n    mission_id: m-1\n    phase_id: p1\n    run_kind: implement\nbacklog:\n  []\n`,
+      "utf8",
+    );
+    const paths = bridgePaths(wb)!;
+    refreshStatusBoard(wb);
+    const status = readFileSync(paths.statusFile, "utf8");
+    expect(status).toMatch(/run-1/);
+    expect(status).toMatch(/m-1/);
+  });
+
+  it("extractBriefBody takes content after ---", () => {
+    const md = "# title\n\n---\n\nactual task text\n";
+    expect(extractBriefBody(md)).toBe("actual task text");
   });
 });

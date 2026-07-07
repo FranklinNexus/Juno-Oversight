@@ -186,6 +186,12 @@ if (decision.action === "run_drive_tick") {
 }
 
 if (decision.action === "escalate_human") {
+  const { recordEscalation } = await import("./lib/vault-bridge-core.mjs");
+  recordEscalation(workbench, {
+    kind: "escalate_human",
+    reason: decision.reason,
+    detail: decision.detail,
+  });
   finish(false);
   console.error(`[autonomy] paused: ${decision.reason} — ${decision.detail}`);
   process.exit(2);

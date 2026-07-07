@@ -47,7 +47,7 @@ const {
   finalizeRunCheckpoint,
 } = await import("../orchestrator/dist/mission-progress.js");
 const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotency.js");
-const { recordSlotOutcome } = await import("./lib/vault-bridge-core.mjs");
+const { recordSlotOutcome, recordEscalation } = await import("./lib/vault-bridge-core.mjs");
 
 let { now, backlog } = parseNowYaml(workbench);
 if (now.length === 0) {
@@ -238,6 +238,13 @@ if (action.action === "revise") {
 
 if (action.action !== "dequeue") {
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "failed" });
+  recordEscalation(workbench, {
+    kind: "gate hold",
+    reason: action.reason ?? action.action,
+    missionId: head.mission_id,
+    runId: head.id,
+    checkpointPath: path.join(workbench, "runs", head.id, "checkpoint.md"),
+  });
   log(`not dequeue-ready: ${action.action} — retry when review gate clears`);
   process.exit(3);
 }
