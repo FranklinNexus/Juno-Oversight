@@ -76,7 +76,7 @@ if (!advanceOnly && !process.env.CURSOR_API_KEY?.trim()) {
   process.exit(3);
 }
 
-log(`live spawn ${head.id} (${head.phase_id}) mission=${head.mission_id}`);
+log(`${advanceOnly ? "advance" : "live spawn"} ${head.id} (${head.phase_id}) mission=${head.mission_id}`);
 
 const runDir = path.join(workbench, "runs", head.id);
 const cpPath = path.join(runDir, "checkpoint.md");
@@ -102,11 +102,12 @@ function maybeAutoPushAfterVerify(runKind, head) {
 }
 
 function tryAdvanceWithoutSpawn() {
-  if (!existsSync(cpPath)) return false;
   const runKind = readRunKind(workbench, head.id);
   if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, runKind)) {
-    log(`mirrored mission checkpoint → runs/${head.id}/checkpoint.md`);
+    log(`finalized checkpoint → runs/${head.id}/checkpoint.md`);
   }
+  if (!existsSync(cpPath)) return false;
+
   const cp = checkpointTextForAdvance(workbench, head.id, head.mission_id);
   const action = evaluateCompletedRun(workbench, head.id, head.mission_id);
   if (action.action === "revise") {
@@ -132,14 +133,24 @@ function tryAdvanceWithoutSpawn() {
   process.exit(0);
 }
 
+const { reconcileStaleApiInflight } = await import("../orchestrator/dist/api-gateway.js");
+const clearedInflight = reconcileStaleApiInflight(workbench);
+if (clearedInflight > 0) log(`reconciled stale api inflight (${clearedInflight})`);
+
 if (advanceOnly || existsSync(cpPath)) {
   if (tryAdvanceWithoutSpawn()) {
     /* exits inside */
   }
-  if (advanceOnly) {
-    log("advance-only: checkpoint not dequeue-ready");
-    process.exit(3);
+} else if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, readRunKind(workbench, head.id))) {
+  log(`synced checkpoint from events before spawn — retrying advance`);
+  if (tryAdvanceWithoutSpawn()) {
+    /* exits inside */
   }
+}
+
+if (advanceOnly) {
+  log("advance-only: checkpoint not dequeue-ready");
+  process.exit(3);
 }
 
 const manifestPath = materializeQueueRun(head);
@@ -168,6 +179,12 @@ if ((r.status ?? 1) !== 0) {
   process.exit(r.status ?? 1);
 }
 
+if (!existsSync(cpPath)) {
+  const runKind = readRunKind(workbench, head.id);
+  if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, runKind)) {
+    log(`synced checkpoint from events → runs/${head.id}/checkpoint.md`);
+  }
+}
 if (!existsSync(cpPath)) {
   log("no checkpoint.md after live slot");
   process.exit(1);

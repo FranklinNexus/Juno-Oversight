@@ -8,6 +8,7 @@ import {
   estimateMissionCapacity,
   getQuotaStatus,
   loadApiLimits,
+  reconcileStaleApiInflight,
   recordApiFailure,
   releaseApiSlot,
   resolveLimits,
@@ -123,5 +124,14 @@ describe("api-gateway", () => {
     releaseApiSlot(dir, "cursor");
     const rows = getQuotaStatus(dir);
     expect(rows.some((r) => r.providerId === "cursor" && r.dailyRequests >= 1)).toBe(true);
+  });
+
+  it("reconcileStaleApiInflight clears orphaned inflight when orchestrator idle", () => {
+    const dir = wb();
+    acquireApiSlot(dir, "cursor");
+    const cleared = reconcileStaleApiInflight(dir);
+    expect(cleared).toBe(1);
+    const rows = getQuotaStatus(dir);
+    expect(rows.find((r) => r.providerId === "cursor")?.inflight).toBe(0);
   });
 });

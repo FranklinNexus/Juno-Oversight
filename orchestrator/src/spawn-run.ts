@@ -2,8 +2,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Agent, CursorAgentError } from "@cursor/sdk";
 import { runApiToken } from "./api-token.js";
+import { syncCheckpointFromEvents } from "./checkpoint-sync.js";
 import {
   estimateManifestTokens,
+  reconcileStaleApiInflight,
   recordApiFailure,
   recordApiSuccess,
   releaseApiSlot,
@@ -244,6 +246,11 @@ async function runSlot(manifest: RunManifest, workbench: string, runDir: string)
     throw new Error(`Unknown provider: ${manifest.provider}`);
   }
 
+  if (ok) {
+    const runKind = manifest.runKind ?? "implement";
+    syncCheckpointFromEvents(workbench, manifest.runId, runKind);
+  }
+
   runState.lastStatus = ok ? "done" : "failed";
   runState.updatedAt = nowIso();
   saveRunState(runDir, runState);
@@ -253,6 +260,7 @@ async function runSlot(manifest: RunManifest, workbench: string, runDir: string)
 
 async function main(): Promise<void> {
   loadProjectEnv();
+  reconcileStaleApiInflight(workbenchRoot());
   const { manifestPath, dryRun } = parseArgs(process.argv.slice(2));
   const manifest = readJsonFile<RunManifest>(manifestPath);
   const workbench = workbenchRoot();

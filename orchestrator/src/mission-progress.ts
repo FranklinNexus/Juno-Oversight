@@ -7,6 +7,7 @@ import {
   resolveQueueAdvance,
   type QueueAdvanceAction,
 } from "./review-loop.js";
+import { syncCheckpointFromEvents } from "./checkpoint-sync.js";
 import { validateMetacognitionForAdvance } from "./metacognition.js";
 import type { QueueItem, RunKind } from "./types.js";
 
@@ -52,6 +53,8 @@ export function finalizeRunCheckpoint(
   missionId: string | undefined,
   runKind: RunKind,
 ): boolean {
+  if (syncCheckpointFromEvents(workbench, runId, runKind)) return true;
+
   if (runKind !== "implement" || !missionId) return false;
 
   const runCpPath = path.join(workbench, "runs", runId, "checkpoint.md");

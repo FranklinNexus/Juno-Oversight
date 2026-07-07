@@ -330,11 +330,38 @@ export function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Reset orphaned inflight when no run is actively marked running (crash / kill mid-slot). */
+export function reconcileStaleApiInflight(workbench: string): number {
+  const orchPath = path.join(workbench, "state", "orchestrator.json");
+  let activeRunning = false;
+  try {
+    const orch = JSON.parse(readFileSync(orchPath, "utf8")) as {
+      activeRunStatus?: string;
+    };
+    activeRunning = orch.activeRunStatus === "running";
+  } catch {
+    activeRunning = false;
+  }
+  if (activeRunning) return 0;
+
+  const state = readQuotaState(workbench);
+  let cleared = 0;
+  for (const providerId of Object.keys(state.providers) as ApiProviderId[]) {
+    const ps = state.providers[providerId];
+    if (!ps || ps.inflight <= 0) continue;
+    cleared += ps.inflight;
+    ps.inflight = 0;
+  }
+  if (cleared > 0) writeQuotaState(workbench, state);
+  return cleared;
+}
+
 export async function waitForApiSlot(
   workbench: string,
   providerId: ApiProviderId,
   opts: { estimatedTokens?: number; maxWaitMs?: number } = {},
 ): Promise<AcquireResult> {
+  reconcileStaleApiInflight(workbench);
   const maxWait = opts.maxWaitMs ?? 600_000;
   const deadline = Date.now() + maxWait;
   while (Date.now() < deadline) {
