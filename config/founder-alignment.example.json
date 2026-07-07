@@ -1,4 +1,5 @@
 {
+  "driveStrategy": "balanced",
   "themes": [
     {
       "id": "juno-product",

@@ -3,6 +3,7 @@
   "autonomyTimezone": "Asia/Shanghai",
   "startHourLocal": 0,
   "tickIntervalMs": 120000,
+  "driveScanEveryTicks": 5,
   "maxIterationsPerDay": null,
   "maxIdleTicks": null,
   "exportRoot": "E:\\JunoDailyExport",

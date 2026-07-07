@@ -54,4 +54,20 @@ describe("drive-engine", () => {
     const ev = collectAmbitionEvidence(process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench", process.cwd());
     expect(ev["hardware-sovereignty:ports_scanned"]).toBeDefined();
   });
+
+  it("prioritizes mission inbox pending items", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "juno-drive-inbox-"));
+    const vault = mkdtempSync(path.join(tmpdir(), "juno-vault-"));
+    mkdirSync(path.join(dir, "queue"), { recursive: true });
+    mkdirSync(path.join(vault, "Juno"), { recursive: true });
+    writeFileSync(
+      path.join(dir, "config.yaml"),
+      `vault_path: "${vault.replace(/\\/g, "/")}"\nvault_juno_root: "Juno"\n`,
+    );
+    writeFileSync(path.join(dir, "queue", "now.yaml"), "updated: x\nnow:\nbacklog: []\n");
+    writeFileSync(path.join(vault, "Juno", "Juno_Mission_Inbox.md"), "- [ ] do something\n");
+    const obs = scanEnvironment(dir, process.cwd(), null);
+    const hit = obs.find((o) => o.summary.includes("Mission Inbox pending"));
+    expect(hit?.kind).toBe("human_inbox");
+  });
 });

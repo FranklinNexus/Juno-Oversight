@@ -156,8 +156,22 @@ const maxIter =
   schedule.maxIterationsPerDay ?? DEFAULT_AUTONOMY_LIMITS.maxSelfIterationsPerDay;
 const intervalMs = schedule.tickIntervalMs ?? 120_000;
 const maxIdle = schedule.maxIdleTicks ?? null;
+const driveScanEveryTicks = Math.max(1, Number(schedule.driveScanEveryTicks ?? 5));
 
 log(`autonomyDate=${runReport.autonomyDate} maxIterations=${maxIter} interval=${intervalMs}ms`);
+
+// Daily inbox generation is idempotent; skip when today's file already exists.
+{
+  const di = spawnSync("node", ["scripts/run-daily-inbox.mjs", "--skip-build"], {
+    cwd: repoRoot,
+    env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+    stdio: "inherit",
+    shell: false,
+  });
+  if (di.status !== 0) {
+    log(`daily-inbox exit ${di.status} (continue loop)`);
+  }
+}
 
 let idleStreak = 0;
 
@@ -182,6 +196,22 @@ while (true) {
 
   runReport.ticks += 1;
   const after = readAutonomyState(workbench);
+
+  if (runReport.ticks % driveScanEveryTicks === 0) {
+    const drive = spawnSync(
+      "node",
+      ["scripts/run-drive-tick.mjs", "--skip-build"],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
+        stdio: "inherit",
+        shell: false,
+      },
+    );
+    if (drive.status !== 0) {
+      log(`drive tick exit ${drive.status} (non-blocking)`);
+    }
+  }
 
   let plannerDecision = null;
   try {

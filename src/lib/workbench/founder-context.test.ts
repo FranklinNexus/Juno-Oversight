@@ -18,6 +18,7 @@ describe("founder-context", () => {
     writeFileSync(
       path.join(wb, "config", "founder-alignment.json"),
       JSON.stringify({
+        driveStrategy: "lrif",
         themes: [
           {
             id: "juno-product",
@@ -45,6 +46,7 @@ describe("founder-context", () => {
     expect(ctx.currentFocus.length).toBeGreaterThanOrEqual(2);
     expect(ctx.activeThemes.some((t) => t.id === "juno-product")).toBe(true);
     expect(ctx.activeThemes.some((t) => t.id === "investment")).toBe(true);
+    expect(ctx.driveStrategy).toBe("lrif");
     expect(alignmentBoostForMission("juno-wisdomechoes-axiom-blog-2026", ctx)).toBeGreaterThan(0);
   });
 });

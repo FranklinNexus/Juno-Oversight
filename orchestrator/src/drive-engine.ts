@@ -78,6 +78,20 @@ export function readVaultJunoInbox(workbench: string): string | null {
   }
 }
 
+function readVaultJunoRoot(workbench: string): string | null {
+  const cfgP = workbenchConfigPath(workbench);
+  if (!existsSync(cfgP)) return null;
+  try {
+    const raw = readFileSync(cfgP, "utf8");
+    const vaultMatch = raw.match(/vault_path:\s*["']?([^"'\n]+)/);
+    const junoRootMatch = raw.match(/vault_juno_root:\s*["']?([^"'\n]+)/);
+    if (!vaultMatch || !junoRootMatch) return null;
+    return path.join(vaultMatch[1].trim(), junoRootMatch[1].trim());
+  } catch {
+    return null;
+  }
+}
+
 function missionComplete(workbench: string, missionId: string): boolean {
   const cp = path.join(workbench, "missions", missionId, "checkpoint.md");
   if (!existsSync(cp)) return false;
@@ -177,6 +191,7 @@ export function scanEnvironment(
 ): DriveObservation[] {
   const obs: DriveObservation[] = [];
   const { now } = parseNowYaml(workbench);
+  const junoRoot = readVaultJunoRoot(workbench);
 
   if (now.length === 0) {
     obs.push({
@@ -239,6 +254,23 @@ export function scanEnvironment(
     }
   }
 
+  if (junoRoot) {
+    const missionInbox = path.join(junoRoot, "Juno_Mission_Inbox.md");
+    if (existsSync(missionInbox)) {
+      const md = readFileSync(missionInbox, "utf8");
+      const pending = [...md.matchAll(/^\s*-\s*\[\s\]\s+(.+)$/gim)];
+      if (pending.length > 0) {
+        obs.push({
+          source: "vault",
+          kind: "human_inbox",
+          summary: `Mission Inbox pending: ${pending.length} item(s)`,
+          score: 0.99,
+          meta: { pendingCount: pending.length },
+        });
+      }
+    }
+  }
+
   if (gitDirty(junoRepoRoot)) {
     obs.push({
       source: "git",
@@ -288,6 +320,7 @@ export function observationsToProposals(
   const proposals: DriveProposal[] = [];
   const threshold = constitution?.autoQueueThreshold ?? 0.55;
   const ts = new Date().toISOString();
+  const strategy = founderCtx?.driveStrategy ?? "balanced";
 
   const has = (k: TensionKind) => observations.some((o) => o.kind === k && o.score >= threshold * 0.8);
 
@@ -367,6 +400,26 @@ export function observationsToProposals(
       bootstrap: "queue:daily-inbox",
       createdAt: ts,
     });
+  }
+
+  if (strategy === "wisdomechoes") {
+    for (const p of proposals) {
+      if (p.missionId === "juno-wisdomechoes-axiom-blog-2026") {
+        p.score = Math.min(1, p.score + 0.15);
+        p.hypothesis = `[wisdomechoes-strategy] ${p.hypothesis}`;
+      }
+    }
+  }
+  if (strategy === "lrif") {
+    for (const p of proposals) {
+      if (p.missionId === "juno-daily-inbox-2026") {
+        p.score = Math.min(1, p.score + 0.2);
+        p.hypothesis = `[lrif-strategy] ${p.hypothesis}`;
+      }
+      if (p.missionId === "juno-wisdomechoes-axiom-blog-2026") {
+        p.score = Math.max(0, p.score - 0.1);
+      }
+    }
   }
 
   if (has("queue_idle") && !has("research_gap") && !has("hardware_opportunity")) {

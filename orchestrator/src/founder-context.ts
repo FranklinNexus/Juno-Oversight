@@ -19,6 +19,8 @@ export interface FounderTheme {
 
 export interface FounderAlignmentConfig {
   themes?: FounderTheme[];
+  /** Drive preference: balanced | wisdomechoes | lrif */
+  driveStrategy?: "balanced" | "wisdomechoes" | "lrif";
   /** Vault-relative paths (read-only, titles + mtime only) */
   readOnlyVaultPaths?: string[];
   maxRecentNotes?: number;
@@ -28,6 +30,7 @@ export interface RecentVaultNote {
   relPath: string;
   title: string;
   mtime: string;
+  preview?: string;
 }
 
 export interface FounderContext {
@@ -44,6 +47,7 @@ export interface FounderContext {
   recentNotes: RecentVaultNote[];
   /** Human-readable alignment summary for digest */
   alignmentSummary: string[];
+  driveStrategy: "balanced" | "wisdomechoes" | "lrif";
 }
 
 function workbenchConfigPath(workbench: string): string {
@@ -100,6 +104,20 @@ function titleFromMd(relPath: string, maxChars = 80): string {
   return base.slice(0, maxChars);
 }
 
+function readNotePreview(fullPath: string): string {
+  try {
+    const text = readFileSync(fullPath, "utf8");
+    const cleaned = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#") && !l.startsWith("- ") && !l.startsWith(">"))
+      .join(" ");
+    return cleaned.slice(0, 120);
+  } catch {
+    return "";
+  }
+}
+
 function scanRecentNotes(vaultPath: string, relPaths: string[], maxNotes: number): RecentVaultNote[] {
   const notes: RecentVaultNote[] = [];
   for (const rel of relPaths) {
@@ -131,10 +149,13 @@ function walkMd(dir: string, vaultPath: string, out: RecentVaultNote[], depth: n
     if (st.isDirectory()) {
       walkMd(full, vaultPath, out, depth - 1);
     } else if (name.endsWith(".md")) {
+      const relPath = path.relative(vaultPath, full).replace(/\\/g, "/");
+      const preview = /20_Projects\/投资\/watch\//.test(relPath) ? readNotePreview(full) : "";
       out.push({
-        relPath: path.relative(vaultPath, full).replace(/\\/g, "/"),
+        relPath,
         title: titleFromMd(name),
         mtime: st.mtime.toISOString(),
+        preview: preview || undefined,
       });
     }
   }
@@ -166,6 +187,7 @@ export function loadFounderContext(workbench: string): FounderContext {
     activeThemes: [],
     recentNotes: [],
     alignmentSummary: ["No Vault profile — edit Juno/inbox/_profile.md"],
+    driveStrategy: cfg.driveStrategy ?? "balanced",
   };
   if (!paths) return empty;
 
@@ -198,6 +220,7 @@ export function loadFounderContext(workbench: string): FounderContext {
     activeThemes,
     recentNotes,
     alignmentSummary,
+    driveStrategy: cfg.driveStrategy ?? "balanced",
   };
 }
 
@@ -216,6 +239,10 @@ function buildAlignmentSummary(
   }
   if (recentNotes.length) {
     lines.push(`近期项目笔记（只读）：${recentNotes.slice(0, 4).map((n) => n.title).join("、")}`);
+    const watch = recentNotes.find((n) => n.preview);
+    if (watch?.preview) {
+      lines.push(`投资观察摘要：${watch.preview}`);
+    }
   }
   if (lines.length === 0) {
     lines.push("在 _profile.md 填写 ## 当前重心 与 ## 业务与野心，Juno 会据此加权自主 queue");
