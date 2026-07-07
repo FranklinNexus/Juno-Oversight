@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { quietSpawnOpts, runOrchestratorBuild } from "./lib/win-spawn.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
@@ -24,11 +25,7 @@ const daemonStatePath = path.join(stateDir, "juno-daemon.json");
 
 mkdirSync(stateDir, { recursive: true });
 
-const buildOnce = spawnSync("pnpm", ["orchestrator:build"], {
-  cwd: repoRoot,
-  stdio: "inherit",
-  shell: true,
-});
+const buildOnce = runOrchestratorBuild(repoRoot);
 if (buildOnce.status !== 0) process.exit(buildOnce.status ?? 1);
 
 const { acquireAutonomyLock, releaseAutonomyLock, readAutonomyLock } = await import(
@@ -106,12 +103,10 @@ while (true) {
   const r = spawnSync(
     "node",
     ["scripts/juno-autonomy-tick.mjs", "--execute", "--skip-build"],
-    {
-      cwd: repoRoot,
+    quietSpawnOpts(repoRoot, {
       env: { ...process.env, JUNO_SKIP_ORCHESTRATOR_BUILD: "1" },
       stdio: "inherit",
-      shell: false,
-    },
+    }),
   );
 
   writeState({ lastExit: r.status ?? 0, status: "running", heartbeatAt: new Date().toISOString() });

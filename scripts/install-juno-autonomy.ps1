@@ -91,7 +91,12 @@ if ($StartDaemonNow) {
   if ($running) {
     Write-Host "[juno-autonomy] daemon already running pid=$old"
   } else {
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$DaemonWrapper`"" -WorkingDirectory $RepoRoot
-    Write-Host "[juno-autonomy] started daemon in background"
+    $node = (Get-Command node -ErrorAction Stop).Source
+    Start-Process `
+      -FilePath $node `
+      -ArgumentList "`"$(Join-Path $RepoRoot 'scripts\start-juno-daemon-hidden.mjs')`"" `
+      -WorkingDirectory $RepoRoot `
+      -WindowStyle Hidden
+    Write-Host "[juno-autonomy] started daemon detached (no window)"
   }
 }

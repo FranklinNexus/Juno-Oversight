@@ -1,9 +1,12 @@
-# Wrapper for Task Scheduler / logon — loads env and runs juno:daemon.
+# Wrapper for Task Scheduler / logon — loads env, runs daemon without visible console.
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 if (-not $env:AGENT_WORKBENCH_ROOT) {
   $env:AGENT_WORKBENCH_ROOT = "E:\AgentWorkbench"
+}
+if (-not $env:WISDOMECHOES_ROOT) {
+  $env:WISDOMECHOES_ROOT = "C:\Users\kfr34\Desktop\Entrepreneurship\WisdomEchoes.net"
 }
 if (-not $env:JUNO_OVERSIGHT_ROOT) {
   $env:JUNO_OVERSIGHT_ROOT = $RepoRoot
@@ -23,5 +26,6 @@ if (Test-Path $EnvLocal) {
 }
 
 Set-Location $RepoRoot
-& pnpm juno:daemon 2>&1 | Tee-Object -FilePath (Join-Path $env:AGENT_WORKBENCH_ROOT "state\juno-daemon.log") -Append
+# Detached node — no pnpm/cmd.exe popup; logs to juno-daemon.log
+& node (Join-Path $RepoRoot "scripts\start-juno-daemon-hidden.mjs")
 exit $LASTEXITCODE
