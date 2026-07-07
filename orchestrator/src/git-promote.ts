@@ -5,16 +5,22 @@ import { existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+export interface AutoPushRepoConfig {
+  id: string;
+  root: string;
+  remote?: string;
+  branch?: string;
+  /** Mission id allowlist; omit only with allowAllMissions: true */
+  missions?: string[];
+  /** Legacy: push on any mission verify (dangerous for monorepos). Default false. */
+  allowAllMissions?: boolean;
+  /** When set, only stage/commit paths under these prefixes */
+  pathPrefixes?: string[];
+}
+
 export interface AutoPushConfig {
   enabled?: boolean;
-  repos?: Array<{
-    id: string;
-    root: string;
-    remote?: string;
-    branch?: string;
-    /** Mission id allowlist; empty = all with autoPush brief tag */
-    missions?: string[];
-  }>;
+  repos?: AutoPushRepoConfig[];
   requireVerifyPass?: boolean;
   maxFilesPerPush?: number;
 }
@@ -48,7 +54,7 @@ export function loadAutoPushConfig(workbench: string): AutoPushConfig {
 
 function runGit(cwd: string, args: string[]): { ok: boolean; out: string } {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", shell: false });
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/\s+$/, "");
   return { ok: (r.status ?? 1) === 0, out };
 }
 
@@ -56,9 +62,41 @@ function hasForbiddenDiff(text: string): boolean {
   return /\bforce\b|--force|-f\b.*push|push.*--force/i.test(text);
 }
 
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/\r$/, "");
+}
+
+function parseStatusPaths(porcelain: string): string[] {
+  return porcelain
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const m = line.match(/^(..)\s+(.*)$/);
+      const raw = (m ? m[2] : line).trim();
+      const arrow = raw.indexOf(" -> ");
+      return arrow >= 0 ? raw.slice(arrow + 4).trim() : raw;
+    });
+}
+
+function filterPathsByPrefixes(paths: string[], prefixes?: string[]): string[] {
+  if (!prefixes?.length) return paths;
+  const norms = prefixes.map((p) => normalizePath(p));
+  return paths.filter((file) => {
+    const f = normalizePath(file);
+    return norms.some((p) => f === p.replace(/\/$/, "") || f.startsWith(p));
+  });
+}
+
 export function tryGitPromoteForRepo(
   repoRoot: string,
-  opts: { missionId?: string; message: string; repoId?: string },
+  opts: {
+    missionId?: string;
+    message: string;
+    repoId?: string;
+    pathPrefixes?: string[];
+    maxFilesPerPush?: number;
+  },
 ): GitPromoteResult {
   const root = path.resolve(repoRoot);
   const base: GitPromoteResult = { repoId: opts.repoId ?? path.basename(root), root, pushed: false };
@@ -71,19 +109,31 @@ export function tryGitPromoteForRepo(
   if (!status.ok) return { ...base, error: status.out };
   if (!status.out.trim()) return { ...base, skipped: "clean working tree" };
 
-  const diffStat = runGit(root, ["diff", "--stat"]);
+  const allPaths = parseStatusPaths(status.out);
+  const paths = filterPathsByPrefixes(allPaths, opts.pathPrefixes);
+  if (opts.pathPrefixes?.length && paths.length === 0) {
+    return { ...base, skipped: "no changes under pathPrefixes" };
+  }
+
+  const diffStat = runGit(root, ["diff", "--stat", "--", ...paths]);
   if (diffStat.out && hasForbiddenDiff(diffStat.out)) {
     return { ...base, skipped: "forbidden pattern in diff metadata" };
   }
 
-  const fileCount = status.out.split("\n").filter(Boolean).length;
-  const cfg = loadAutoPushConfig(process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench");
-  const maxFiles = cfg.maxFilesPerPush ?? 80;
-  if (fileCount > maxFiles) {
-    return { ...base, skipped: `too many changed files (${fileCount}>${maxFiles}) — human review` };
+  const maxFiles = opts.maxFilesPerPush ?? 80;
+  if (paths.length > maxFiles) {
+    return {
+      ...base,
+      skipped: `too many changed files (${paths.length}>${maxFiles}) — human review`,
+    };
   }
 
-  runGit(root, ["add", "-A"]);
+  if (paths.length > 0) {
+    runGit(root, ["add", "--", ...paths]);
+  } else {
+    runGit(root, ["add", "-A"]);
+  }
+
   const commit = runGit(root, ["commit", "-m", opts.message]);
   if (!commit.ok) {
     if (/nothing to commit/i.test(commit.out)) return { ...base, skipped: "nothing to commit" };
@@ -95,6 +145,21 @@ export function tryGitPromoteForRepo(
   if (!push.ok) return { ...base, error: push.out, commit: sha.out };
 
   return { ...base, pushed: true, commit: sha.out };
+}
+
+export function repoEligibleForMission(
+  repo: AutoPushRepoConfig,
+  missionId: string | undefined,
+  briefAutoPush: boolean,
+): { ok: true } | { ok: false; reason: string } {
+  const hasAllowlist = Array.isArray(repo.missions) && repo.missions.length > 0;
+  if (!hasAllowlist && repo.allowAllMissions !== true && !briefAutoPush) {
+    return { ok: false, reason: "repo has no mission allowlist" };
+  }
+  if (hasAllowlist && missionId && !repo.missions!.includes(missionId) && !briefAutoPush) {
+    return { ok: false, reason: "mission not in repo allowlist" };
+  }
+  return { ok: true };
 }
 
 export function tryAutoGitPush(
@@ -120,11 +185,20 @@ export function tryAutoGitPush(
 
   const results: GitPromoteResult[] = [];
   const msg = `juno: ${opts.missionId ?? "mission"} ${opts.phaseId ?? ""}`.trim();
+  const maxFiles = cfg.maxFilesPerPush ?? 80;
 
   for (const repo of repos) {
-    if (repo.missions?.length && opts.missionId && !repo.missions.includes(opts.missionId)) {
-      if (!briefAutoPush) continue;
+    const eligible = repoEligibleForMission(repo, opts.missionId, briefAutoPush);
+    if (!eligible.ok) {
+      results.push({
+        repoId: repo.id,
+        root: repo.root,
+        pushed: false,
+        skipped: eligible.reason,
+      });
+      continue;
     }
+
     if (cfg.requireVerifyPass !== false && opts.verifyPassed === false) {
       results.push({
         repoId: repo.id,
@@ -135,7 +209,13 @@ export function tryAutoGitPush(
       continue;
     }
 
-    const r = tryGitPromoteForRepo(repo.root, { missionId: opts.missionId, message: msg, repoId: repo.id });
+    const r = tryGitPromoteForRepo(repo.root, {
+      missionId: opts.missionId,
+      message: msg,
+      repoId: repo.id,
+      pathPrefixes: repo.pathPrefixes,
+      maxFilesPerPush: maxFiles,
+    });
     results.push(r);
 
     mkdirSync(path.join(workbench, "state"), { recursive: true });

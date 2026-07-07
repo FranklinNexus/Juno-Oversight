@@ -82,8 +82,8 @@ const runDir = path.join(workbench, "runs", head.id);
 const cpPath = path.join(runDir, "checkpoint.md");
 
 function maybeAutoPushAfterVerify(runKind, head) {
-  if (runKind !== "verify" || !head.mission_id) return;
-  import("../orchestrator/dist/git-promote.js")
+  if (runKind !== "verify" || !head.mission_id) return Promise.resolve([]);
+  return import("../orchestrator/dist/git-promote.js")
     .then(({ tryAutoGitPush }) =>
       tryAutoGitPush(workbench, {
         missionId: head.mission_id,
@@ -97,11 +97,15 @@ function maybeAutoPushAfterVerify(runKind, head) {
         else if (pr.skipped) log(`git-push ${pr.repoId} skip: ${pr.skipped}`);
         else if (pr.error) log(`git-push ${pr.repoId} err: ${pr.error}`);
       }
+      return pushResults;
     })
-    .catch((e) => log(`git-push skipped: ${e instanceof Error ? e.message : String(e)}`));
+    .catch((e) => {
+      log(`git-push skipped: ${e instanceof Error ? e.message : String(e)}`);
+      return [];
+    });
 }
 
-function tryAdvanceWithoutSpawn() {
+async function tryAdvanceWithoutSpawn() {
   const runKind = readRunKind(workbench, head.id);
   if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, runKind)) {
     log(`finalized checkpoint → runs/${head.id}/checkpoint.md`);
@@ -128,7 +132,7 @@ function tryAdvanceWithoutSpawn() {
   ({ now, backlog } = parseNowYaml(workbench));
   saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
-  maybeAutoPushAfterVerify(runKind, head);
+  await maybeAutoPushAfterVerify(runKind, head);
   log(`done ${head.id} (advance-only)`);
   process.exit(0);
 }
@@ -138,12 +142,12 @@ const clearedInflight = reconcileStaleApiInflight(workbench);
 if (clearedInflight > 0) log(`reconciled stale api inflight (${clearedInflight})`);
 
 if (advanceOnly || existsSync(cpPath)) {
-  if (tryAdvanceWithoutSpawn()) {
+  if (await tryAdvanceWithoutSpawn()) {
     /* exits inside */
   }
 } else if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, readRunKind(workbench, head.id))) {
   log(`synced checkpoint from events before spawn — retrying advance`);
-  if (tryAdvanceWithoutSpawn()) {
+  if (await tryAdvanceWithoutSpawn()) {
     /* exits inside */
   }
 }
@@ -165,7 +169,7 @@ const r = spawnSync("node", [spawnScript, "--manifest", manifestPath], {
 
 if (r.error?.code === "ETIMEDOUT") {
   log("spawn-run timed out — try advance-only if checkpoint exists");
-  if (tryAdvanceWithoutSpawn()) {
+  if (await tryAdvanceWithoutSpawn()) {
     /* exits */
   }
   process.exit(1);
@@ -173,7 +177,7 @@ if (r.error?.code === "ETIMEDOUT") {
 
 if ((r.status ?? 1) !== 0) {
   log(`spawn-run exit ${r.status}`);
-  if (tryAdvanceWithoutSpawn()) {
+  if (await tryAdvanceWithoutSpawn()) {
     /* exits */
   }
   process.exit(r.status ?? 1);
@@ -220,5 +224,5 @@ if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {
 ({ now, backlog } = parseNowYaml(workbench));
 saveNowQueue(workbench, now.slice(1), backlog);
 mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
-maybeAutoPushAfterVerify(runKind, head);
+await maybeAutoPushAfterVerify(runKind, head);
 log(`done ${head.id}`);

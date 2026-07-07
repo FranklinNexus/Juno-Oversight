@@ -2,8 +2,8 @@
 
 | Phase | Kind | Status |
 |-------|------|--------|
-| w01-delete-recap-post | implement | queued |
-| w02-import-quality-book | implement | queued |
-| w03-juno-intro | implement | queued |
-| w04-chunked-reader | implement | queued |
-| w05-verify-build | verify | queued |
+| w01-delete-recap-post | implement | done |
+| w02-import-quality-book | implement | done |
+| w03-juno-intro | implement | done |
+| w04-chunked-reader | implement | done |
+| w05-verify-build | verify | done |

@@ -114,7 +114,7 @@ while (true) {
     },
   );
 
-  writeState({ lastExit: r.status ?? 0, status: "running" });
+  writeState({ lastExit: r.status ?? 0, status: "running", heartbeatAt: new Date().toISOString() });
 
   if (r.status === 3) {
     log(`gate hold (review/verify pending) — retry in ${intervalMs / 1000}s`);

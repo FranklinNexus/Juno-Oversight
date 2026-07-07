@@ -7,7 +7,22 @@
       "id": "juno-overseer",
       "root": "C:/Users/kfr34/Desktop/Entrepreneurship/Juno Oversight",
       "remote": "origin",
-      "branch": "main"
+      "branch": "main",
+      "missions": [
+        "juno-overseer-hardening-2026",
+        "juno-daily-autonomy-2026",
+        "juno-hardware-mcp-2026",
+        "juno-nl-brief-2026",
+        "juno-agent-drive-research-2026"
+      ],
+      "pathPrefixes": [
+        "orchestrator/",
+        "scripts/",
+        "src/lib/workbench/",
+        "wiki/",
+        "missions-templates/",
+        "mcp-servers/"
+      ]
     },
     {
       "id": "wisdomechoes",
@@ -16,5 +31,5 @@
       "missions": ["juno-wisdomechoes-axiom-blog-2026"]
     }
   ],
-  "notes": "Copy to AgentWorkbench/config/auto-push.json. Push only after verify slot PASS; never force-push."
+  "notes": "Copy to AgentWorkbench/config/auto-push.json. Repos need missions[] OR allowAllMissions:true. pathPrefixes limits git add scope. Never force-push."
 }

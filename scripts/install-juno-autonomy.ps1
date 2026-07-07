@@ -80,9 +80,12 @@ if ($StartDaemonNow) {
   $pidPath = Join-Path $env:AGENT_WORKBENCH_ROOT "state\juno-daemon.pid"
   $running = $false
   if (Test-Path $pidPath) {
-    $old = [int](Get-Content $pidPath -Raw).Trim()
-    if ($old -gt 0) {
-      try { Get-Process -Id $old -ErrorAction Stop | Out-Null; $running = $true } catch { }
+    $raw = Get-Content $pidPath -Raw -ErrorAction SilentlyContinue
+    if ($null -ne $raw -and $raw.Trim().Length -gt 0) {
+      $old = [int]$raw.Trim()
+      if ($old -gt 0) {
+        try { Get-Process -Id $old -ErrorAction Stop | Out-Null; $running = $true } catch { }
+      }
     }
   }
   if ($running) {
