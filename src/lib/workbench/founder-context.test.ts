@@ -18,7 +18,7 @@ describe("founder-context", () => {
     writeFileSync(
       path.join(wb, "config", "founder-alignment.json"),
       JSON.stringify({
-        driveStrategy: "lrif",
+        driveStrategy: "balanced",
         themes: [
           {
             id: "juno-product",
@@ -39,7 +39,7 @@ describe("founder-context", () => {
     mkdirSync(inbox, { recursive: true });
     writeFileSync(
       path.join(inbox, "_profile.md"),
-      "## 当前重心\n\n- Juno Runtime 产品化\n- 投资研究 LRIF\n",
+      "strategy: lrif\n\n## 当前重心\n\n- Juno Runtime 产品化\n- 投资研究 LRIF\n",
     );
 
     const ctx = loadFounderContext(wb);
@@ -47,6 +47,7 @@ describe("founder-context", () => {
     expect(ctx.activeThemes.some((t) => t.id === "juno-product")).toBe(true);
     expect(ctx.activeThemes.some((t) => t.id === "investment")).toBe(true);
     expect(ctx.driveStrategy).toBe("lrif");
+    expect(ctx.alignmentSummary.some((s) => s.includes("drive strategy: lrif"))).toBe(true);
     expect(alignmentBoostForMission("juno-wisdomechoes-axiom-blog-2026", ctx)).toBeGreaterThan(0);
   });
 });

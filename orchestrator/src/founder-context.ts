@@ -99,6 +99,12 @@ function parseBulletList(section: string): string[] {
     .filter(Boolean);
 }
 
+function parseDriveStrategyFromProfile(md: string): "balanced" | "wisdomechoes" | "lrif" | null {
+  const m = md.match(/^\s*strategy\s*:\s*(balanced|wisdomechoes|lrif)\s*$/im);
+  if (!m?.[1]) return null;
+  return m[1].toLowerCase() as "balanced" | "wisdomechoes" | "lrif";
+}
+
 function titleFromMd(relPath: string, maxChars = 80): string {
   const base = path.basename(relPath, path.extname(relPath));
   return base.slice(0, maxChars);
@@ -195,6 +201,7 @@ export function loadFounderContext(workbench: string): FounderContext {
   if (!existsSync(profilePath)) return { ...empty, profilePath };
 
   const md = readFileSync(profilePath, "utf8");
+  const profileStrategy = parseDriveStrategyFromProfile(md);
   const currentFocus = parseBulletList(extractSection(md, "当前重心"));
   const ambitionText =
     extractSection(md, "业务与野心") ||
@@ -209,6 +216,7 @@ export function loadFounderContext(workbench: string): FounderContext {
   );
 
   const alignmentSummary = buildAlignmentSummary(currentFocus, activeThemes, recentNotes);
+  const driveStrategy = profileStrategy ?? cfg.driveStrategy ?? "balanced";
 
   return {
     loadedAt: new Date().toISOString(),
@@ -219,8 +227,8 @@ export function loadFounderContext(workbench: string): FounderContext {
     themes,
     activeThemes,
     recentNotes,
-    alignmentSummary,
-    driveStrategy: cfg.driveStrategy ?? "balanced",
+    alignmentSummary: [...alignmentSummary, `drive strategy: ${driveStrategy}`],
+    driveStrategy,
   };
 }
 
