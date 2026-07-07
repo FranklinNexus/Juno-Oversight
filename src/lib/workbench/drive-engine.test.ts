@@ -72,6 +72,22 @@ describe("drive-engine", () => {
     expect(hit?.kind).toBe("human_inbox");
   });
 
+  it("ignores generated daily inbox files as human override", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "juno-drive-daily-"));
+    const vault = mkdtempSync(path.join(tmpdir(), "juno-vault-"));
+    const inboxDir = path.join(vault, "Juno", "inbox");
+    mkdirSync(path.join(dir, "queue"), { recursive: true });
+    mkdirSync(inboxDir, { recursive: true });
+    writeFileSync(
+      path.join(dir, "config.yaml"),
+      `vault_path: "${vault.replace(/\\/g, "/")}"\nvault_juno_root: "Juno"\n`,
+    );
+    writeFileSync(path.join(dir, "queue", "now.yaml"), "updated: x\nnow:\nbacklog: []\n");
+    writeFileSync(path.join(inboxDir, "2026-07-07-每日任务.md"), "# daily");
+    const obs = scanEnvironment(dir, process.cwd(), null);
+    expect(obs.some((o) => o.summary.includes("Human inbox file: 2026-07-07-每日任务.md"))).toBe(false);
+  });
+
   it("does not crash on mission-inbox human_inbox without path", () => {
     const obs: DriveObservation[] = [
       { source: "vault", kind: "human_inbox", summary: "Mission Inbox pending: 1 item(s)", score: 0.99 },

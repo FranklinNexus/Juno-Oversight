@@ -257,6 +257,7 @@ export function scanEnvironment(
   if (inbox && existsSync(inbox)) {
     for (const name of readdirSync(inbox)) {
       if (name.startsWith(".") || name.startsWith("digest-")) continue;
+      if (/^\d{4}-\d{2}-\d{2}-每日任务\.md$/.test(name)) continue;
       if (name === "_profile.md") continue;
       if (name === "brief.md") {
         const text = readFileSync(path.join(inbox, name), "utf8");
