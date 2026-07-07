@@ -21,8 +21,12 @@ if (!process.argv.includes("--skip-build")) {
 }
 
 const { runDriveTick } = await import("../orchestrator/dist/drive-engine.js");
+const { refreshStatusBoard } = await import("./lib/vault-bridge-core.mjs");
 
 const result = runDriveTick(workbench, repoRoot, { autoQueue: autoQueue && execute });
+
+// Keep Vault status board in sync with drive-engine state.
+refreshStatusBoard(workbench);
 
 console.log(JSON.stringify(result, null, 2));
 
