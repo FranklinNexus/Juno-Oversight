@@ -16,6 +16,14 @@ const skipBuild =
 process.env.AGENT_WORKBENCH_ROOT = workbench;
 process.env.JUNO_OVERSIGHT_ROOT = repoRoot;
 
+// Sync Vault mission inbox -> queue before planner decision.
+spawnSync("node", ["scripts/juno-vault-bridge.mjs"], {
+  cwd: repoRoot,
+  stdio: "ignore",
+  shell: false,
+  env: { ...process.env, AGENT_WORKBENCH_ROOT: workbench, JUNO_OVERSIGHT_ROOT: repoRoot },
+});
+
 if (!skipBuild) {
   const build = spawnSync("pnpm", ["orchestrator:build"], {
     cwd: repoRoot,

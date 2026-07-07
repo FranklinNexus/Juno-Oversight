@@ -56,6 +56,7 @@
     "queue:runtime-overnight": "node scripts/bootstrap-runtime-overnight.mjs --force-queue",
     "queue:daily-inbox": "node scripts/bootstrap-daily-inbox.mjs --force-queue",
     "juno:brief": "node scripts/juno-brief.mjs",
+    "juno:vault:sync": "node scripts/juno-vault-bridge.mjs",
     "drive:tick": "node scripts/run-drive-tick.mjs",
     "queue:agent-drive-research": "node scripts/bootstrap-agent-drive-research.mjs --force-queue",
     "queue:nl-brief": "node scripts/bootstrap-nl-brief.mjs --force-queue",

@@ -264,6 +264,14 @@ runReport.finishedAt = new Date().toISOString();
 runReport.status = "complete";
 writeFileSync(runStatePath, `${JSON.stringify(runReport, null, 2)}\n`, "utf8");
 
+const { appendDailySummary } = await import("./lib/vault-bridge-core.mjs");
+appendDailySummary(workbench, {
+  ticks: runReport.ticks,
+  capFilled: runReport.capFilled,
+  exportDir: runReport.export?.exportDir,
+  purgeDeleted: runReport.purge?.deleted,
+});
+
 cleanup();
 log("done");
 process.exit(0);

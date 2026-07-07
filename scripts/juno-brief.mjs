@@ -7,7 +7,7 @@
  *   pnpm juno:brief --file "E:/Obsidian Vault/Juno/inbox/brief.md"
  *   pnpm juno:brief --execute --file ...
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,7 +55,14 @@ savePendingBrief(workbench, { text, submittedAt: new Date().toISOString(), sourc
 
 const known = routeBriefToKnownMission(text);
 if (known) {
-  console.log(JSON.stringify({ action: "route_known", missionId: known, text: text.slice(0, 120) }, null, 2));
+  const knownResult = { action: "route_known", missionId: known, text: text.slice(0, 120) };
+  console.log(JSON.stringify(knownResult, null, 2));
+  const planPath = path.join(workbench, "state", "last-brief-plan.json");
+  writeFileSync(
+    planPath,
+    `${JSON.stringify({ missionId: known, sourceText: text, createdAt: new Date().toISOString(), route: "known" }, null, 2)}\n`,
+    "utf8",
+  );
   if (execute) {
     const { spawnSync } = await import("node:child_process");
     const boot =

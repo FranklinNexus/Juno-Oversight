@@ -47,6 +47,7 @@ const {
   finalizeRunCheckpoint,
 } = await import("../orchestrator/dist/mission-progress.js");
 const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotency.js");
+const { recordSlotOutcome } = await import("./lib/vault-bridge-core.mjs");
 
 let { now, backlog } = parseNowYaml(workbench);
 if (now.length === 0) {
@@ -105,6 +106,24 @@ function maybeAutoPushAfterVerify(runKind, head) {
     });
 }
 
+async function finalizeAdvance(runKind, cp, actionKind) {
+  if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {
+    markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
+  }
+  ({ now, backlog } = parseNowYaml(workbench));
+  saveNowQueue(workbench, now.slice(1), backlog);
+  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  const pushResults =
+    actionKind === "dequeue" ? await maybeAutoPushAfterVerify(runKind, head) : [];
+  await recordSlotOutcome(workbench, repoRoot, {
+    head,
+    runKind,
+    checkpoint: cp,
+    pushResults,
+    action: actionKind,
+  });
+}
+
 async function tryAdvanceWithoutSpawn() {
   const runKind = readRunKind(workbench, head.id);
   if (finalizeRunCheckpoint(workbench, head.id, head.mission_id, runKind)) {
@@ -119,6 +138,12 @@ async function tryAdvanceWithoutSpawn() {
     ({ now, backlog } = parseNowYaml(workbench));
     saveNowQueue(workbench, [fix, ...now.slice(1)], backlog);
     mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+    await recordSlotOutcome(workbench, repoRoot, {
+      head,
+      runKind,
+      checkpoint: cp,
+      action: "revise",
+    });
     log(`REVISE fix queued for ${head.phase_id}`);
     process.exit(0);
   }
@@ -126,13 +151,7 @@ async function tryAdvanceWithoutSpawn() {
     log(`not dequeue-ready: ${action.action} — ${advanceOnly ? "cannot advance-only" : "will respawn"}`);
     return false;
   }
-  if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {
-    markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
-  }
-  ({ now, backlog } = parseNowYaml(workbench));
-  saveNowQueue(workbench, now.slice(1), backlog);
-  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
-  await maybeAutoPushAfterVerify(runKind, head);
+  await finalizeAdvance(runKind, cp, "dequeue");
   log(`done ${head.id} (advance-only)`);
   process.exit(0);
 }
@@ -207,6 +226,12 @@ if (action.action === "revise") {
   ({ now, backlog } = parseNowYaml(workbench));
   saveNowQueue(workbench, [fix, ...now.slice(1)], backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  await recordSlotOutcome(workbench, repoRoot, {
+    head,
+    runKind,
+    checkpoint: cp,
+    action: "revise",
+  });
   log(`REVISE fix queued for ${head.phase_id}`);
   process.exit(0);
 }
@@ -217,12 +242,5 @@ if (action.action !== "dequeue") {
   process.exit(3);
 }
 
-if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, cp)) {
-  markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
-}
-
-({ now, backlog } = parseNowYaml(workbench));
-saveNowQueue(workbench, now.slice(1), backlog);
-mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
-await maybeAutoPushAfterVerify(runKind, head);
+await finalizeAdvance(runKind, cp, "dequeue");
 log(`done ${head.id}`);
