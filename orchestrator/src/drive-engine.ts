@@ -325,16 +325,48 @@ export function observationsToProposals(
   const has = (k: TensionKind) => observations.some((o) => o.kind === k && o.score >= threshold * 0.8);
 
   if (has("human_inbox")) {
-    const inboxObs = observations.find((o) => o.kind === "human_inbox")!;
+    const inboxObs = observations.find(
+      (o) => o.kind === "human_inbox" && typeof o.meta?.path === "string",
+    );
+    if (inboxObs) {
+      proposals.push({
+        id: `prop-inbox-${Date.now()}`,
+        hypothesis: "Human left a brief in Vault inbox — highest priority override",
+        tensionKinds: ["human_inbox"],
+        score: 0.98,
+        confidence: 0.95,
+        needsHumanApproval: false,
+        action: "compile_brief",
+        briefText: readFileSync(inboxObs.meta!.path as string, "utf8"),
+        createdAt: ts,
+      });
+    }
+  }
+
+  if (strategy === "wisdomechoes") {
     proposals.push({
-      id: `prop-inbox-${Date.now()}`,
-      hypothesis: "Human left a brief in Vault inbox — highest priority override",
-      tensionKinds: ["human_inbox"],
-      score: 0.98,
-      confidence: 0.95,
+      id: `prop-strategy-we-${Date.now()}`,
+      hypothesis: "[wisdomechoes-strategy] Prioritize public surface and ship WisdomEchoes milestones",
+      tensionKinds: ["founder_alignment", "ambition_gap"],
+      score: 0.97,
+      confidence: 0.92,
       needsHumanApproval: false,
-      action: "compile_brief",
-      briefText: readFileSync(inboxObs.meta!.path as string, "utf8"),
+      action: "bootstrap",
+      missionId: "juno-wisdomechoes-axiom-blog-2026",
+      bootstrap: "queue:wisdomechoes-blog",
+      createdAt: ts,
+    });
+  } else if (strategy === "lrif") {
+    proposals.push({
+      id: `prop-strategy-lrif-${Date.now()}`,
+      hypothesis: "[lrif-strategy] Prioritize LRIF cadence via daily inbox execution rhythm",
+      tensionKinds: ["founder_alignment"],
+      score: 0.96,
+      confidence: 0.9,
+      needsHumanApproval: false,
+      action: "bootstrap",
+      missionId: "juno-daily-inbox-2026",
+      bootstrap: "queue:daily-inbox",
       createdAt: ts,
     });
   }
@@ -402,19 +434,10 @@ export function observationsToProposals(
     });
   }
 
-  if (strategy === "wisdomechoes") {
-    for (const p of proposals) {
-      if (p.missionId === "juno-wisdomechoes-axiom-blog-2026") {
-        p.score = Math.min(1, p.score + 0.15);
-        p.hypothesis = `[wisdomechoes-strategy] ${p.hypothesis}`;
-      }
-    }
-  }
   if (strategy === "lrif") {
     for (const p of proposals) {
       if (p.missionId === "juno-daily-inbox-2026") {
         p.score = Math.min(1, p.score + 0.2);
-        p.hypothesis = `[lrif-strategy] ${p.hypothesis}`;
       }
       if (p.missionId === "juno-wisdomechoes-axiom-blog-2026") {
         p.score = Math.max(0, p.score - 0.1);
@@ -445,7 +468,24 @@ export function observationsToProposals(
     }
   }
 
-  return proposals.sort((a, b) => b.score - a.score);
+  const byMission = new Map<string, DriveProposal>();
+  const byBrief = new Map<string, DriveProposal>();
+  const passthrough: DriveProposal[] = [];
+  for (const p of proposals) {
+    if (p.missionId) {
+      const prev = byMission.get(p.missionId);
+      if (!prev || p.score > prev.score) byMission.set(p.missionId, p);
+      continue;
+    }
+    if (p.action === "compile_brief" && p.briefText) {
+      const key = p.briefText.trim().slice(0, 120);
+      const prev = byBrief.get(key);
+      if (!prev || p.score > prev.score) byBrief.set(key, p);
+      continue;
+    }
+    passthrough.push(p);
+  }
+  return [...passthrough, ...byMission.values(), ...byBrief.values()].sort((a, b) => b.score - a.score);
 }
 
 export function writeDriveDigest(

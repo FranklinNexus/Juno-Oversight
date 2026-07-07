@@ -4,6 +4,7 @@ import {
   collectAmbitionEvidence,
   observationsToProposals,
   scanEnvironment,
+  type DriveObservation,
 } from "../../../orchestrator/src/drive-engine.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,5 +70,30 @@ describe("drive-engine", () => {
     const obs = scanEnvironment(dir, process.cwd(), null);
     const hit = obs.find((o) => o.summary.includes("Mission Inbox pending"));
     expect(hit?.kind).toBe("human_inbox");
+  });
+
+  it("does not crash on mission-inbox human_inbox without path", () => {
+    const obs: DriveObservation[] = [
+      { source: "vault", kind: "human_inbox", summary: "Mission Inbox pending: 1 item(s)", score: 0.99 },
+    ];
+    const proposals = observationsToProposals(obs, null);
+    expect(proposals.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("strategy lrif promotes daily-inbox mission", () => {
+    const obs: DriveObservation[] = [
+      { source: "founder", kind: "founder_alignment", summary: "investment", score: 0.8 },
+    ];
+    const proposals = observationsToProposals(obs, null, {
+      loadedAt: new Date().toISOString(),
+      currentFocus: ["投资研究 LRIF"],
+      ambitionText: "",
+      themes: [],
+      activeThemes: [],
+      recentNotes: [],
+      alignmentSummary: [],
+      driveStrategy: "lrif",
+    });
+    expect(proposals[0]?.missionId).toBe("juno-daily-inbox-2026");
   });
 });
