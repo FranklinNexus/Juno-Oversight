@@ -53,10 +53,10 @@ pnpm orchestrator:build
 ### 4.2 一键跑通（推荐）
 
 ```powershell
-pnpm loop:smoke    # bootstrap + 真实 verify + 出队 + progress.md
+pnpm loop:smoke    # bootstrap + 真实 verify + 出队 + progress.md；全新 Workbench 也可直接启动
 ```
 
-### 4.3 Dry 模拟（不调用 Cursor API）
+### 4.3 Dry 模拟（不调用 agent SDK）
 
 ```powershell
 $env:AGENT_WORKBENCH_ROOT="E:\AgentWorkbench"
@@ -65,21 +65,20 @@ node scripts/simulate-smoke-loop.mjs
 
 预期：三 slot 均 `dequeue`，模拟队列清空。
 
-### 4.3 Verify slot 前置
+### 4.4 Verify slot 前置
 
 ```powershell
-pnpm dev --port 3000    # 终端 A
+pnpm dev                # 终端 A
 pnpm ui:smoke           # 终端 B → [ui-smoke] PASS
-pnpm test               # 54/54
+pnpm test               # 以本次 Vitest 全量统计为准
 ```
 
-### 4.4 LIVE Loop（需 API Key）
+### 4.5 LIVE Loop（需本机 Codex 登录）
 
 ```powershell
-pnpm dev --port 3000
-# 编辑 E:\AgentWorkbench\state\scheduler.json → "enabled": true
-node orchestrator/dist/scheduler-daemon.js
-# 或 WIDGET-S Start Daemon
+pnpm dev
+corepack pnpm juno:daemon
+# 或在 Tauri 的 WIDGET-S 点击 Start Daemon
 ```
 
 ---
@@ -95,7 +94,7 @@ pnpm ui:smoke
 检查：
 
 - HTTP **200**
-- body **不含**：`Internal Server Error`、`Turbopack error`、`Runtime Error`
+- body **不含**：`Internal Server Error`、`Turbopack error`、`Runtime Error`、`Cannot find module`、`[turbopack]_runtime.js`
 
 dev server 未启动 → FAIL（连接拒绝），verify slot 应写在 VERIFY_REPORT 中。
 
@@ -121,6 +120,7 @@ STATUS: COMPLETE
 - drift: none
 - scope_violations: []
 - must_fix_next_slot: []
+- reviewer_notes: ui-smoke scope verified
 ```
 
 **sl02 verify**
@@ -137,5 +137,5 @@ STATUS: COMPLETE
 ## 7. 相关文档
 
 - 门禁逻辑：[overseer-quality.md §2–§9](./overseer-quality.md)
-- Scheduler：[orchestrator.md](./orchestrator.md)
-- Workbench Mission 文件：[workbench.md §3](./workbench.md#3-mission-生命周期)
+- Scheduler：[runtime.md](./runtime.md)
+- Workbench Mission 文件：[juno-architecture.md §8](./juno-architecture.md#8-mission-生命周期)

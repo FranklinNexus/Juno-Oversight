@@ -4,6 +4,7 @@
 /node_modules
 /orchestrator/node_modules
 /orchestrator/dist
+/.pnpm-store
 /.pnp
 .pnp.*
 .yarn/*
@@ -18,6 +19,9 @@
 # next.js
 /.next/
 /out/
+/.juno-dev-smoke/
+/src-tauri/resources/juno-runtime/*
+!/src-tauri/resources/juno-runtime/.gitkeep
 
 # production
 /build

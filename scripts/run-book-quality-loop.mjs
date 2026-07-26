@@ -2,17 +2,27 @@
 /**
  * Run book quality REVISE loop (live write/review with programmatic gates).
  */
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnLiveBookSlot, writeBookLoopState, BOOK_MISSION_ID } from "./lib/book-advance-core.mjs";
+import {
+  BOOK_MISSION_ID,
+  spawnLiveBookSlot,
+  writeBookQualityLoopState,
+} from "./lib/book-advance-core.mjs";
 import { needsLiveAgent } from "./lib/book-decision.mjs";
+import { spawnPnpmWithTimeout } from "./lib/pnpm-runner.mjs";
+import {
+  BUILD_TIMEOUT_MS,
+  inspectMissionQueueHead,
+  loopExitCode,
+  parseCycleNonceFlag,
+  parsePositiveIntegerFlag,
+  requireSpawnSuccess,
+  TERMINAL_BLOCK_EXIT,
+} from "./lib/specialized-loop-guard.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
-const maxArg = process.argv.find((a) => a.startsWith("--max-slots="));
-const maxSlots = maxArg ? Number(maxArg.split("=")[1]) : 2;
-
 process.env.AGENT_WORKBENCH_ROOT = workbench;
 process.env.JUNO_OVERSIGHT_ROOT = repoRoot;
 
@@ -20,11 +30,43 @@ function log(m) {
   process.stderr.write(`[book-quality] ${m}\n`);
 }
 
-const build = spawnSync("pnpm", ["orchestrator:build"], { cwd: repoRoot, stdio: "inherit", shell: true });
-if (build.status !== 0) process.exit(build.status ?? 1);
+let maxSlots;
+let cycleNonce;
+try {
+  const args = process.argv.slice(2);
+  maxSlots = parsePositiveIntegerFlag(args, "max-slots", 2, { max: 100 });
+  cycleNonce = parseCycleNonceFlag(args);
+} catch (error) {
+  log(`BLOCKED: ${error.message}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}
 
-const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
-loadProjectEnv();
+function writeLoopState(state) {
+  writeBookQualityLoopState(workbench, { ...state, cycleNonce });
+}
+
+try {
+  requireSpawnSuccess(
+    await spawnPnpmWithTimeout(
+      ["orchestrator:build"],
+      { cwd: repoRoot, stdio: "inherit" },
+      BUILD_TIMEOUT_MS,
+    ),
+    "orchestrator build",
+  );
+} catch (error) {
+  writeLoopState({
+    status: "terminal_blocked",
+    qualityLoop: true,
+    blockedReason: error.message,
+  });
+  log(`BLOCKED: ${error.message}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}
+
+try {
+  const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
+  loadProjectEnv();
 
 const { autoFixBookSpacedBoldOnly, scanBookQuality } = await import(
   "../orchestrator/dist/quality-gate.js"
@@ -42,68 +84,114 @@ const deps = {
 
 function clearStaleBqQueue(scan) {
   if (scan.failedChapters.length > 0) return false;
-  const { parseNowYaml, saveNowQueue } = deps.queueIo;
-  const { markMissionPhaseDone } = deps.missionProgress;
-  let { now, backlog } = parseNowYaml(workbench);
-  const stale = now.filter((h) => /^bq-ch/.test(h.phase_id ?? ""));
-  if (stale.length === 0) return false;
-  for (const item of stale) {
-    markMissionPhaseDone(workbench, item.mission_id ?? BOOK_MISSION_ID, item.phase_id ?? "");
-  }
-  saveNowQueue(
-    workbench,
-    now.filter((h) => !/^bq-ch/.test(h.phase_id ?? "")),
-    backlog,
+  const { readNowQueueSnapshot, replaceQueueSnapshotConditional } = deps.queueIo;
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now, backlog } = queueSnapshot;
+  const stale = now.filter(
+    (head) => head.mission_id === BOOK_MISSION_ID && /^bq-ch/.test(head.phase_id ?? ""),
   );
+  if (stale.length === 0) return false;
+  if (stale.length !== now.length) return false;
+  const update = replaceQueueSnapshotConditional(workbench, {
+    expectedRevision: queueSnapshot.revision,
+    now: [],
+    backlog,
+  });
+  if (!update.ok) return update.reason === "busy" ? "busy" : "conflict";
   log(`cleared ${stale.length} stale bq-* slots — scan PASS`);
   return true;
 }
 
 let scan = scanBookQuality(workbench, { strictLength: false });
-if (clearStaleBqQueue(scan)) {
-  writeBookLoopState(workbench, { status: "idle", slotsAdvancedThisRun: 0, qualityLoop: true, clearedStale: true });
+const staleQueueResult = clearStaleBqQueue(scan);
+if (staleQueueResult === "busy") {
+  writeLoopState({ status: "busy", slotsAdvancedThisRun: 0, qualityLoop: true });
+  process.exit(loopExitCode({ advanced: 0 }));
+}
+if (staleQueueResult === "conflict") {
+  throw new Error("queue revision conflict while clearing stale book-quality work");
+}
+if (staleQueueResult) {
+  writeLoopState({ status: "noop", slotsAdvancedThisRun: 0, qualityLoop: true, clearedStale: true });
   log("=== book:quality-loop done — stale queue cleared ===");
-  process.exit(0);
+  process.exit(loopExitCode({ advanced: 0 }));
 }
 
 let advanced = 0;
-let failed = false;
+let transitions = 0;
+let failedReason = null;
+let queueBusy = false;
 for (let i = 0; i < maxSlots; i++) {
   const { parseNowYaml } = deps.queueIo;
   const { now } = parseNowYaml(workbench);
   const head = now[0];
   if (!head) break;
-  if (!needsLiveAgent(head) && !head.phase_id?.startsWith("bq-")) break;
-
-  if (!process.env.CURSOR_API_KEY?.trim()) {
-    log("blocked: CURSOR_API_KEY required");
+  const headGuard = inspectMissionQueueHead(head, BOOK_MISSION_ID, { phasePrefix: "bq-" });
+  if (!headGuard.ok) {
+    failedReason = headGuard.reason;
+    log(`blocked: ${failedReason}`);
+    break;
+  }
+  if (!needsLiveAgent(head)) {
+    failedReason = `unsupported_quality_slot:${head.phase_id ?? "missing"}`;
+    log(`blocked: ${failedReason}`);
     break;
   }
 
   log(`live ${head.id} (${head.phase_id})`);
-  const live = await spawnLiveBookSlot(workbench, head, deps);
-  if (!live.ok && !live.revised) {
-    log(`failed: ${live.reason}`);
-    failed = true;
+  let live;
+  try {
+    live = await spawnLiveBookSlot(workbench, head, deps);
+  } catch (error) {
+    failedReason = `live_exception:${error.message}`;
+    log(`failed: ${failedReason}`);
     break;
   }
-  advanced += 1;
+  if (!live.ok) {
+    if (live.busy) {
+      queueBusy = true;
+      log(`queue mutation busy: ${live.reason}`);
+      break;
+    }
+    log(`failed: ${live.reason}`);
+    failedReason = live.reason;
+    break;
+  }
+  transitions += 1;
+  if (live.dequeued) advanced += 1;
   log(live.revised ? `revise queued ${head.id}` : `done ${head.id}`);
 }
 
-writeBookLoopState(workbench, {
-  status: advanced > 0 ? "idle" : "noop",
-  slotsAdvancedThisRun: advanced,
-  qualityLoop: true,
-});
-
 if (advanced > 0) {
-  const { runSelfOptimize } = await import("../orchestrator/dist/self-optimize.js");
-  runSelfOptimize(workbench);
+  try {
+    const { runSelfOptimize } = await import("../orchestrator/dist/self-optimize.js");
+    runSelfOptimize(workbench);
+  } catch (error) {
+    failedReason = `self_optimize:${error.message}`;
+  }
 }
 
 scan = scanBookQuality(workbench, { strictLength: false });
 const remaining = scan.failedChapters.length;
+const terminal = Boolean(failedReason) || (!queueBusy && remaining > 0 && transitions === 0);
 
-log(`=== book:quality-loop done — advanced ${advanced}, remaining fail ${remaining || 0} ===`);
-process.exit(failed || remaining > 0 ? 1 : 0);
+writeLoopState({
+  status: terminal ? "terminal_blocked" : advanced > 0 ? "idle" : "noop",
+  slotsAdvancedThisRun: advanced,
+  transitionsThisRun: transitions,
+  qualityLoop: true,
+  remainingFailedChapters: remaining,
+  blockedReason: failedReason ?? (terminal ? "quality_failures_without_progress" : null),
+});
+
+  log(`=== book:quality-loop done — advanced ${advanced}, remaining fail ${remaining || 0} ===`);
+  process.exit(loopExitCode({ advanced, terminal }));
+} catch (error) {
+  writeLoopState({
+    status: "terminal_blocked",
+    qualityLoop: true,
+    blockedReason: `quality_loop_exception:${error.message}`,
+  });
+  log(`BLOCKED: quality_loop_exception:${error.message}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}

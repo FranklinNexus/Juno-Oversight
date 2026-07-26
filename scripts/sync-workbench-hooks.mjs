@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-/** Copy Juno .cursor hooks into AgentWorkbench so SDK runs inherit the same gates. */
+/** Copy optional defense-in-depth hooks for manually launched Cursor sessions. */
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const junoRoot = process.argv[2] ?? "C:\\Users\\kfr34\\Desktop\\Entrepreneurship\\Juno Oversight";
+const defaultJunoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const junoRoot = process.argv[2] ?? defaultJunoRoot;
 const workbench = process.argv[3] ?? process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 
 const srcHooks = path.join(junoRoot, ".cursor", "hooks");

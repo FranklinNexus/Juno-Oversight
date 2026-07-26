@@ -1,6 +1,6 @@
 # Juno 系统架构 — 详细参考
 
-**最后更新**：2026-07-03  
+**最后更新**：2026-07-11
 **代码真源**：`orchestrator/src/` · `scripts/` · `src/`（HUD）  
 **状态**：Hardening mission **COMPLETE**（h01–h11）· Von Neumann v0–v1 **已落地**
 
@@ -15,7 +15,7 @@ flowchart TB
     ORCH[orchestrator/src/]
     SCR[scripts/]
     WIKI[wiki/]
-    HOOKS[.cursor/hooks/]
+    HOOKS[可选 .cursor/hooks/]
   end
   subgraph wb [AgentWorkbench — 不进 git]
     Q[queue/now.yaml]
@@ -25,7 +25,7 @@ flowchart TB
     CFG[config/]
   end
   subgraph external [外界原始汤]
-    API[Cursor API / OpenAI]
+    API[本机 Codex runtime]
     MCP[MCP servers]
     TS[Windows Task Scheduler]
     EXP[JunoDailyExport 隔离导出]
@@ -45,15 +45,15 @@ flowchart TB
 | **HUD** | `src/` · `src-tauri/` | 战术看板、Promote 预览、Run 控制 | 无（读 Workbench 快照） |
 | **Orchestrator** | `orchestrator/src/` | 队列、spawn、门禁、planner、fitness | 编译为 `orchestrator/dist/` |
 | **Workbench** | `AGENT_WORKBENCH_ROOT` | 运行时 queue / runs / missions / state | 本地磁盘，daily export 备份 |
-| **Safety** | `.cursor/hooks/` | Vault 只读、destructive ops 拦截 | 随仓库 |
+| **Safety** | Codex sandbox · baseline v3 · deterministic verify · Promote containment | 写入边界、漂移检测、人工确认 | 仓库 + Workbench state |
 
-环境变量：
+运行配置与状态：
 
-| 变量 | 说明 |
-|------|------|
+| 配置/状态 | 说明 |
+|-----------|------|
 | `JUNO_OVERSIGHT_ROOT` | 本仓库绝对路径 |
 | `AGENT_WORKBENCH_ROOT` | Workbench 根（如 `E:\AgentWorkbench`） |
-| `CURSOR_API_KEY` | Live Composer spawn |
+| 本机 Codex 登录态 | Live slot 鉴权；Juno 不向 Agent 注入 provider key |
 
 ---
 
@@ -123,7 +123,9 @@ flowchart LR
 Fitness 公式（默认权重）：
 
 ```
-score = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
+score = 50 - 10×failedChapters - 20×apiBackoff - 3×idle
+        + 25×runSuccessRate + 20×verifyPassRate
+        - 30×runFailureRate - 10×reviseRate - 25×safetyBlock
 ```
 
 详见 [evolution.md](./evolution.md)（Von Neumann 自指单元）。
@@ -139,11 +141,11 @@ sequenceDiagram
   participant Q as now.yaml
   participant M as manifest.ts
   participant S as spawn-run.ts
-  participant A as Cursor Agent
+  participant A as Codex executor / deterministic Verify
   participant R as review-loop.ts
   Q->>M: buildManifestFromQueue
   M->>S: RunManifest + prompt
-  S->>A: Agent.create + send
+  S->>A: provider-neutral executor
   A->>S: checkpoint.md / events.jsonl
   S->>R: evaluateCompletedRun
   R->>Q: dequeue / block / revise
@@ -151,16 +153,19 @@ sequenceDiagram
 
 | RunKind | 出队条件 | 失败行为 |
 |---------|----------|----------|
-| **implement** | `STATUS: COMPLETE` | hold → review |
-| **review** | `REVIEW_VERDICT: PASS` | BLOCK 不出队；REVISE → fix slot |
-| **verify** | `VERIFY_REPORT` 存在且无 FAIL | BLOCK 保留队列 |
+| **implement** | 独立 `STATUS: COMPLETE` + 非空 `## CHANGES` | 缺证据则 hold |
+| **review** | `PASS` + drift 非 major + scope violations 为空 | BLOCK 不出队；REVISE → fix slot |
+| **verify** | 确定性命令全部通过 + `verdict: PASS` + safety baseline 通过 | 任一非零退出或越界均 BLOCK |
 | **debate** | PASS（P2 workflow） | 同 review |
 
 **关键修复（2026-07）**：
 
-- verify 空 checkpoint → `hold`（不再误 dequeue）
-- mission checkpoint 回退 — Agent 写 mission 级 checkpoint 时 `checkpointTextForAdvance` 可读
-- **implement 镜像** — run stub + mission 含 `## CHANGES` 时 `finalizeRunCheckpoint` 写入 run 并补 `STATUS: COMPLETE`（`mission-loop` spawn 后）
+- gate 只读取当前 `runs/<id>/checkpoint.md`，不回退 mission checkpoint，也不合成完成标记
+- Mission 依赖只读取父进程签发的 `state/mission-completions/<sha256(mission-id)>.json`；mission checkpoint 只是展示
+- verify 由 `verify-runner.ts` 执行真实命令并写 `verify-artifact.json`，不调用模型
+- safety diff 在任何 host 命令前执行；Workbench 内 Agent 生成的 package scripts 在没有 OS 级沙箱时直接 BLOCK，不在宿主机执行
+- safety baseline v3 冻结 scope-lock 与 Git root 集合，并追踪 staged/unstaged/committed diff 和 Workbench 文件树
+- `openai_codex` 使用 Codex SDK；implement 可写，review/debate/vote 只读，审批固定为 never
 - hardening 队列 repair — `hardening-queue.ts` 按 `progress.md` 补缺口（如 h09 丢失）
 
 ---
@@ -173,11 +178,15 @@ sequenceDiagram
 | **Autonomy** | `bounded-autonomy.ts` | 日限额、record tick、evolution 挂钩 |
 | **Evolution** | `evolution-unit.ts` | fitness、log、planner 反馈、mutation policy |
 | **Hardening Q** | `hardening-queue.ts` | progress ↔ now.yaml 同步 |
-| **Spawn** | `spawn-run.ts` | Live API、model fallback 链 |
-| **Models** | `model-defaults.ts` | 默认 `auto` + composer fallback |
+| **Spawn** | `spawn-run.ts` | provider dispatch、run-state、heartbeat |
+| **Executor** | `executor.ts` | provider-neutral executor registry |
+| **Codex** | `codex-executor.ts` | Codex SDK sandbox、事件与 artifact |
+| **Verify** | `verify-runner.ts` | 确定性 eval profile 命令执行 |
+| **Models** | `model-defaults.ts` | 默认 `openai_codex` + legacy provider canonicalization |
 | **Manifest** | `manifest.ts` | QueueItem → prompt + RunManifest |
 | **Review** | `review-loop.ts` | REVIEW_VERDICT / VERIFY_REPORT 解析 |
-| **Progress** | `mission-progress.ts` | phase done、revise item、checkpoint 回退 |
+| **Progress** | `mission-progress.ts` | phase done、revise item、fail-closed gate |
+| **Completion** | `mission-completion.ts` | strict immutable receipt、terminal checkpoint hash、ordinary verify 签发 |
 | **Quality** | `quality-gate.ts` | 书稿 scan、spaced-bold |
 | **Self-opt** | `self-optimize.ts` | scan → rubric → workflow → MCP hints |
 | **API** | `api-gateway.ts` | RPM / 并发 / backoff |
@@ -187,7 +196,7 @@ sequenceDiagram
 | **Lock** | `autonomy-lock.ts` | daemon ↔ daily-juno 互斥 |
 | **Gate** | `loop-gate.ts` | smoke/meta 24h stamp |
 | **Events** | `events-schema.ts` | events.jsonl 契约 |
-| **Safety** | `safety-doctrine.ts` · `safety-verify.ts` | 与 hooks 对齐 |
+| **Safety** | `safety-doctrine.ts` · `safety-verify.ts` | v3 frozen scope + Git/Workbench diff；fail-closed |
 
 ---
 
@@ -201,12 +210,14 @@ sequenceDiagram
 | `state/evolution-log.jsonl` | evolution-unit | 历史 score |
 | `state/evolution-feedback.json` | evolution-unit | 7d MA、trend |
 | `state/api-quota.json` | api-gateway | backoff、用量 |
+| `state/safety-baselines/<mission-hash>.json` | safety-verify | 冻结的 v3 scope/Git/Workbench 基线；mission 内文件不能替代 |
+| `state/mission-completions/<mission-hash>.json` | mission-completion | Mission 完成唯一权威 receipt；runs 被 purge 后仍有效 |
 | `state/juno-daemon.json` | juno:daemon | heartbeat、cap 长睡 |
 | `state/autonomy.lock.json` | autonomy-lock | daemon 互斥 |
 | `state/quality-scan.json` | self-optimize | 书稿 scan |
 | `state/orchestrator.json` | spawn-run | activeRunId |
 
-Mission 级：`missions/<id>/progress.md` · `checkpoint.md` · `scope-lock.md` · `north-star.md`
+Mission 级：`missions/<id>/progress.md` · `checkpoint.md`（仅展示）· `scope-lock.md` · `north-star.md`
 
 ---
 
@@ -245,7 +256,9 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 
 | 规则 | 机制 |
 |------|------|
-| Vault 只读 | `.cursor/hooks/vault-gate.mjs` |
+| Codex 写入边界 | SDK sandbox；仅 working directory + 明确 additional directories |
+| Vault Promote | canonical containment + rule glob + server-side human confirmation |
+| 可选人工 Cursor 防护 | `.cursor/hooks/*` defense-in-depth；**不是 Codex slot 的主边界** |
 | 禁止 destructive shell/git | `destructive-ops-gate` + `safety-doctrine` |
 | orchestrator 禁止 `file:..` 父依赖 | `check-orchestrator-deps.mjs` |
 | Promote 进 Vault | 默认 `require_human: true` |
@@ -266,15 +279,15 @@ bootstrap (scripts) → progress.md + queue/now.yaml
 
 ---
 
-## 11. 当前运行态（2026-07-03）
+## 11. 当前运行态（2026-07-11）
 
 | 项 | 值 |
 |----|-----|
 | **Hardening** | COMPLETE（h01–h11） |
 | **Workbench cleanup** | COMPLETE · `queue/now.yaml` 空 |
-| **Tests** | 127 passing |
-| **Daemon** | cap 满 → `waiting_midnight`（12/12）；0:00 后自动续跑 |
+| **Tests** | 以 `corepack pnpm test` 的最新全量结果为准 |
+| **Daemon** | stopped；PID/lock 已清理；terminal BLOCK 不自动重跑 |
 | **Charter** | Runtime 叙事 · `landing-site-2026` forbidden |
-| **Planner 下一目标** | `evolution:tick`（von-neumann）· book-quality · self-optimize（按 priority） |
+| **Queue** | `now` 空；deferred inbox item 在 backlog |
 
 **代码（2026-07-03）**：空队列 exit 4 不计 cap · auto-discover 用 `loopScript` · mission-loop skip-build。

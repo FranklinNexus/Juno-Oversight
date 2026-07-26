@@ -4,9 +4,8 @@
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { replaceQueueSnapshotSafely } from "./lib/queue-bootstrap.mjs";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 const MISSION = "juno-book-quality-2026";
 const BOOK = "juno-axiom-book-2026";
@@ -40,7 +39,7 @@ for (const ch of failed) {
     run_kind: "implement",
     repo_target: "workbench",
     prompt: "executor_book_write",
-    provider: "cursor_composer",
+    provider: "openai_codex",
     max_minutes: 30,
     mission_id: BOOK,
     phase_id: `bq-ch${n}-revise`,
@@ -53,7 +52,7 @@ for (const ch of failed) {
     run_kind: "review",
     repo_target: "workbench",
     prompt: "executor_book_review",
-    provider: "cursor_composer",
+    provider: "openai_codex",
     max_minutes: 15,
     mission_id: BOOK,
     phase_id: `bq-ch${n}-review`,
@@ -72,12 +71,11 @@ writeFileSync(
   "utf8",
 );
 
-const queuePath = path.join(workbench, "queue", "now.yaml");
-const yaml = `now:\n${now
-  .map(
-    (i) =>
-      `  - id: ${i.id}\n    horizon: mission\n    kind: ${i.kind}\n    run_kind: ${i.run_kind}\n    repo_target: workbench\n    prompt: ${i.prompt}\n    provider: cursor_composer\n    max_minutes: ${i.max_minutes}\n    mission_id: ${i.mission_id}\n    phase_id: ${i.phase_id}\n    success_criteria: "${i.success_criteria.replace(/"/g, '\\"')}"`,
-  )
-  .join("\n")}\nbacklog: []\n`;
-writeFileSync(queuePath, yaml, "utf8");
-console.log(`[bootstrap] queued ${failed.length} chapter REVISE cycles → ${queuePath}`);
+const queueResult = await replaceQueueSnapshotSafely({
+  workbench,
+  now,
+  backlog: [],
+  backupPrefix: "bak-pre-book-quality",
+});
+console.log(`[bootstrap] queued ${failed.length} chapter REVISE cycles`);
+if (queueResult.backupPath) console.log(`[bootstrap] backup: ${queueResult.backupPath}`);

@@ -3,9 +3,9 @@
  * Bootstrap juno-agi-literature-2026: 1000 papers / 40 batches.
  * Queues ag00–ag02 in now; ag03–ag83 in backlog.
  */
-import { mkdirSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { replaceQueueSnapshotSafely } from "./lib/queue-bootstrap.mjs";
 
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 const missionId = "juno-agi-literature-2026";
@@ -37,7 +37,7 @@ function makeItem({ id, phase, kind, criteria, dependsOn, evalProfile }) {
     mission_id: missionId,
     phase_id: phase,
     prompt,
-    provider: "cursor_composer",
+    provider: "openai_codex",
     workflow_id: "default",
     max_minutes: kind === "verify" ? 15 : phase.includes("papers") ? 20 : 12,
     success_criteria: criteria,
@@ -107,45 +107,19 @@ function buildPhases() {
   return phases;
 }
 
-function yamlQuote(v) {
-  const s = String(v);
-  if (/^[a-zA-Z0-9_./:-]+$/.test(s)) return s;
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function formatItem(it) {
-  const lines = [`  - id: ${yamlQuote(it.id)}`];
-  for (const [k, v] of Object.entries(it)) {
-    if (k === "id" || v == null) continue;
-    if (k === "max_minutes") lines.push(`    max_minutes: ${v}`);
-    else lines.push(`    ${k}: ${yamlQuote(String(v))}`);
-  }
-  return lines.join("\n");
-}
-
 mkdirSync(path.join(missionDir, "papers"), { recursive: true });
 
 const all = buildPhases();
 const now = all.slice(0, 3);
 const backlog = all.slice(3);
 
-const queuePath = path.join(workbench, "queue", "now.yaml");
-if (existsSync(queuePath)) {
-  copyFileSync(queuePath, path.join(workbench, "queue", `now.yaml.bak-pre-agi-${Date.now()}.yaml`));
-}
-
-writeFileSync(
-  queuePath,
-  [
-    `updated: ${new Date().toISOString()}`,
-    "now:",
-    ...now.map(formatItem),
-    "backlog:",
-    ...backlog.map(formatItem),
-    "",
-  ].join("\n"),
-  "utf8",
-);
+const queueResult = await replaceQueueSnapshotSafely({
+  workbench,
+  now,
+  backlog,
+  backupPrefix: "bak-pre-agi",
+});
 
 console.log(`[agi-literature] ${now.length} now + ${backlog.length} backlog (${all.length} phases)`);
 console.log(`[agi-literature] now head: ${now[0]?.id}`);
+if (queueResult.backupPath) console.log(`[agi-literature] backup: ${queueResult.backupPath}`);

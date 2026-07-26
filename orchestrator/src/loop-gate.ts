@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { readMissionCompletionReceipt } from "./mission-completion.js";
 
 export interface LoopGateResult {
   ok: boolean;
@@ -17,10 +18,7 @@ const META_MISSION = "juno-loop-meta-2026";
 const STAMP_MAX_AGE_MS = 24 * 60 * 60_000;
 
 function missionCheckpointComplete(workbench: string, missionId: string): boolean {
-  const cp = path.join(workbench, "missions", missionId, "checkpoint.md");
-  if (!existsSync(cp)) return false;
-  const text = readFileSync(cp, "utf8");
-  return /STATUS:\s*COMPLETE/i.test(text);
+  return readMissionCompletionReceipt(workbench, missionId) !== null;
 }
 
 export function readLoopGateStamp(workbench: string): LoopGateStamp | null {

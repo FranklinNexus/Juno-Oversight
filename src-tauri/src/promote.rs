@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::workbench_root_path;
 
@@ -60,13 +60,13 @@ fn default_promote_rules() -> Vec<PromoteRule> {
       id: "jinstone-devlog".to_string(),
       from_glob: "staging/jinstone/**".to_string(),
       to_path: "E:/Obsidian Vault/20_Projects/支线_开发日志/".to_string(),
-      require_confirm: false,
+      require_confirm: true,
     },
     PromoteRule {
       id: "jinstone-research".to_string(),
       from_glob: "staging/jinstone/research/**".to_string(),
       to_path: "E:/Obsidian Vault/30_Library/Jinstone/".to_string(),
-      require_confirm: false,
+      require_confirm: true,
     },
     PromoteRule {
       id: "n1-staging".to_string(),
@@ -96,11 +96,63 @@ fn resolve_rule(rule_id: &str) -> Result<PromoteRule, String> {
     .ok_or_else(|| format!("unknown promote rule: {rule_id}"))
 }
 
-fn prepare_promote_plan(rule_id: &str, relative_path: &str) -> Result<PromotePlan, String> {
-  let _rule = resolve_rule(rule_id)?;
-  let workbench = workbench_root_path();
+fn normalize_relative_path(relative_path: &str) -> Result<String, String> {
   let normalized = relative_path.replace('\\', "/");
-  let source = workbench.join(normalized.replace('/', "\\"));
+  let path = Path::new(&normalized);
+  if normalized.trim().is_empty() || path.is_absolute() {
+    return Err("promote source must be a relative staging path".to_string());
+  }
+  if path.components().any(|component| {
+    matches!(
+      component,
+      Component::ParentDir | Component::RootDir | Component::Prefix(_)
+    )
+  }) {
+    return Err("promote source may not escape staging".to_string());
+  }
+  let clean = path
+    .components()
+    .filter_map(|component| match component {
+      Component::Normal(part) => Some(part.to_string_lossy()),
+      Component::CurDir => None,
+      _ => None,
+    })
+    .collect::<Vec<_>>()
+    .join("/");
+  if !clean.starts_with("staging/") {
+    return Err("promote source must be under staging/".to_string());
+  }
+  Ok(clean)
+}
+
+fn rule_matches_path(rule: &PromoteRule, relative_path: &str) -> bool {
+  let prefix = rule
+    .from_glob
+    .replace('\\', "/")
+    .trim_end_matches("/**")
+    .trim_end_matches('/')
+    .to_string();
+  relative_path == prefix || relative_path.starts_with(&format!("{prefix}/"))
+}
+
+fn prepare_promote_plan(rule_id: &str, relative_path: &str) -> Result<PromotePlan, String> {
+  let rule = resolve_rule(rule_id)?;
+  let workbench = workbench_root_path();
+  let normalized = normalize_relative_path(relative_path)?;
+  if !rule_matches_path(&rule, &normalized) {
+    return Err(format!(
+      "source {normalized} is outside promote rule {} ({})",
+      rule.id, rule.from_glob
+    ));
+  }
+
+  let staging = fs::canonicalize(workbench.join("staging"))
+    .map_err(|e| format!("staging root unavailable: {e}"))?;
+  let source = fs::canonicalize(workbench.join(normalized.replace('/', "\\")))
+    .map_err(|e| format!("staging file not found: {relative_path} ({e})"))?;
+  if !source.starts_with(&staging) {
+    return Err("promote source resolved outside staging".to_string());
+  }
   if !source.is_file() {
     return Err(format!("staging file not found: {relative_path}"));
   }
@@ -110,7 +162,7 @@ fn prepare_promote_plan(rule_id: &str, relative_path: &str) -> Result<PromotePla
     .and_then(|n| n.to_str())
     .ok_or_else(|| "invalid file name".to_string())?;
 
-  let dest_dir = PathBuf::from(_rule.to_path.replace('/', "\\"));
+  let dest_dir = PathBuf::from(rule.to_path.replace('/', "\\"));
   let dest = dest_dir.join(file_name);
 
   let raw = fs::read_to_string(&source).map_err(|e| e.to_string())?;
@@ -306,7 +358,15 @@ pub fn list_promote_rules() -> Vec<PromoteRule> {
   default_promote_rules()
 }
 
-pub fn promote_to_vault(rule_id: String, relative_path: String) -> Result<PromoteResult, String> {
+pub fn promote_to_vault(
+  rule_id: String,
+  relative_path: String,
+  confirmed: Option<bool>,
+) -> Result<PromoteResult, String> {
+  let rule = resolve_rule(&rule_id)?;
+  if rule.require_confirm && confirmed != Some(true) {
+    return Err("human confirmation is required for Vault promote".to_string());
+  }
   let plan = prepare_promote_plan(&rule_id, &relative_path)?;
   if let Some(parent) = plan.dest.parent() {
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -345,5 +405,20 @@ mod tests {
     assert_eq!(added, 0);
     assert_eq!(removed, 0);
     assert!(lines.is_empty());
+  }
+
+  #[test]
+  fn normalize_relative_path_rejects_escape_and_absolute_paths() {
+    assert!(normalize_relative_path("../secret.md").is_err());
+    assert!(normalize_relative_path("staging/../secret.md").is_err());
+    assert!(normalize_relative_path("C:\\secret.md").is_err());
+    assert!(normalize_relative_path("staging/jinstone/ok.md").is_ok());
+  }
+
+  #[test]
+  fn promote_rule_must_match_source_prefix() {
+    let rule = &default_promote_rules()[0];
+    assert!(rule_matches_path(rule, "staging/jinstone/ok.md"));
+    assert!(!rule_matches_path(rule, "staging/n1/ok.md"));
   }
 }

@@ -1,0 +1,61 @@
+name: Juno Oversight CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: juno-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Desktop gates (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      AGENT_WORKBENCH_ROOT: ${{ runner.temp }}/AgentWorkbench
+      JUNO_OVERSIGHT_ROOT: ${{ github.workspace }}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frozen workspace
+        shell: pwsh
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Run desktop verification gates
+        shell: pwsh
+        run: corepack pnpm verify:desktop
+
+      - name: Stage packaged runtime
+        shell: pwsh
+        run: corepack pnpm desktop:runtime:prepare
+
+      - name: Verify packaged runtime
+        shell: pwsh
+        run: corepack pnpm desktop:runtime:verify
+
+      - name: Run smoke loop
+        shell: pwsh
+        run: corepack pnpm loop:smoke

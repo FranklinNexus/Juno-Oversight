@@ -5,11 +5,21 @@ import os from "node:os";
 import {
   checkpointTextForAdvance,
   finalizeRunCheckpoint,
+  isRunCheckpointStub,
   resolveQueueAdvance,
 } from "../../../orchestrator/src/mission-progress.js";
 
+describe("isRunCheckpointStub", () => {
+  it("requires an exact, unique COMPLETE status line", () => {
+    expect(isRunCheckpointStub("notes: STATUS: COMPLETE\n")).toBe(true);
+    expect(isRunCheckpointStub("STATUS: COMPLETE-ish\n")).toBe(true);
+    expect(isRunCheckpointStub("STATUS: COMPLETE\nSTATUS: BLOCKED\n")).toBe(true);
+    expect(isRunCheckpointStub("STATUS: COMPLETE\n")).toBe(false);
+  });
+});
+
 describe("finalizeRunCheckpoint", () => {
-  it("mirrors mission CHANGES into run checkpoint with STATUS COMPLETE", () => {
+  it("does not let a mission checkpoint satisfy a new run", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "juno-mcp-mirror-"));
     const missionId = "juno-workbench-cleanup-2026";
     const runId = "juno-c02-execute";
@@ -23,7 +33,7 @@ describe("finalizeRunCheckpoint", () => {
     );
     writeFileSync(
       path.join(dir, "missions", missionId, "checkpoint.md"),
-      "# Mission cp\n\n## CHANGES\n- purge-report.json\n",
+      "# Mission cp\n\nSTATUS: COMPLETE\n\n## CHANGES\n- purge-report.json\n",
       "utf8",
     );
     writeFileSync(
@@ -32,14 +42,19 @@ describe("finalizeRunCheckpoint", () => {
       "utf8",
     );
 
-    expect(finalizeRunCheckpoint(dir, runId, missionId, "implement")).toBe(true);
+    const originalRunCheckpoint = readFileSync(
+      path.join(dir, "runs", runId, "checkpoint.md"),
+      "utf8",
+    );
+    expect(finalizeRunCheckpoint(dir, runId, missionId, "implement")).toBe(false);
 
     const runCp = readFileSync(path.join(dir, "runs", runId, "checkpoint.md"), "utf8");
-    expect(runCp).toMatch(/## CHANGES/);
-    expect(runCp).toMatch(/STATUS:\s*COMPLETE/i);
+    expect(runCp).toBe(originalRunCheckpoint);
+    expect(runCp).not.toMatch(/## CHANGES/);
+    expect(runCp).not.toMatch(/STATUS:\s*COMPLETE/i);
 
     const advance = resolveQueueAdvance("implement", checkpointTextForAdvance(dir, runId, missionId));
-    expect(advance).toEqual({ action: "dequeue" });
+    expect(advance).toEqual({ action: "hold", reason: "review_pending" });
   });
 
   it("does not mirror when run checkpoint already has gate markers", () => {

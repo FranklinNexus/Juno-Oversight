@@ -5,12 +5,28 @@ import { EmptyState, HudButton, LoadingRows, MetricRow } from "@/components/ui";
 import { useRunControl } from "@/hooks/useRunControl";
 import { useRunEvents } from "@/hooks/useRunEvents";
 import { useWorkbenchSnapshot } from "@/hooks/useWorkbenchSnapshot";
-import { DEMO_RUN_ID } from "@/lib/workbench/orchestrator-client";
 
 export function ActiveRunPanel() {
-  const { loading, activeRunId, activeRunStatus, rootConfigured, rootPath, refresh } =
-    useWorkbenchSnapshot();
+  const {
+    loading,
+    activeRunId,
+    activeRunStatus,
+    rootConfigured,
+    rootPath,
+    source,
+    error: snapshotError,
+    daemons,
+    refresh,
+  } = useWorkbenchSnapshot();
   const live = activeRunStatus === "running";
+  const blockedDaemons = [
+    ["JUNO", daemons.juno],
+    ["AGI", daemons.agi],
+    ["BOOK", daemons.book],
+  ] as const;
+  const blockedDaemonEntries = blockedDaemons.filter(([, daemon]) =>
+    daemon.status.toLowerCase().includes("blocked"),
+  );
   const { lines, loading: eventsLoading, tauriReady, refresh: refreshEvents } = useRunEvents(
     activeRunId,
     Boolean(activeRunId),
@@ -53,6 +69,23 @@ export function ActiveRunPanel() {
             <p className="text-[10px] text-[var(--down)] font-mono break-all">{error}</p>
           )}
 
+          {snapshotError && (
+            <p className="text-[10px] text-[var(--down)] font-mono break-all">
+              Runtime snapshot failed: {snapshotError}
+            </p>
+          )}
+
+          {(activeRunStatus === "blocked" || blockedDaemonEntries.length > 0) && (
+            <div className="border border-[var(--accent-gold)] px-2 py-1 text-[9px] text-[var(--accent-gold)] font-mono break-all">
+              {activeRunStatus === "blocked" && <p>ACTIVE RUN BLOCKED · inspect events before retry</p>}
+              {blockedDaemonEntries.map(([label, daemon]) => (
+                <p key={label}>
+                  {label} BLOCKED · {daemon.blockedReason ?? daemon.evidenceReason ?? "reason unavailable"}
+                </p>
+              ))}
+            </div>
+          )}
+
           {loading ? (
             <LoadingRows rows={5} className="flex-1" />
           ) : !activeRunId ? (
@@ -63,7 +96,11 @@ export function ActiveRunPanel() {
               <MetricRow
                 label="Status"
                 value={activeRunStatus.toUpperCase()}
-                alert={activeRunStatus === "stall" || activeRunStatus === "failed"}
+                alert={
+                  activeRunStatus === "stall"
+                  || activeRunStatus === "failed"
+                  || activeRunStatus === "blocked"
+                }
               />
               <div className="flex-1 min-h-0 border border-[var(--border-dim)] p-2 text-[10px] text-[var(--text-muted)] font-mono overflow-auto whitespace-pre-wrap">
                 {eventsLoading && lines.length === 0
@@ -77,7 +114,7 @@ export function ActiveRunPanel() {
 
           {rootConfigured && (
             <p className="text-[9px] text-[var(--text-muted)] truncate">
-              workbench: {rootPath} · demo={DEMO_RUN_ID}
+              workbench: {rootPath} · source={source}
             </p>
           )}
         </div>

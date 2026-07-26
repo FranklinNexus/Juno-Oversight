@@ -1,11 +1,17 @@
 {
+  "schemaVersion": 2,
   "enabled": true,
   "weights": {
     "bookQuality": 10,
-    "hardening": 5,
-    "capUtilization": 2,
+    "hardening": 0,
+    "capUtilization": 0,
     "apiHealth": 20,
-    "idlePenalty": 3
+    "idlePenalty": 3,
+    "runSuccess": 25,
+    "verifyPass": 20,
+    "runFailure": 30,
+    "revisePenalty": 10,
+    "safetyBlock": 25
   },
   "mutationAllowlist": [
     "config/mission-registry.json",
@@ -29,6 +35,7 @@
     "declineThresholdDays": 3,
     "minDailyScores": 2,
     "selfOptimizeOnDecline": true,
+    "selfOptimizeCooldownHours": 24,
     "escalateOnBackoffDecline": true
   },
   "notes": "Copy to AgentWorkbench/config/evolution-unit.json"

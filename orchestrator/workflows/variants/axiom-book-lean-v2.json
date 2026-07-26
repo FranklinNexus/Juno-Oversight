@@ -1,0 +1,15 @@
+{
+  "id": "axiom-book-lean-v2",
+  "version": 2,
+  "description": "Axiom book lean canary: decide, debate, write, review, merge, verify",
+  "evalProfile": "literature",
+  "baseWorkflow": "axiom-book",
+  "slots": [
+    { "kind": "implement", "prompt": "executor_implement", "phaseId": "ax00-decide" },
+    { "kind": "debate", "prompt": "executor_book_review", "phaseId": "ax01-debate-axioms", "dependsOn": "ax00-decide" },
+    { "kind": "implement", "prompt": "executor_book_write", "phaseId": "ax-ch-write", "dependsOn": "ax01-debate-axioms" },
+    { "kind": "review", "prompt": "executor_book_review", "phaseId": "ax-ch-review", "dependsOn": "ax-ch-write" },
+    { "kind": "implement", "prompt": "executor_implement", "phaseId": "ax43-merge", "dependsOn": "ax-ch-review" },
+    { "kind": "verify", "prompt": "executor_verify", "phaseId": "ax46-verify", "dependsOn": "ax43-merge" }
+  ]
+}

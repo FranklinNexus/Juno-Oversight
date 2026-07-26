@@ -1,10 +1,7 @@
 param([string]$Workbench = "E:\AgentWorkbench")
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
+
 $missionId = "juno-self-iterate-p2-2026"
-$nowPath = Join-Path $Workbench "queue/now.yaml"
-if (Test-Path $nowPath) {
-  Copy-Item $nowPath (Join-Path $Workbench "queue/now.yaml.bak-pre-p2-$(Get-Date -Format 'yyyyMMdd-HHmmss')")
-}
-$utf8 = New-Object System.Text.UTF8Encoding $false
 $yaml = @"
 updated: $(Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
 now:
@@ -16,7 +13,7 @@ now:
     mission_id: $missionId
     phase_id: si20-implement-p2
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p2
     eval_profile: orchestrator
     max_minutes: 25
@@ -29,7 +26,7 @@ now:
     mission_id: $missionId
     phase_id: si21-debate-p2
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p2
     depends_on: si20-implement-p2
     max_minutes: 12
@@ -42,7 +39,7 @@ now:
     mission_id: $missionId
     phase_id: si22-review-p2
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p2
     depends_on: si21-debate-p2
     max_minutes: 12
@@ -55,7 +52,7 @@ now:
     mission_id: $missionId
     phase_id: si23-verify-p2
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p2
     eval_profile: orchestrator
     depends_on: si22-review-p2
@@ -64,5 +61,5 @@ now:
 backlog:
   []
 "@
-[System.IO.File]::WriteAllText($nowPath, $yaml, $utf8)
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $yaml -BackupPrefix "bak-pre-p2"
 Write-Host "P2 mission queued (4 slots). Run: pnpm loop:self-iterate-p2-run"

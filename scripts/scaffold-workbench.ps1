@@ -3,6 +3,8 @@ param(
   [string]$Root = "E:\AgentWorkbench"
 )
 
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
+
 $dirs = @(
   "providers",
   "queue",
@@ -22,7 +24,7 @@ foreach ($d in $dirs) {
 $config = @"
 # AgentWorkbench global config — see wiki/overseer-plan.md §4
 vault_path: "E:/Obsidian Vault"
-default_provider: cursor_composer
+default_provider: openai_codex
 quiet_hours:
   start: "23:00"
   end: "07:00"
@@ -37,7 +39,7 @@ now:
     horizon: day
     kind: jinstone
     prompt: executor_jinstone
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
   - id: site-phase-2-004
     horizon: mission
@@ -45,7 +47,7 @@ now:
     mission_id: landing-site-2026
     phase_id: pages
     prompt: executor_generic
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
 backlog: []
 "@
@@ -86,7 +88,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 Set-Content -Path (Join-Path $Root "config.yaml") -Value $config -Encoding UTF8
-Set-Content -Path (Join-Path $Root "queue/now.yaml") -Value $nowYaml -Encoding UTF8
+Submit-JunoQueueCandidate -Workbench $Root -Yaml $nowYaml -IfMissing
 Set-Content -Path (Join-Path $Root "state/orchestrator.json") -Value $orchestrator -Encoding UTF8
 Set-Content -Path (Join-Path $Root "daily/2026-06-01.md") -Value $daily -Encoding UTF8
 
@@ -114,9 +116,8 @@ $demoManifest = @"
 {
   "runId": "demo-jupiter-bench",
   "horizon": "day",
-  "provider": "cursor_composer",
-  "providerRef": "cursor_accounts.main",
-  "model": "composer-2.5",
+  "provider": "openai_codex",
+  "providerRef": "codex.local",
   "promptTemplate": "executor_jinstone",
   "cwd": "staging/jinstone",
   "maxMinutes": 25,
@@ -156,9 +157,8 @@ $demoManifest = @"
 {
   "runId": "demo-jupiter-bench",
   "horizon": "day",
-  "provider": "cursor_composer",
-  "providerRef": "cursor_accounts.main",
-  "model": "composer-2.5",
+  "provider": "openai_codex",
+  "providerRef": "codex.local",
   "promptTemplate": "executor_jinstone",
   "cwd": "staging/jinstone",
   "maxMinutes": 25,
@@ -189,7 +189,7 @@ id: landing-site-2026
 title: 径石营销着陆页
 horizon: mission
 status: ACTIVE
-provider: cursor_composer
+provider: openai_codex
 workspace: staging/sites/landing
 success_criteria: "pnpm build 通过；staging/sites/landing/out 存在"
 phases:

@@ -1,3 +1,10 @@
+import type {
+  OperatorRecoveryAction,
+  OperatorRecoveryResult,
+  RecoveryInventory,
+  WorkbenchSnapshot,
+} from "@/lib/workbench/types";
+
 export const DEMO_RUN_ID = "demo-jupiter-bench";
 
 export const DEFAULT_DEMO_MANIFEST = `E:\\AgentWorkbench\\runs\\${DEMO_RUN_ID}\\manifest.json`;
@@ -54,6 +61,7 @@ export type MissionSummary = {
   currentPhaseId: string | null;
   phases: MissionPhase[];
   progressExcerpt: string | null;
+  blockedReason: string | null;
 };
 
 export type StagingEntry = { relativePath: string; sizeBytes: number };
@@ -95,6 +103,23 @@ export async function getMissionsSnapshot(): Promise<MissionSummary[]> {
   return invoke<MissionSummary[]>("get_missions_snapshot");
 }
 
+export async function getWorkbenchSnapshot(): Promise<WorkbenchSnapshot> {
+  return invoke<WorkbenchSnapshot>("get_workbench_snapshot");
+}
+
+export async function inspectOperatorRecovery(): Promise<RecoveryInventory> {
+  return invoke<RecoveryInventory>("inspect_operator_recovery");
+}
+
+export async function applyOperatorRecovery(input: {
+  incidentId: string;
+  action: OperatorRecoveryAction;
+  preconditionSha256: string;
+  reason: string;
+}): Promise<OperatorRecoveryResult> {
+  return invoke<OperatorRecoveryResult>("apply_operator_recovery", { request: input });
+}
+
 export async function listStagingEntries(): Promise<StagingEntry[]> {
   return invoke<StagingEntry[]>("list_staging_entries");
 }
@@ -106,8 +131,9 @@ export async function listPromoteRules(): Promise<PromoteRule[]> {
 export async function promoteToVault(
   ruleId: string,
   relativePath: string,
+  confirmed: boolean,
 ): Promise<PromoteResult> {
-  return invoke<PromoteResult>("promote_to_vault", { ruleId, relativePath });
+  return invoke<PromoteResult>("promote_to_vault", { ruleId, relativePath, confirmed });
 }
 
 export async function previewPromoteToVault(

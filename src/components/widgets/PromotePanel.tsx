@@ -74,10 +74,10 @@ export function PromotePanel() {
                 )}
                 <div className="flex gap-1 pt-1">
                   <HudButton
-                    disabled={!tauriReady || busy || !selectedPath || previewLoading}
+                    disabled={!tauriReady || busy || !selectedPath || previewLoading || !defaultRule}
                     onClick={() => selectedPath && promote(defaultRule, selectedPath)}
                   >
-                    Promote
+                    Confirm Promote
                   </HudButton>
                   {preview?.action === "unchanged" && (
                     <span className="text-[10px] text-[var(--text-muted)] self-center">unchanged — 跳过</span>

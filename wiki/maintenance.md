@@ -1,6 +1,6 @@
 # Juno Oversight — 维护手册
 
-**最后更新**：2026-07-03（Self-optimize + API Gateway + quality-gate）
+**最后更新**：2026-07-15（workflow canary trust chain + legacy selection migration）
 
 ---
 
@@ -9,17 +9,17 @@
 | 工具 | 版本建议 |
 |------|----------|
 | Node.js | **22.13+**（orchestrator / `pnpm tauri:dev` 门禁） |
-| pnpm | 10+ |
+| pnpm | **10.13.1**（由 Corepack + `packageManager` 固定） |
 | Rust | 1.77+（`tauri:dev` / 打包） |
-| CURSOR_API_KEY | Orchestrator Live spawn（`.env.local`） |
+| Codex 登录 | 本机 Codex 已登录；Juno 不从 `.env.local` 注入 provider key |
 
 ---
 
 ## 2. 常用命令
 
 ```bash
-pnpm install          # 安装依赖
-pnpm dev              # predev 释放 3000 + next dev -p 3000
+corepack pnpm install --frozen-lockfile  # 一次安装 HUD + orchestrator workspace
+pnpm dev              # next-dev 修 cache、释放 3000、启动 next dev
 pnpm tauri:dev        # 桌面壳 + Next 热更新（需先能访问 localhost:3000）
 pnpm clean            # 删除 out/ 与 .next/（排错时用；勿在 dev 跑着时 clean）
 pnpm build            # clean + 静态导出到 out/（仅 production 启用 export）
@@ -27,13 +27,19 @@ pnpm preview          # 静态 out/ 本地预览（原 start）
 pnpm lint             # ESLint
 pnpm test             # Vitest 单元测试
 pnpm orchestrator:build
-pnpm verify:desktop   # test + lint + build + orchestrator + cargo check
+pnpm evolution:canary                 # 只读列出 workflow experiments
+pnpm workflow:selection:migrate       # 只读检查 legacy selection
+pnpm verify:desktop   # test + lint + build + isolated dev smoke + orchestrator + cargo check/test
 pnpm ui:smoke         # HTTP 冒烟（需 dev server）
 node scripts/simulate-smoke-loop.mjs   # 三 slot 门禁 dry 模拟
-node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
+node scripts/sync-workbench-hooks.mjs   # 仅供人工 Cursor 会话同步 hooks；不是 Codex sandbox/gate
 ```
 
-复制 `.env.example` 为 `.env.local`（`CURSOR_API_KEY`、`JUNO_OVERSIGHT_ROOT` 等）。
+`pnpm-lock.yaml` 是唯一依赖锁；不要在 `orchestrator/` 内运行 `npm install`。`orchestrator:build` 只检查依赖契约并编译，不会在自治运行期间联网安装。
+
+`dev:smoke` 使用系统分配的空闲端口和 `localhost`，在临时隔离项目中编译；成功或失败都会确认 Next 进程树、端口和临时 `.next/dev` lock 已清理，不会复用或终止外部 dev server。
+
+复制 `.env.example` 为 `.env.local`（`AGENT_WORKBENCH_ROOT`、`JUNO_OVERSIGHT_ROOT`）。
 
 ### 开发地址
 
@@ -42,7 +48,7 @@ node scripts/sync-workbench-hooks.mjs   # 同步 hooks → AgentWorkbench
 | http://localhost:3000 | 主 HUD（`pnpm dev`） |
 | http://localhost:3000/dev/components | UI 组件目录（**仅 development**） |
 
-`predev` 会尝试结束占用 **3000** 的旧进程（`scripts/free-port.mjs`）。若仍失败，手动 `taskkill` 后重试。不要用 `next start`（已改为 `pnpm preview`）。
+`scripts/next-dev.mjs` 会修复脏 cache 并结束占用 **3000** 的旧 Next 进程。静态 export 用 `pnpm preview`；它通过内置只读 HTTP server 提供 `out/`。
 
 ### 桌面打包（Tauri）
 
@@ -219,10 +225,13 @@ pnpm test
 | `safety-doctrine.test.ts` | destructive shell 分类 |
 | `spawn-idempotency.test.ts` | shouldSkipSpawn |
 | `manifest-prompt.test.ts` | prompt 注入含 §11、MCP |
-| `api-gateway.test.ts` | 限速、配额、mission 容量 |
+| `api-gateway.test.ts` | Codex 限速、lease 崩溃恢复、真实 token 校正 |
 | `quality-gate.test.ts` | spaced-bold、章节 rubric |
 | `bounded-autonomy.test.ts` | 自决策优先级 |
-| `orchestrator-isolation.test.ts` | Workbench/Vault 隔离 |
+| `orchestrator-isolation.test.ts` | orchestrator 禁止父目录 symlink |
+| `safety-verify.test.ts` | baseline v3、冻结 scope、Git/Workbench 越界与 secret |
+| `verify-runner.test.ts` | 目标路由、shell-free 命令、secret redaction |
+| `codex-executor.test.ts` | sandbox、事件证据、缺失 turn.completed fail-closed |
 
 Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review-loop.test.ts`（经 re-export 测 `shouldMarkPhaseDone`）。
 
@@ -250,7 +259,7 @@ Orchestrator 逻辑在 `orchestrator/src/`；门禁单元测试主要在 `review
 
 ## 10. Orchestrator 运维
 
-详见 [orchestrator.md](./orchestrator.md)、[workbench.md](./workbench.md)。
+详见 [runtime.md](./runtime.md)、[juno-architecture.md](./juno-architecture.md)。
 
 ```powershell
 pnpm orchestrator:build
@@ -261,8 +270,109 @@ node orchestrator/dist/spawn-run.js --manifest E:\AgentWorkbench\runs\<id>\manif
 
 | 状态文件 | 关键字段 |
 |----------|----------|
-| `state/scheduler.json` | `enabled` — 人类控制 |
-| `state/orchestrator.json` | `activeRunStatus` — `done` 触发出队 |
+| `state/juno-daemon.json` | `status`、连续失败/无进展预算、lastAction |
+| `state/juno-daemon.pid` | 当前主 daemon PID；Tauri 会核验进程身份 |
+| `state/orchestrator.json` | transport 状态；只有 checkpoint gate + safety PASS 才允许出队 |
+
+### 10.1 手工 workflow canary
+
+Canary controller 默认会先 build orchestrator。不要在 flags 前加独立的 `--`，否则严格参数解析器会把它当成未知参数。
+
+```powershell
+# 只读：列出全部实验 / 检查单个实验
+pnpm evolution:canary
+pnpm evolution:canary --id=<experiment-id>
+
+# 创建或复用 proposal，不 queue、不运行、不激活
+pnpm evolution:canary --baseline=axiom-book --candidate=variants/axiom-book-lean-v2 --target-mission=juno-axiom-book-2026 --source-phase=workflow-canary --episodes=2
+
+# 下面每次只允许一个显式 mutation flag
+pnpm evolution:canary --id=<experiment-id> --queue
+pnpm evolution:canary --id=<experiment-id> --evaluate
+pnpm evolution:canary --id=<experiment-id> --promote
+pnpm evolution:canary --id=<experiment-id> --rollback
+```
+
+操作顺序：
+
+1. Proposal 输出中记录 `experimentId`、`proposalSha256`、两个 workflow SHA、`promptSha256ByTemplate` 与 `fixtureSha256`。同 ID 的冲突 proposal 不会覆盖。
+2. `--queue` 创建隔离 fixture/running record，并通过 queue revision CAS 入队。`now` 为空时实验直接进入 `now`；否则进入 backlog。实验已在 backlog 且 `now` 后来变空时，再次显式 `--queue` 会将它提升到 `now`，不重排外部 backlog。
+3. 用正常 runtime 消费 queue。不要直接改生成的 sample、queue item、manifest、fixture receipt 或 prompt。
+4. `--evaluate` 可重复执行。证据不足时保持 `running`；terminal 时写不可覆盖 decision receipt。两条 arm 每个 episode 都必须 deterministic verify PASS，candidate 还必须无退化且至少严格改善一项。
+5. 只有 `accepted` 才执行 `--promote`。它会重算 workflow/prompt/fixture、比对 live evidence，并在 selection lease 下 CAS 安装 active selection。
+6. 需要撤销时执行同一 experiment 的 `--rollback`。它只处理当前由该 accepted receipt 激活的 selection，不会覆盖 foreign writer，也不会恢复已失信的 previous selection。
+
+`--queue`、`--evaluate`、`--promote`、`--rollback` 一次只能有一个；不带 action flag 的已有 ID 是 inspect。Proposal definition 会落盘 proposal，不能把它误认为只读。源码模式不应常规使用 `--skip-build`；desktop runtime 的脚本已经固定到构建阶段校验过的 runtime。
+
+#### Canary 证据审计
+
+| 检查点 | 必查字段 / 文件 |
+|--------|-----------------|
+| Proposal | workflow definition SHA、prompt template→SHA map、fixture template SHA、previous selection、proposal SHA |
+| Queue slot | `experiment_id`、`experiment_arm`、`experiment_episode`、`source_phase_id`、`experiment_fixture_sha256`、`experiment_prompt_sha256`，以及 workflow/profile/mission/phase/runKind |
+| Fixture | 每个 arm/episode 的 create-once receipt；fixture version、sample mission、template SHA、rendered files SHA |
+| Manifest | `experimentPromptSha256`、`experimentFixtureSha256` 与 compiled slot 完全一致；prompt 在 materialize 和实际构造 user prompt 时各核对一次 |
+| Evidence | exact queue item/manifest、Codex 或 deterministic verify artifact v2、checkpoint/events/attempt/slot/retry SHA 绑定、REVISE lineage、metrics 与 `evidenceSha256` |
+| Selection | accepted decision receipt SHA；mission、candidate workflow 与 experiment 三者一致 |
+
+`juno-axiom-book-2026` 使用 literature micro fixture v2。每个 sample 只有 `essay.md` 可修改；`brief.md`、`rubric.md`、`north-star.md`、`progress.md`、`scope-lock.md` 必须保持精确字节。PASS 要求 450-900 English words、Thesis/Argument/Counterargument/Conclusion、`[S1] [S2] [S3]`，以及 auditable、falsifiable、oversight 论证。Verifier 读取隔离 sample，不读取生产书产物。
+
+任何 workflow 文件、prompt bytes、compiled slot、fixture receipt、manifest 或 evidence 在 proposal 后漂移，都应当作为阻断处理，而不是手工修 JSON 后继续。完整机制见 [evolution.md](./evolution.md)。
+
+#### Verify completion 崩溃恢复
+
+Terminal verify 不再先出队再签 receipt。Runtime 会先在
+`state/mission-completion-intents/` 写 create-once intent，然后在 queue lease 内提交 dequeue 和
+正式 receipt。Intent 绑定 exact queue head/revision、run checkpoint、evidence policy；AGI/book
+还绑定 mission checkpoint 与 domain evidence。提交失败只会在精确 post revision 上恢复原 head，
+不会覆盖 foreign queue writer。
+
+所有 generic、scheduler、minimal、AGI 和 book 入口都会在运行新 slot 前 reconcile pending intent：
+可信 receipt 已存在时清理 intent；terminal head 尚在时完成原事务；head 已移除时提交 receipt，
+若提交仍失败则把原 head prepend 回 live queue 并保留其他任务。不要手工删除 intent、重写 receipt，
+也不要重复执行已通过的 terminal verify；`busy` 时稍后重试，`blocked` 时先调查 intent、queue 与
+控制文件的 hardlink/metadata 漂移。
+
+### 10.2 Legacy workflow selection 迁移
+
+先 inspect，默认不写任何状态：
+
+```powershell
+pnpm workflow:selection:migrate
+```
+
+按输出处理：
+
+| `status` | 操作 |
+|----------|------|
+| `missing` | 无旧 selection，不需要迁移 |
+| `legacy_v0` | 仅此状态允许按 inspect 返回的精确 SHA commit |
+| `trusted_v1` | 禁止迁移；使用对应 accepted canary 的 `--rollback` |
+| `unsupported` | 禁止自动删除；人工调查 malformed、forged v1 或未知 schema |
+
+只有确认 daemon、autonomy、launcher、orchestrator 与 workflow experiment 都静默后才 commit：
+
+```powershell
+pnpm workflow:selection:migrate --commit --expected-sha256=<64-hex-from-inspect> --reason="Archive obsolete legacy v0 selection"
+```
+
+Commit 会自行再次检查静默条件和 selection lease。它只接受精确四字段 legacy schema（`workflowId`、`score`、`reasons`、`updatedAt`）、inspect 的 exact SHA、非空且最长 500 字符的 reason，以及不超过 64 KiB 的 exclusive regular file。以下情况全部 fail closed：
+
+- SHA/bytes/file metadata 在 inspect 后变化；
+- source 或 archive 是 symlink/hardlink，或 archive/receipt 内容冲突；
+- daemon PID、autonomy lock、run-launcher lease、active orchestrator run 或 running experiment 仍存在；
+- selection 是 trusted/forged v1、malformed、未知 schema，或 selection lease 正忙；
+- receipt 已存在后 source 又被重建，或 foreign writer 在 commit 中抢占。
+
+成功后确认：
+
+```text
+state/workflow-selection.json                                      不存在
+state/workflow-selection-archive/<selection-sha256>.json           原始字节归档
+state/workflow-selection-archive/<selection-sha256>.receipt.json   create-once 审计凭证
+```
+
+记录命令输出中的 `receiptSha256`。重复使用同一 expected SHA 会返回 `already_archived`，不会覆盖 archive 或 receipt。迁移不触碰 `queue/now.yaml`；若发现 lock/recovery/temp/preimage 残留，停止后续 promote 并调查，不要手工删除证据。
 
 ---
 
@@ -277,7 +387,7 @@ node orchestrator/dist/spawn-run.js --manifest E:\AgentWorkbench\runs\<id>\manif
 
 ### 2026-07-01（第七轮 — 120% Wiki）
 
-- Wiki 新增：`orchestrator.md`、`workbench.md`、`widgets.md`
+- Wiki 新增的 Orchestrator/Workbench 内容现已合并到 `runtime.md` 与 `juno-architecture.md`
 - LIVE dev：恢复 `src/app/api/market/*` → `lib/market/live/*`
 - `shouldMarkPhaseDone`；bootstrap smoke 默认 `enabled: false`
 - `simulate-smoke-loop.mjs`

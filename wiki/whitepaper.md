@@ -122,7 +122,7 @@ queue/now.yaml → Scheduler → spawn-run → checkpoint.md + events.jsonl
          missions/*/progress.md (phase done)
 ```
 
-权威文档：[orchestrator.md](./orchestrator.md)、[workbench.md](./workbench.md)、[overseer-quality.md](./overseer-quality.md)。
+权威文档：[runtime.md](./runtime.md)、[juno-architecture.md](./juno-architecture.md)、[overseer-quality.md](./overseer-quality.md)。
 
 ### 3.3 全局模式
 
@@ -168,7 +168,7 @@ queue/now.yaml → Scheduler → spawn-run → checkpoint.md + events.jsonl
 | 桌面 | Tauri 2, sysinfo |
 | 网格 | react-grid-layout v2 |
 | 图表 | lightweight-charts 5 |
-| 编排 | Node 22 orchestrator + `@cursor/sdk` |
+| 编排 | Node 22 orchestrator + `@openai/codex-sdk` |
 
 ### 5.1 构建双模式
 
@@ -188,7 +188,7 @@ queue/now.yaml → Scheduler → spawn-run → checkpoint.md + events.jsonl
 - Overseer 六窗 + Scheduler + Review 门禁 + destructive hook
 - Smoke loop Mission + `pnpm ui:smoke`
 - LIVE dev 代理（`lib/market/live` + Route Handler）
-- Wiki 120%（orchestrator / workbench / widgets）
+- Runtime / Workbench / Widget 架构文档
 
 ### Phase 3（进行中）
 
@@ -220,8 +220,8 @@ queue/now.yaml → Scheduler → spawn-run → checkpoint.md + events.jsonl
 |------|------|
 | [wiki/README.md](./README.md) | Wiki 总索引 |
 | [widgets.md](./widgets.md) | 10 Widget + Tauri IPC |
-| [orchestrator.md](./orchestrator.md) | Scheduler / spawn-run |
-| [workbench.md](./workbench.md) | AgentWorkbench 目录 |
+| [runtime.md](./runtime.md) | Queue / spawn-run / daemon / AgentWorkbench |
+| [juno-architecture.md](./juno-architecture.md) | 控制面、执行面与安全边界 |
 | [overseer-quality.md](./overseer-quality.md) | Review / Verify 权威 |
 | [smoke-loop.md](./smoke-loop.md) | 最小 loop 试跑 |
 | [maintenance.md](./maintenance.md) | 命令、排错、测试 |

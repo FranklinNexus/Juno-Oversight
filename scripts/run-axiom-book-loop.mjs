@@ -2,7 +2,6 @@
 /**
  * Axiom book loop — local planning + live chapter write/review.
  */
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,12 +11,23 @@ import {
   BOOK_MISSION_ID,
 } from "./lib/book-advance-core.mjs";
 import { countBookHan, needsLiveAgent } from "./lib/book-decision.mjs";
+import { spawnPnpmWithTimeout } from "./lib/pnpm-runner.mjs";
+import {
+  BOOTSTRAP_TIMEOUT_MS,
+  BUILD_TIMEOUT_MS,
+  inspectMissionQueueHead,
+  loopExitCode,
+  parseCycleNonceFlag,
+  parsePositiveIntegerFlag,
+  requireSpawnSuccess,
+  spawnWithTimeout,
+  TERMINAL_BLOCK_EXIT,
+} from "./lib/specialized-loop-guard.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
-const maxArg = process.argv.find((a) => a.startsWith("--max-slots="));
-const maxSlots = maxArg ? Number(maxArg.split("=")[1]) : 3;
 const skipAutonomy = process.argv.includes("--skip-autonomy");
+const skipBuild = process.argv.includes("--skip-build");
 
 process.env.AGENT_WORKBENCH_ROOT = workbench;
 process.env.JUNO_OVERSIGHT_ROOT = repoRoot;
@@ -26,11 +36,69 @@ function log(m) {
   process.stderr.write(`[book-loop] ${m}\n`);
 }
 
-const build = spawnSync("pnpm", ["orchestrator:build"], { cwd: repoRoot, stdio: "inherit", shell: true });
-if (build.status !== 0) process.exit(build.status ?? 1);
+let maxSlots;
+let cycleNonce;
+try {
+  const args = process.argv.slice(2);
+  maxSlots = parsePositiveIntegerFlag(args, "max-slots", 3, { max: 100 });
+  cycleNonce = parseCycleNonceFlag(args);
+} catch (error) {
+  log(`BLOCKED: ${error.message}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}
 
-const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
-loadProjectEnv();
+function writeLoopState(state) {
+  writeBookLoopState(workbench, { ...state, cycleNonce });
+}
+
+if (!skipBuild) {
+  try {
+    requireSpawnSuccess(
+      await spawnPnpmWithTimeout(
+        ["orchestrator:build"],
+        { cwd: repoRoot, stdio: "inherit" },
+        BUILD_TIMEOUT_MS,
+      ),
+      "orchestrator build",
+    );
+  } catch (error) {
+    writeLoopState({ status: "terminal_blocked", blockedReason: error.message });
+    log(`BLOCKED: ${error.message}`);
+    process.exit(TERMINAL_BLOCK_EXIT);
+  }
+}
+
+try {
+  const { loadProjectEnv } = await import("../orchestrator/dist/env.js");
+  loadProjectEnv();
+
+const deps = {
+  queueIo: await import("../orchestrator/dist/queue-io.js"),
+  manifest: await import("../orchestrator/dist/manifest.js"),
+  missionProgress: await import("../orchestrator/dist/mission-progress.js"),
+  missionCompletion: await import("../orchestrator/dist/mission-completion.js"),
+  idempotency: await import("../orchestrator/dist/idempotency.js"),
+};
+
+const completionRecovery = deps.missionCompletion.recoverPendingVerifyCompletions(workbench);
+if (completionRecovery.status === "busy") {
+  writeLoopState({ status: "busy", blockedReason: "completion_recovery_busy" });
+  process.exit(loopExitCode({ advanced: 0 }));
+}
+if (completionRecovery.status === "blocked") {
+  writeLoopState({ status: "terminal_blocked", blockedReason: completionRecovery.reason });
+  log(`BLOCKED: ${completionRecovery.reason}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}
+if (completionRecovery.status === "recovered") {
+  deps.idempotency.mergeOrchestratorState(workbench, {
+    activeRunId: null,
+    activeRunStatus: "idle",
+  });
+  writeLoopState({ status: "idle", completionRecovery });
+  log(`recovered completion ${completionRecovery.recovered.map((entry) => entry.terminalRunId).join(",")}`);
+  process.exit(0);
+}
 
 let recordAutonomyDecision;
 let decideNextAction;
@@ -39,65 +107,131 @@ if (!skipAutonomy) {
   const decision = decideNextAction(workbench);
   if (decision.action === "escalate_human") {
     log(`BLOCKED: ${decision.reason}`);
-    writeBookLoopState(workbench, { status: "escalate_human", decision });
-    process.exit(2);
+    writeLoopState({ status: "terminal_blocked", decision });
+    process.exit(TERMINAL_BLOCK_EXIT);
   }
-  if (decision.action === "queue_mission" && decision.bootstrap === "queue:axiom-book") {
-    spawnSync("node", ["scripts/bootstrap-axiom-book.mjs"], { cwd: repoRoot, stdio: "inherit" });
-  }
-  if (decision.action === "run_book_loop" || decision.action === "queue_mission") {
-    recordAutonomyDecision(workbench, {
-      action: "run_book_loop",
-      missionId: BOOK_MISSION_ID,
-      script: "book:loop",
-      reason: "axiom book advance",
+  if (decision.action === "queue_mission") {
+    if (decision.missionId !== BOOK_MISSION_ID || decision.bootstrap !== "queue:axiom-book") {
+      writeLoopState({
+        status: "terminal_blocked",
+        blockedReason: `planner selected ${decision.missionId ?? "unknown"}`,
+        decision,
+      });
+      log(`BLOCKED: planner selected another mission (${decision.missionId ?? "unknown"})`);
+      process.exit(TERMINAL_BLOCK_EXIT);
+    }
+    try {
+      requireSpawnSuccess(
+        await spawnWithTimeout(process.execPath, ["scripts/bootstrap-axiom-book.mjs"], {
+          cwd: repoRoot,
+          stdio: "inherit",
+          shell: false,
+        }, BOOTSTRAP_TIMEOUT_MS),
+        "axiom book bootstrap",
+      );
+    } catch (error) {
+      writeLoopState({ status: "terminal_blocked", blockedReason: error.message });
+      log(`BLOCKED: ${error.message}`);
+      process.exit(TERMINAL_BLOCK_EXIT);
+    }
+  } else if (decision.action !== "run_book_loop" || decision.missionId !== BOOK_MISSION_ID) {
+    writeLoopState({
+      status: "terminal_blocked",
+      blockedReason: `planner action ${decision.action} targets ${decision.missionId ?? "unknown"}`,
+      decision,
     });
+    log(`BLOCKED: planner selected ${decision.action} for ${decision.missionId ?? "unknown"}`);
+    process.exit(TERMINAL_BLOCK_EXIT);
   }
+  recordAutonomyDecision(workbench, {
+    action: "run_book_loop",
+    missionId: BOOK_MISSION_ID,
+    script: "book:loop",
+    reason: "axiom book advance",
+  });
 }
-
-const deps = {
-  queueIo: await import("../orchestrator/dist/queue-io.js"),
-  manifest: await import("../orchestrator/dist/manifest.js"),
-  missionProgress: await import("../orchestrator/dist/mission-progress.js"),
-  idempotency: await import("../orchestrator/dist/idempotency.js"),
-};
 
 let advanced = 0;
 let blocked = null;
+let terminal = false;
+let queueBusy = false;
 
 for (let i = 0; i < maxSlots; i++) {
-  const { parseNowYaml, saveNowQueue } = deps.queueIo;
-  let { now, backlog } = parseNowYaml(workbench);
+  const { readNowQueueSnapshot, replaceQueueSnapshotConditional } = deps.queueIo;
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  let { now, backlog } = queueSnapshot;
   if (now.length === 0) {
     const promoted = backlog.filter((item) => item.mission_id === BOOK_MISSION_ID).slice(0, 1);
     if (promoted.length === 0) break;
     const ids = new Set(promoted.map((p) => p.id));
     backlog = backlog.filter((item) => !ids.has(item.id));
     now = promoted;
-    saveNowQueue(workbench, now, backlog);
-  }
-  const head = now[0];
-  if (!head || head.mission_id !== BOOK_MISSION_ID) break;
-
-  if (needsLiveAgent(head)) {
-    if (!process.env.CURSOR_API_KEY?.trim()) {
-      blocked = { reason: "need CURSOR_API_KEY for live chapter slot", phase: head.phase_id };
-      log(`blocked: ${blocked.reason} (${head.phase_id})`);
+    const promotion = replaceQueueSnapshotConditional(workbench, {
+      expectedRevision: queueSnapshot.revision,
+      now,
+      backlog,
+    });
+    if (!promotion.ok) {
+      if (promotion.reason === "busy") queueBusy = true;
+      else {
+        blocked = { reason: "queue_revision_conflict:backlog_promotion" };
+        terminal = true;
+      }
       break;
     }
+  }
+  const head = now[0];
+  const headGuard = inspectMissionQueueHead(head, BOOK_MISSION_ID);
+  if (!headGuard.ok) {
+    if (headGuard.terminal) {
+      blocked = { reason: headGuard.reason, phase: head?.phase_id };
+      terminal = true;
+      log(`blocked: ${headGuard.reason}`);
+    }
+    break;
+  }
+  if (String(head.phase_id ?? "").startsWith("bq-")) {
+    blocked = { reason: `foreign_workflow_head:${head.phase_id}`, phase: head.phase_id };
+    terminal = true;
+    log(`blocked: ${blocked.reason}`);
+    break;
+  }
+
+  if (needsLiveAgent(head)) {
     log(`live spawn ${head.id} (${head.phase_id})`);
-    const live = await spawnLiveBookSlot(workbench, head, deps);
+    let live;
+    try {
+      live = await spawnLiveBookSlot(workbench, head, deps);
+    } catch (error) {
+      blocked = { reason: `live_exception:${error.message}`, phase: head.phase_id };
+      terminal = true;
+      log(`live failed: ${blocked.reason}`);
+      break;
+    }
     if (!live.ok) {
+      if (live.busy) {
+        log(`live queue mutation busy: ${live.reason}`);
+        break;
+      }
       blocked = { reason: live.reason, phase: head.phase_id };
+      terminal = true;
       log(`live failed: ${live.reason}`);
       break;
     }
-    advanced += 1;
-    log(`live done ${head.id}${live.revised ? " (REVISE fix queued)" : ""}`);
+    if (live.dequeued) advanced += 1;
+    log(live.revised ? `live revise transition ${head.id}` : `live dequeued ${head.id}`);
     continue;
   }
 
-  const r = await advanceOneBookSlot(workbench, deps);
+  let r;
+  try {
+    r = await advanceOneBookSlot(workbench, deps);
+  } catch (error) {
+    blocked = { reason: `advance_exception:${error.message}`, phase: head.phase_id };
+    terminal = true;
+    log(`blocked: ${blocked.reason}`);
+    break;
+  }
   if (r.advanced) {
     advanced += 1;
     log(`dequeued ${r.runId} (${r.runKind})`);
@@ -105,6 +239,18 @@ for (let i = 0; i < maxSlots; i++) {
   }
   if (r.needLive) {
     blocked = { reason: r.reason, phase: head.phase_id };
+    terminal = true;
+    break;
+  }
+  if (r.busy) {
+    queueBusy = true;
+    log(`stop: ${r.reason}`);
+    break;
+  }
+  if (r.reason?.startsWith("unsupported_local:")) {
+    blocked = { reason: r.reason, phase: head.phase_id };
+    terminal = true;
+    log(`blocked: ${r.reason}`);
     break;
   }
   log(`stop: ${r.reason}`);
@@ -112,13 +258,26 @@ for (let i = 0; i < maxSlots; i++) {
 }
 
 const han = countBookHan(workbench);
-writeBookLoopState(workbench, {
-  status: blocked ? "blocked" : advanced > 0 ? "idle" : "noop",
+writeLoopState({
+  status: terminal
+    ? "terminal_blocked"
+    : blocked
+      ? "blocked"
+      : queueBusy
+        ? "busy"
+        : advanced > 0
+          ? "idle"
+          : "noop",
   slotsAdvancedThisRun: advanced,
   bookHanApprox: han,
-  blockedReason: blocked?.reason ?? null,
+  blockedReason: blocked?.reason ?? (queueBusy ? "queue_mutation_busy" : null),
   blockedPhase: blocked?.phase ?? null,
 });
 
-log(`=== book:loop done — advanced ${advanced}, bookHan≈${han} ===`);
-process.exit(blocked && advanced === 0 ? 3 : 0);
+  log(`=== book:loop done — advanced ${advanced}, bookHan≈${han} ===`);
+  process.exit(loopExitCode({ advanced, terminal: terminal || Boolean(blocked) }));
+} catch (error) {
+  writeLoopState({ status: "terminal_blocked", blockedReason: `loop_exception:${error.message}` });
+  log(`BLOCKED: loop_exception:${error.message}`);
+  process.exit(TERMINAL_BLOCK_EXIT);
+}

@@ -1,14 +1,21 @@
 /**
  * Shared AGI literature queue advance (no API).
  */
-import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { hasUniqueCompleteStatus } from "./checkpoint-status.mjs";
+import { spawnPnpmWithTimeout } from "./pnpm-runner.mjs";
+import {
+  spawnWithTimeout,
+  VERIFY_TIMEOUT_MS,
+} from "./specialized-loop-guard.mjs";
 
 export const AGI_MISSION_ID = "juno-agi-literature-2026";
+const DEFAULT_JUNO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 function junoRoot() {
-  return process.env.JUNO_OVERSIGHT_ROOT ?? "C:\\Users\\kfr34\\Desktop\\Entrepreneurship\\Juno Oversight";
+  return process.env.JUNO_OVERSIGHT_ROOT ?? DEFAULT_JUNO_ROOT;
 }
 
 export function countBatchPapers(workbench, batchNum) {
@@ -21,6 +28,93 @@ export function countBatchPapers(workbench, batchNum) {
   );
   if (!existsSync(f)) return -1;
   return (readFileSync(f, "utf8").match(/^  - title:/gm) ?? []).length;
+}
+
+function parseYamlScalar(raw) {
+  const value = raw.trim();
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return "";
+    }
+  }
+  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
+  return value;
+}
+
+function normalizedEvidenceKey(value) {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+}
+
+export function validateAgiBatch(workbench, batchNum, seen = {}) {
+  const batchPath = path.join(
+    workbench,
+    "missions",
+    AGI_MISSION_ID,
+    "papers",
+    `batch-${String(batchNum).padStart(2, "0")}.yaml`,
+  );
+  if (!existsSync(batchPath)) return { ok: false, count: 0, reason: `missing ${path.basename(batchPath)}` };
+  const text = readFileSync(batchPath, "utf8");
+  const starts = [...text.matchAll(/^  - title:\s*(.*)$/gm)];
+  if (starts.length !== 25) {
+    return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} expected 25 entries` };
+  }
+
+  const seenTitles = seen.titles ?? new Set();
+  const seenUrls = seen.urls ?? new Set();
+  const requiredFields = ["authors", "year", "venue", "url", "one_line", "juno_hook"];
+  for (let index = 0; index < starts.length; index += 1) {
+    const start = starts[index];
+    const end = starts[index + 1]?.index ?? text.length;
+    const block = text.slice(start.index, end);
+    const title = parseYamlScalar(start[1] ?? "");
+    const fields = {};
+    for (const field of requiredFields) {
+      const match = block.match(new RegExp(`^    ${field}:\\s*(.*)$`, "m"));
+      fields[field] = match ? parseYamlScalar(match[1]) : "";
+    }
+    if (title.trim().length < 5 || requiredFields.some((field) => String(fields[field]).trim() === "")) {
+      return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} entry ${index + 1} has empty fields` };
+    }
+    const year = Number(fields.year);
+    if (!Number.isInteger(year) || year < 1900 || year > new Date().getUTCFullYear() + 1) {
+      return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} entry ${index + 1} has invalid year` };
+    }
+    if (!/^https?:\/\//i.test(fields.url)) {
+      return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} entry ${index + 1} has invalid url` };
+    }
+    if (fields.one_line.trim().length < 20 || fields.juno_hook.trim().length < 20) {
+      return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} entry ${index + 1} lacks substantive evidence` };
+    }
+
+    const titleKey = normalizedEvidenceKey(title);
+    const urlKey = normalizedEvidenceKey(fields.url).replace(/\/$/, "");
+    if (seenTitles.has(titleKey) || seenUrls.has(urlKey)) {
+      return { ok: false, count: starts.length, reason: `${path.basename(batchPath)} entry ${index + 1} duplicates prior evidence` };
+    }
+    seenTitles.add(titleKey);
+    seenUrls.add(urlKey);
+  }
+  return { ok: true, count: starts.length };
+}
+
+export function validateAgiLiteratureEvidence(workbench) {
+  const seen = { titles: new Set(), urls: new Set() };
+  let completedBatches = 0;
+  for (let batch = 1; batch <= 40; batch += 1) {
+    const result = validateAgiBatch(workbench, batch, seen);
+    if (!result.ok) return { ok: false, completedBatches, reason: result.reason };
+    completedBatches += 1;
+  }
+  const wikiPath = path.join(junoRoot(), "wiki", "juno-agi-north-star.md");
+  if (!existsSync(wikiPath)) return { ok: false, completedBatches, reason: "missing AGI north-star wiki" };
+  const wiki = readFileSync(wikiPath, "utf8").trim();
+  if (wiki.length < 1_000 || !/^#\s+\S/m.test(wiki) || !/^##\s+\S/m.test(wiki)) {
+    return { ok: false, completedBatches, reason: "AGI north-star wiki is not substantive" };
+  }
+  return { ok: true, completedBatches, reason: null };
 }
 
 export function validateImplementPhase(workbench, phaseId) {
@@ -73,6 +167,8 @@ export function validateImplementPhase(workbench, phaseId) {
   if (c !== 25) {
     throw new Error(`batch-${String(batchNum).padStart(2, "0")} expected 25, got ${c}`);
   }
+  const evidence = validateAgiBatch(workbench, batchNum);
+  if (!evidence.ok) throw new Error(evidence.reason);
   return {
     ok: true,
     changes: [`papers/batch-${String(batchNum).padStart(2, "0")}.yaml (${c} papers)`],
@@ -109,24 +205,25 @@ function batchFileFromReviewPhase(phaseId) {
   return `batch-${String(batchNum).padStart(2, "0")}.yaml`;
 }
 
-function runCmd(label, cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", shell: true });
-  return (r.status ?? 1) === 0;
-}
-
 async function checkpointVerify(workbench, phaseId) {
-  const batches = countCompletedBatches(workbench);
+  const evidence = validateAgiLiteratureEvidence(workbench);
+  if (!evidence.ok) throw new Error(`literature evidence invalid: ${evidence.reason}`);
+  const batches = evidence.completedBatches;
   const papers = batches * 25;
   const wiki = path.join(junoRoot(), "wiki", "juno-agi-north-star.md");
   const repoRoot = junoRoot();
+  const testResult = await spawnPnpmWithTimeout(["test"], { cwd: repoRoot, stdio: "inherit" }, VERIFY_TIMEOUT_MS);
+  const depsResult = await spawnWithTimeout(
+    process.execPath,
+    ["scripts/check-orchestrator-deps.mjs"],
+    { cwd: repoRoot, stdio: "inherit" },
+    VERIFY_TIMEOUT_MS,
+  );
   const checks = [
     { label: "papers>=1000", ok: papers >= 1000 },
     { label: "wiki/juno-agi-north-star.md", ok: existsSync(wiki) },
-    { label: "pnpm test", ok: runCmd("pnpm test", "pnpm", ["test"], repoRoot) },
-    {
-      label: "check-orchestrator-deps",
-      ok: runCmd("check-orchestrator-deps", "node", ["scripts/check-orchestrator-deps.mjs"], repoRoot),
-    },
+    { label: "pnpm test", ok: !testResult.error && testResult.status === 0 },
+    { label: "check-orchestrator-deps", ok: !depsResult.error && depsResult.status === 0 },
   ];
   const lines = checks.map((c) => `- ${c.label}: ${c.ok ? "PASS" : "FAIL"}`).join("\n");
   const allOk = checks.every((c) => c.ok);
@@ -145,11 +242,8 @@ ${lines}
 `;
 }
 
-function markMissionComplete(workbench) {
-  const cp = path.join(workbench, "missions", AGI_MISSION_ID, "checkpoint.md");
-  writeFileSync(
-    cp,
-    `# Checkpoint — ${AGI_MISSION_ID}
+function missionCompleteCheckpoint() {
+  return `# Checkpoint — ${AGI_MISSION_ID}
 
 STATUS: COMPLETE
 
@@ -160,22 +254,25 @@ Mission **COMPLETE** — 1000 篇 AGI 文献 + north-star synthesis + verify PAS
 
 ## Recent events
 - ${new Date().toISOString().slice(0, 10)}: agi:daemon completed ag81–ag83
-`,
-    "utf8",
-  );
+`;
 }
 
 /**
  * Advance one AGI slot. Returns { advanced, stopped, blocked }.
  */
 export async function advanceOneAgiSlot(workbench, deps) {
-  const { parseNowYaml, saveNowQueue } = deps.queueIo;
-  const { materializeQueueRun } = deps.manifest;
+  const {
+    readNowQueueSnapshot,
+    replaceQueueHeadConditional,
+    replaceQueueSnapshotConditional,
+  } = deps.queueIo;
+  const { loadRunState, materializeQueueRun, saveRunState } = deps.manifest;
   const { evaluateCompletedRun, markMissionPhaseDone, readRunKind, shouldMarkPhaseDone } =
     deps.missionProgress;
   const { mergeOrchestratorState } = deps.idempotency;
 
-  let { now, backlog } = parseNowYaml(workbench);
+  let queueSnapshot = readNowQueueSnapshot(workbench);
+  let { now, backlog } = queueSnapshot;
 
   if (now.length === 0) {
     const promoted = backlog.filter((i) => i.mission_id === AGI_MISSION_ID).slice(0, 3);
@@ -185,7 +282,24 @@ export async function advanceOneAgiSlot(workbench, deps) {
     const ids = new Set(promoted.map((p) => p.id));
     backlog = backlog.filter((i) => !ids.has(i.id));
     now = promoted;
-    saveNowQueue(workbench, now, backlog);
+    const promotion = replaceQueueSnapshotConditional(workbench, {
+      expectedRevision: queueSnapshot.revision,
+      now,
+      backlog,
+    });
+    if (!promotion.ok) {
+      if (promotion.reason === "busy") {
+        return { advanced: false, stopped: true, busy: true, reason: "queue_mutation_busy" };
+      }
+      return {
+        advanced: false,
+        stopped: true,
+        blocked: true,
+        reason: "queue_revision_conflict:backlog_promotion",
+      };
+    }
+    queueSnapshot = promotion.current;
+    ({ now, backlog } = queueSnapshot);
   }
 
   const head = now[0];
@@ -213,35 +327,70 @@ export async function advanceOneAgiSlot(workbench, deps) {
   } else if (kind === "verify") {
     cp = await checkpointVerify(workbench, head.phase_id);
   } else {
-    return { advanced: false, stopped: true, reason: `unsupported_kind:${kind}` };
+    return { advanced: false, stopped: true, blocked: true, reason: `unsupported_kind:${kind}` };
   }
 
   materializeQueueRun(head);
   const runDir = path.join(workbench, "runs", head.id);
   writeFileSync(path.join(runDir, "checkpoint.md"), cp, "utf8");
+  const runState = loadRunState(runDir);
+  runState.slotIndex += 1;
+  runState.lastStatus = "done";
+  runState.updatedAt = new Date().toISOString();
+  saveRunState(runDir, runState);
   mergeOrchestratorState(workbench, {
     activeRunId: head.id,
     activeRunStatus: "done",
   });
 
-  const action = evaluateCompletedRun(workbench, head.id);
+  const action = evaluateCompletedRun(workbench, head.id, AGI_MISSION_ID);
   const runKind = readRunKind(workbench, head.id);
   const ready =
     action.action === "dequeue" &&
-    (runKind !== "implement" || /STATUS:\s*COMPLETE/i.test(cp));
+    (runKind !== "implement" || hasUniqueCompleteStatus(cp));
 
   if (!ready) throw new Error(`slot ${head.id} not ready: ${action.action}`);
 
+  const remainingNow = queueSnapshot.now.slice(1);
+  if (
+    head.phase_id === "ag83-verify" &&
+    [...remainingNow, ...backlog].some((item) => item.mission_id === AGI_MISSION_ID)
+  ) {
+    throw new Error("AGI completion refused while mission queue items remain");
+  }
+  const terminalVerify = head.phase_id === "ag83-verify" && /##\s*VERIFY_REPORT/i.test(cp);
+  if (terminalVerify) {
+    const evidence = validateAgiLiteratureEvidence(workbench);
+    if (!evidence.ok || evidence.completedBatches !== 40) {
+      throw new Error(`AGI completion evidence invalid: ${evidence.reason ?? "batch count"}`);
+    }
+  }
+  const queueUpdate = terminalVerify
+    ? deps.missionCompletion.finalizeSpecializedVerifyQueueHead(workbench, {
+        expectedQueueRevision: queueSnapshot.revision,
+        expectedHead: head,
+        missionCheckpointText: missionCompleteCheckpoint(),
+      })
+    : replaceQueueHeadConditional(workbench, {
+        expectedRevision: queueSnapshot.revision,
+        expectedHead: head,
+        replacement: [],
+      });
+  if (!queueUpdate.ok) {
+    if (queueUpdate.reason === "busy") {
+      return { advanced: false, stopped: true, busy: true, reason: "queue_mutation_busy" };
+    }
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "blocked" });
+    return {
+      advanced: false,
+      stopped: true,
+      blocked: true,
+      reason: `queue_${queueUpdate.reason}:${head.id}`,
+    };
+  }
   if (shouldMarkPhaseDone(runKind, cp)) {
     markMissionPhaseDone(workbench, AGI_MISSION_ID, head.phase_id);
   }
-
-  if (head.phase_id === "ag83-verify" && /##\s*VERIFY_REPORT/i.test(cp)) {
-    markMissionComplete(workbench);
-  }
-
-  ({ now, backlog } = parseNowYaml(workbench));
-  saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
 
   return {
@@ -260,7 +409,7 @@ export function writeAgiLoopState(workbench, state) {
 export function countCompletedBatches(workbench) {
   let n = 0;
   for (let b = 1; b <= 40; b++) {
-    if (countBatchPapers(workbench, b) === 25) n += 1;
+    if (validateAgiBatch(workbench, b).ok) n += 1;
     else break;
   }
   return n;

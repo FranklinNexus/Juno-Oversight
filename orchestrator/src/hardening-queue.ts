@@ -3,8 +3,9 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { parseNowYaml, saveNowQueue } from "./queue-io.js";
+import { readNowQueueSnapshot, replaceQueueSnapshotConditional } from "./queue-io.js";
 import type { QueueItem } from "./types.js";
+import { readMissionCompletionReceipt } from "./mission-completion.js";
 
 export const HARDENING_MISSION_ID = "juno-overseer-hardening-2026";
 
@@ -26,15 +27,9 @@ function progressPath(workbench: string): string {
   return path.join(workbench, "missions", HARDENING_MISSION_ID, "progress.md");
 }
 
-function checkpointPath(workbench: string): string {
-  return path.join(workbench, "missions", HARDENING_MISSION_ID, "checkpoint.md");
-}
-
-/** True when hardening mission checkpoint contains STATUS: COMPLETE. */
+/** Completion is control-plane evidence, never an Agent-writable mission checkpoint. */
 export function isHardeningMissionComplete(workbench: string): boolean {
-  const cp = checkpointPath(workbench);
-  if (!existsSync(cp)) return false;
-  return /STATUS:\s*COMPLETE/i.test(readFileSync(cp, "utf8"));
+  return readMissionCompletionReceipt(workbench, HARDENING_MISSION_ID) !== null;
 }
 
 /** Queued hardening phases in progress table order (h07–h11 only). */
@@ -77,7 +72,7 @@ export function buildHardeningQueueItem(spec: HardeningPhaseSpec): QueueItem {
     mission_id: HARDENING_MISSION_ID,
     phase_id: spec.phaseId,
     prompt,
-    provider: "cursor_composer",
+    provider: "openai_codex",
     max_minutes: 25,
     success_criteria: spec.criteria,
   };
@@ -107,7 +102,8 @@ export interface HardeningQueueRepairResult {
  * Fixes partial queues (e.g. h09 missing while h10/h11 remain).
  */
 export function repairHardeningQueue(workbench: string): HardeningQueueRepairResult {
-  const { now, backlog } = parseNowYaml(workbench);
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now, backlog } = queueSnapshot;
 
   if (isHardeningMissionComplete(workbench)) {
     return {
@@ -156,7 +152,12 @@ export function repairHardeningQueue(workbench: string): HardeningQueueRepairRes
 
   const otherNow = now.filter((i) => i.mission_id !== HARDENING_MISSION_ID);
   const nextNow = [...hardeningItems, ...otherNow];
-  saveNowQueue(workbench, nextNow, backlog);
+  const update = replaceQueueSnapshotConditional(workbench, {
+    expectedRevision: queueSnapshot.revision,
+    now: nextNow,
+    backlog,
+  });
+  if (!update.ok) throw new Error(`Hardening queue repair failed: ${update.reason}`);
 
   return {
     changed: true,
@@ -175,14 +176,20 @@ export function bootstrapHardeningQueueFromSpecs(workbench: string): HardeningQu
   const repair = repairHardeningQueue(workbench);
   if (repair.changed) return repair;
 
-  const { now, backlog } = parseNowYaml(workbench);
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now, backlog } = queueSnapshot;
   const hasHardening = now.some((i) => i.mission_id === HARDENING_MISSION_ID);
   if (hasHardening) {
     return { changed: false, reason: "hardening queue already present", addedPhases: [], now, backlog };
   }
 
   const items = HARDENING_PHASE_SPECS.map(buildHardeningQueueItem);
-  saveNowQueue(workbench, items, backlog);
+  const update = replaceQueueSnapshotConditional(workbench, {
+    expectedRevision: queueSnapshot.revision,
+    now: items,
+    backlog,
+  });
+  if (!update.ok) throw new Error(`Hardening queue bootstrap failed: ${update.reason}`);
   return {
     changed: true,
     reason: "bootstrapped full h07–h11 queue",

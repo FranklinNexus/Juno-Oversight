@@ -1,15 +1,20 @@
 #!/usr/bin/env node
-/** Fail fast if orchestrator symlinks parent — breaks Next/Turbopack dev. */
-import { readFileSync } from "node:fs";
+/** Validate the single-lock pnpm workspace contract before build/install. */
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const orchDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "orchestrator");
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const orchDir = path.join(root, "orchestrator");
+
+function fail(message) {
+  console.error(`[workspace] ${message}`);
+  process.exit(1);
+}
 
 function assertNoFileParent(spec, label) {
   if (typeof spec === "string" && /^file:\.\./.test(spec)) {
-    console.error(`[juno] ${label} must not use ${spec} (Turbopack symlink loop)`);
-    process.exit(1);
+    fail(`${label} must not use ${spec} (Turbopack symlink loop)`);
   }
 }
 
@@ -18,15 +23,23 @@ for (const [name, spec] of Object.entries(pkg.dependencies ?? {})) {
   assertNoFileParent(spec, `orchestrator/package.json ${name}`);
 }
 
-const lockPath = path.join(orchDir, "package-lock.json");
-try {
-  const lockText = readFileSync(lockPath, "utf8");
-  if (/\"juno-hud\"\s*:\s*\"file:\.\./.test(lockText)) {
-    console.error("[juno] orchestrator/package-lock.json still pins juno-hud: file:.. — run npm uninstall juno-hud");
-    process.exit(1);
-  }
-} catch {
-  // optional lockfile
+const workspaceText = readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8");
+const packageBlock = workspaceText.match(/^packages:\s*\r?\n((?:\s{2}-[^\r\n]+\r?\n?)+)/m)?.[1] ?? "";
+const workspacePackages = packageBlock
+  .split(/\r?\n/)
+  .map((line) => line.replace(/^\s*-\s*/, "").replace(/^['\"]|['\"]$/g, "").trim())
+  .filter(Boolean);
+if (!workspacePackages.includes("orchestrator")) {
+  fail("pnpm-workspace.yaml must include orchestrator");
 }
 
-console.error("[juno] orchestrator deps OK (no parent symlink)");
+const pnpmLockPath = path.join(root, "pnpm-lock.yaml");
+const pnpmLock = readFileSync(pnpmLockPath, "utf8");
+if (!/^  orchestrator:\s*$/m.test(pnpmLock)) {
+  fail("pnpm-lock.yaml is missing the orchestrator importer; run `corepack pnpm install`");
+}
+if (existsSync(path.join(orchDir, "package-lock.json"))) {
+  fail("orchestrator/package-lock.json is obsolete; pnpm-lock.yaml is the only dependency lock");
+}
+
+console.error("[workspace] orchestrator dependency contract OK (pnpm single lock)");

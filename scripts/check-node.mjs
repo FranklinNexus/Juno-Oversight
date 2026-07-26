@@ -8,7 +8,7 @@ const ok =
 
 if (!ok) {
   console.error(
-    `[juno] Node ${process.version} is too old for @cursor/sdk (need >= 22.13).`,
+    `[juno] Node ${process.version} is too old for the Juno orchestrator (need >= 22.13).`,
   );
   console.error("[juno] Run: nvm install 22.13.1 && nvm use 22.13.1");
   process.exit(1);

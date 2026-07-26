@@ -5,6 +5,7 @@ import { AppIntegrationSlot } from "@/components/widgets/AppIntegrationSlot";
 import { DailyDigestPanel } from "@/components/widgets/DailyDigestPanel";
 import { GitHubRadar } from "@/components/widgets/GitHubRadar";
 import { InfraTelemetry } from "@/components/widgets/InfraTelemetry";
+import { IncidentRecoveryPanel } from "@/components/widgets/IncidentRecoveryPanel";
 import { MissionBoardPanel } from "@/components/widgets/MissionBoardPanel";
 import { OverseerDaemonPanel } from "@/components/widgets/OverseerDaemonPanel";
 import { PromotePanel } from "@/components/widgets/PromotePanel";
@@ -19,6 +20,7 @@ export type WidgetType =
   | "daily"
   | "activerun"
   | "daemon"
+  | "incidents"
   | "mission"
   | "promote"
   | "market"
@@ -57,6 +59,12 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     label: "24/7 Scheduler",
     code: "WIDGET-S",
     Component: OverseerDaemonPanel,
+  },
+  {
+    type: "incidents",
+    label: "Control Incidents",
+    code: "WIDGET-I",
+    Component: IncidentRecoveryPanel,
   },
   {
     type: "mission",

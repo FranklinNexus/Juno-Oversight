@@ -6,6 +6,7 @@ import {
   mergeOrchestratorState,
   readOrchestratorState,
   shouldSkipSpawn,
+  type OrchestratorRunStatus,
   type OrchestratorState,
 } from "./idempotency.js";
 import { materializeQueueRun, readJsonFile, writeJsonFile } from "./manifest.js";
@@ -15,13 +16,26 @@ import {
   evaluateCompletedRun,
   finalizeRunCheckpoint,
   markMissionPhaseDone,
+  nextRevisionAttempt,
   readRunKind,
   shouldMarkPhaseDone,
 } from "./mission-progress.js";
 import { evaluateLoopGate } from "./loop-gate.js";
-import { parseNowYaml, saveNowQueue } from "./queue-io.js";
+import { acquireAutonomyLock, readAutonomyLock, releaseAutonomyLock } from "./autonomy-lock.js";
+import { readNowQueueSnapshot, replaceQueueHeadConditional } from "./queue-io.js";
 import type { QueueAdvanceAction } from "./review-loop.js";
 import type { QueueItem, RunState, SchedulerState } from "./types.js";
+import { hasUniqueCompleteStatus } from "./checkpoint-status.js";
+import {
+  acquireRunLauncherLease,
+  releaseRunLauncherLease,
+  type RunSlotLease,
+} from "./run-slot-lock.js";
+import {
+  finalizeOrdinaryVerifyQueueHead,
+  recoverPendingVerifyCompletions,
+} from "./mission-completion.js";
+import { readWorkflowExperimentRevisionPromptBinding } from "./workflow-experiment.js";
 
 const TICK_MS = 5_000;
 const HEARTBEAT_STALE_MS = 5 * 60_000;
@@ -33,10 +47,42 @@ const projectRoot = junoProjectRoot();
 const spawnScript = path.join(projectRoot, "orchestrator/dist/spawn-run.js");
 const nodeBin = process.env.JUNO_NODE_PATH ?? "C:\\nvm4w\\nodejs\\node.exe";
 
+if (!acquireAutonomyLock(workbench, "scheduler-daemon")) {
+  const held = readAutonomyLock(workbench);
+  process.stderr.write(
+    `[scheduler] blocked by autonomy lock holder=${held?.holder ?? "?"} pid=${held?.pid ?? "?"}\n`,
+  );
+  process.exit(1);
+}
+
 let activeChild: ChildProcessWithoutNullStreams | null = null;
 let activeManifest = "";
 let activeStartedAt = 0;
 let activeMaxMinutes = 25;
+let activeLauncher: RunSlotLease | null = null;
+let activeLauncherRunId = "";
+
+function ensureLauncher(runId: string): boolean {
+  if (activeLauncher) return activeLauncherRunId === runId;
+  const lease = acquireRunLauncherLease(workbench, runId);
+  if (!lease) return false;
+  activeLauncher = lease;
+  activeLauncherRunId = runId;
+  return true;
+}
+
+function releaseLauncher(): boolean {
+  if (!activeLauncher) return true;
+  const lease = activeLauncher;
+  activeLauncher = null;
+  activeLauncherRunId = "";
+  try {
+    return releaseRunLauncherLease(lease);
+  } catch (error) {
+    process.stderr.write(`[scheduler] launcher cleanup failed: ${String(error)}\n`);
+    return false;
+  }
+}
 
 function schedulerStatePath(): string {
   return path.join(workbench, "state/scheduler.json");
@@ -59,7 +105,7 @@ function readOrchestrator(): OrchestratorState {
   return readOrchestratorState(workbench);
 }
 
-function writeOrchestrator(status: string, runId?: string | null): void {
+function writeOrchestrator(status: OrchestratorRunStatus, runId?: string | null): void {
   const patch: Partial<OrchestratorState> = { activeRunStatus: status };
   if (runId === null) {
     patch.activeRunId = null;
@@ -68,17 +114,6 @@ function writeOrchestrator(status: string, runId?: string | null): void {
     patch.lastRunId = runId;
   }
   mergeOrchestratorState(workbench, patch);
-}
-
-function dequeueNowHead(): void {
-  const { now, backlog } = parseNowYaml(workbench);
-  if (now.length === 0) return;
-  saveNowQueue(workbench, now.slice(1), backlog);
-}
-
-function prependNowItem(item: QueueItem): void {
-  const { now, backlog } = parseNowYaml(workbench);
-  saveNowQueue(workbench, [item, ...now], backlog);
 }
 
 function inQuietHours(): boolean {
@@ -119,6 +154,16 @@ function spawnSlot(manifestPath: string, maxMinutes: number): void {
   activeChild.on("exit", (code) => {
     activeChild = null;
     activeManifest = "";
+    if (code === 4) {
+      const sched = loadSchedulerState();
+      sched.lastAction = "slot_busy";
+      saveSchedulerState(sched);
+      releaseLauncher();
+      void tick().catch((err) => {
+        process.stderr.write(`[scheduler] post-busy tick error: ${String(err)}\n`);
+      });
+      return;
+    }
     mergeOrchestratorState(workbench, {
       activeRunId: runId,
       activeRunStatus: code === 0 ? "done" : "failed",
@@ -149,50 +194,122 @@ function bumpRetry(runDir: string): void {
 
 function isTaskComplete(runId: string, missionId?: string): boolean {
   const cp = checkpointTextForAdvance(workbench, runId, missionId);
-  return /STATUS:\s*COMPLETE/i.test(cp);
+  return hasUniqueCompleteStatus(cp);
 }
 
 function handleCompletedRun(runId: string): void {
   const sched = loadSchedulerState();
-  const { now } = parseNowYaml(workbench);
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now } = queueSnapshot;
   const head = now[0];
+  if (!head || head.id !== runId) {
+    sched.lastAction = `queue_head_mismatch:${head?.id ?? "empty"}:${runId}`;
+    saveSchedulerState(sched);
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "blocked" });
+    return;
+  }
   const missionId = head?.mission_id;
   const runKind = readRunKind(workbench, runId);
   finalizeRunCheckpoint(workbench, runId, missionId, runKind);
   const action: QueueAdvanceAction = evaluateCompletedRun(workbench, runId, missionId);
   const checkpoint = checkpointTextForAdvance(workbench, runId, missionId);
+  const runDir = path.join(workbench, "runs", runId);
+  let finalStatus: "idle" | "done" | "failed" | "blocked" = "idle";
 
   switch (action.action) {
     case "dequeue": {
       const ready = runKind === "implement" ? isTaskComplete(runId, missionId) : true;
       if (ready) {
-        dequeueNowHead();
+        const terminalOrdinaryVerify =
+          runKind === "verify" &&
+          Boolean(missionId) &&
+          ![...queueSnapshot.now.slice(1), ...queueSnapshot.backlog].some(
+            (item) => item.mission_id === missionId,
+          );
+        let queueUpdate;
+        try {
+          queueUpdate = terminalOrdinaryVerify
+            ? finalizeOrdinaryVerifyQueueHead(workbench, {
+                expectedQueueRevision: queueSnapshot.revision,
+                expectedHead: head,
+              })
+            : replaceQueueHeadConditional(workbench, {
+                expectedRevision: queueSnapshot.revision,
+                expectedHead: head,
+                replacement: [],
+              });
+        } catch (error) {
+          sched.lastAction = `completion_prepare_blocked:${String(error)}`;
+          finalStatus = "blocked";
+          break;
+        }
+        if (!queueUpdate.ok) {
+          sched.lastAction = `queue_${queueUpdate.reason}:${runId}`;
+          finalStatus = queueUpdate.reason === "busy" ? "done" : "blocked";
+          break;
+        }
         if (head?.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, checkpoint)) {
           markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
         }
         sched.lastAction = "task_complete";
       } else {
         sched.lastAction = "await_complete";
+        finalStatus = shouldRetry(runDir) ? "failed" : "blocked";
       }
       break;
     }
-    case "hold":
+    case "hold": {
       sched.lastAction = action.reason;
+      finalStatus = shouldRetry(runDir) ? "failed" : "blocked";
       break;
+    }
     case "block":
       sched.lastAction = "blocked";
+      finalStatus = "blocked";
       break;
     case "revise":
       if (head) {
-        dequeueNowHead();
-        prependNowItem(buildReviseImplementItem(head, Date.now(), action.mustFix));
+        let revisionItem: QueueItem;
+        try {
+          const revisionAttempt = nextRevisionAttempt(
+            workbench,
+            head.id,
+            [...queueSnapshot.now, ...queueSnapshot.backlog],
+          );
+          const experimentPromptBinding = head.experiment_id
+            ? readWorkflowExperimentRevisionPromptBinding(workbench, head)
+            : undefined;
+          revisionItem = buildReviseImplementItem(
+            head,
+            revisionAttempt,
+            action.mustFix,
+            experimentPromptBinding,
+          );
+        } catch (error) {
+          sched.lastAction = `revision_binding_blocked:${String(error)}`;
+          finalStatus = "blocked";
+          break;
+        }
+        const queueUpdate = replaceQueueHeadConditional(workbench, {
+          expectedRevision: queueSnapshot.revision,
+          expectedHead: head,
+          replacement: [revisionItem],
+        });
+        if (!queueUpdate.ok) {
+          sched.lastAction = `queue_${queueUpdate.reason}:${runId}`;
+          finalStatus = queueUpdate.reason === "busy" ? "done" : "blocked";
+          break;
+        }
       }
       sched.lastAction = "review_revise";
       break;
   }
 
   saveSchedulerState(sched);
-  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  mergeOrchestratorState(workbench, {
+    activeRunId: finalStatus === "idle" ? null : runId,
+    activeRunStatus: finalStatus,
+  });
 }
 
 async function tick(): Promise<void> {
@@ -213,34 +330,93 @@ async function tick(): Promise<void> {
     return;
   }
 
+  let completionRecovery;
+  try {
+    completionRecovery = recoverPendingVerifyCompletions(workbench);
+  } catch (error) {
+    sched.lastAction = `completion_recovery_invalid:${String(error)}`;
+    saveSchedulerState(sched);
+    writeOrchestrator("blocked");
+    return;
+  }
+  if (completionRecovery.status === "busy") {
+    sched.lastAction = "completion_recovery_busy";
+    saveSchedulerState(sched);
+    return;
+  }
+  if (completionRecovery.status === "blocked") {
+    sched.lastAction = `completion_recovery_blocked:${completionRecovery.reason ?? "unknown"}`;
+    saveSchedulerState(sched);
+    writeOrchestrator("blocked");
+    return;
+  }
+  if (completionRecovery.status === "recovered") {
+    sched.lastAction = `completion_recovered:${completionRecovery.recovered
+      .map((entry) => entry.terminalRunId)
+      .join(",")}`;
+    saveSchedulerState(sched);
+    writeOrchestrator("idle", null);
+    return;
+  }
+
   const orch = readOrchestrator();
   const status = orch.activeRunStatus ?? "idle";
 
   if (status === "running") return;
+  if (status === "blocked") {
+    releaseLauncher();
+    sched.lastAction = "blocked";
+    saveSchedulerState(sched);
+    return;
+  }
 
   if (status === "done") {
     const runId = orch.activeRunId ?? undefined;
     if (runId) {
-      handleCompletedRun(runId);
+      if (!ensureLauncher(runId)) {
+        sched.lastAction = "launcher_busy";
+        saveSchedulerState(sched);
+        return;
+      }
+      try {
+        handleCompletedRun(runId);
+      } finally {
+        releaseLauncher();
+      }
     } else {
       writeOrchestrator("idle", null);
     }
+    return;
   } else if (status === "stall" || status === "failed") {
     const runId = orch.activeRunId ?? undefined;
     if (runId) {
+      if (!ensureLauncher(runId)) {
+        sched.lastAction = "launcher_busy";
+        saveSchedulerState(sched);
+        return;
+      }
       const runDir = path.join(workbench, "runs", runId);
       const manifestPath = path.join(runDir, "manifest.json");
       if (existsSync(manifestPath) && shouldRetry(runDir)) {
-        bumpRetry(runDir);
-        const manifest = readJsonFile<{ maxMinutes: number }>(manifestPath);
-        spawnSlot(manifestPath, manifest.maxMinutes ?? 25);
+        try {
+          bumpRetry(runDir);
+          const manifest = readJsonFile<{ maxMinutes: number }>(manifestPath);
+          spawnSlot(manifestPath, manifest.maxMinutes ?? 25);
+        } catch (error) {
+          releaseLauncher();
+          throw error;
+        }
         sched.lastAction = "retry";
         sched.runsToday += 1;
         saveSchedulerState(sched);
         return;
       }
     }
-    writeOrchestrator("idle", null);
+    releaseLauncher();
+    writeOrchestrator("blocked", runId ?? null);
+    sched.lastAction = "retry_exhausted";
+    saveSchedulerState(sched);
+    return;
   }
 
   if (inQuietHours()) {
@@ -256,7 +432,7 @@ async function tick(): Promise<void> {
     return;
   }
 
-  const { now } = parseNowYaml(workbench);
+  const { now } = readNowQueueSnapshot(workbench);
   const next = now[0];
   if (!next) {
     sched.lastAction = "queue_empty";
@@ -271,9 +447,21 @@ async function tick(): Promise<void> {
     return;
   }
 
-  const manifestPath = materializeQueueRun(next);
-  const manifest = readJsonFile<{ maxMinutes: number; runId: string }>(manifestPath);
-  spawnSlot(manifestPath, manifest.maxMinutes ?? 25);
+  if (!ensureLauncher(next.id)) {
+    sched.lastAction = "launcher_busy";
+    saveSchedulerState(sched);
+    return;
+  }
+  let manifestPath: string;
+  let manifest: { maxMinutes: number; runId: string };
+  try {
+    manifestPath = materializeQueueRun(next);
+    manifest = readJsonFile<{ maxMinutes: number; runId: string }>(manifestPath);
+    spawnSlot(manifestPath, manifest.maxMinutes ?? 25);
+  } catch (error) {
+    releaseLauncher();
+    throw error;
+  }
   sched.lastAction = "spawn";
   sched.lastRunId = manifest.runId;
   sched.runsToday += 1;
@@ -296,5 +484,11 @@ void tick();
 
 process.on("SIGTERM", () => {
   if (activeChild) activeChild.kill("SIGTERM");
+  releaseLauncher();
+  releaseAutonomyLock(workbench, "scheduler-daemon");
   process.exit(0);
+});
+process.on("exit", () => {
+  releaseLauncher();
+  releaseAutonomyLock(workbench, "scheduler-daemon");
 });

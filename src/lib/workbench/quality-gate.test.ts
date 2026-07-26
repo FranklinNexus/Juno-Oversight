@@ -39,4 +39,13 @@ describe("quality-gate", () => {
     const report = validateChapterText(good, 1, { strictLength: false });
     expect(report.ok).toBe(true);
   });
+
+  it("rejects long repeated-character padding", () => {
+    const report = validateChapterText(
+      `# 第01章 测试\n\n相关公理：A1\n\n本书主张：测试。\n\n${"测".repeat(4_800)}`,
+      1,
+    );
+    expect(report.ok).toBe(false);
+    expect(report.issues.some((issue) => issue.code === "repetitive_text")).toBe(true);
+  });
 });

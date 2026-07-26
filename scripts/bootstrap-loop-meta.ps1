@@ -1,8 +1,14 @@
 # Queue self-referential loop meta mission after smoke loop passes.
 param(
   [string]$Workbench = "E:\AgentWorkbench",
-  [string]$RepoRoot = "C:\Users\kfr34\Desktop\Entrepreneurship\Juno Oversight"
+  [string]$RepoRoot = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
+
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
 
 $missionId = "juno-loop-meta-2026"
 $missionDir = Join-Path $Workbench "missions/$missionId"
@@ -80,7 +86,7 @@ now:
     mission_id: $missionId
     phase_id: meta00-implement-runner
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "run-minimal-loop.mjs + queue-io + pnpm loop:smoke"
   - id: juno-meta01-review-runner
@@ -91,7 +97,7 @@ now:
     mission_id: $missionId
     phase_id: meta01-review-runner
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on loop runner"
   - id: juno-meta02-verify-runner
@@ -102,14 +108,14 @@ now:
     mission_id: $missionId
     phase_id: meta02-verify-runner
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "pnpm loop:smoke PASS; VERIFY_REPORT"
 backlog:
 $backlogYaml
 "@
 
-[System.IO.File]::WriteAllText((Join-Path $Workbench "queue/now.yaml"), $nowYaml, $utf8)
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $nowYaml -BackupPrefix "bak-pre-loop-meta"
 
 Write-Host "Mission $missionId queued (3 slots). Literature items in backlog if backup found."
 Write-Host "Run: pnpm loop:meta  OR  node scripts/run-minimal-loop.mjs --skip-bootstrap (after editing queue)"

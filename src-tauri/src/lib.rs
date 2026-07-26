@@ -1,8 +1,12 @@
 mod missions;
 mod orchestrator;
 mod promote;
+mod workbench;
 
 use serde::Serialize;
+use std::fs;
+use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -12,13 +16,49 @@ use tauri::State;
 
 use orchestrator::{OrchestratorRuntime, SchedulerDaemon};
 
-pub fn workbench_root_path() -> PathBuf {
-  if let Ok(from_env) = std::env::var("AGENT_WORKBENCH_ROOT") {
-    if !from_env.trim().is_empty() {
-      return PathBuf::from(from_env);
+fn dotenv_value_at(project_root: &Path, key: &str) -> Option<String> {
+  for name in [".env.local", ".env"] {
+    let Ok(content) = fs::read_to_string(project_root.join(name)) else {
+      continue;
+    };
+    for line in content.lines() {
+      let trimmed = line.trim();
+      if trimmed.is_empty() || trimmed.starts_with('#') {
+        continue;
+      }
+      let Some((candidate_key, raw_value)) = trimmed.split_once('=') else {
+        continue;
+      };
+      if candidate_key.trim() != key {
+        continue;
+      }
+      let mut value = raw_value.trim();
+      if value.len() >= 2
+        && ((value.starts_with('"') && value.ends_with('"'))
+          || (value.starts_with('\'') && value.ends_with('\'')))
+      {
+        value = &value[1..value.len() - 1];
+      }
+      if !value.trim().is_empty() {
+        return Some(value.to_string());
+      }
     }
   }
-  PathBuf::from(r"E:\AgentWorkbench")
+  None
+}
+
+fn resolve_workbench_root(environment_override: Option<&str>, project_root: &Path) -> PathBuf {
+  if let Some(from_env) = environment_override.filter(|value| !value.trim().is_empty()) {
+    return PathBuf::from(from_env.trim());
+  }
+  dotenv_value_at(project_root, "AGENT_WORKBENCH_ROOT")
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from(r"E:\AgentWorkbench"))
+}
+
+pub fn workbench_root_path() -> PathBuf {
+  let environment_override = std::env::var("AGENT_WORKBENCH_ROOT").ok();
+  resolve_workbench_root(environment_override.as_deref(), &orchestrator::juno_project_root())
 }
 
 struct HudSystemState(Mutex<System>);
@@ -104,8 +144,9 @@ fn preview_promote_to_vault(
 fn promote_to_vault(
   rule_id: String,
   relative_path: String,
+  confirmed: Option<bool>,
 ) -> Result<promote::PromoteResult, String> {
-  promote::promote_to_vault(rule_id, relative_path)
+  promote::promote_to_vault(rule_id, relative_path, confirmed)
 }
 
 #[tauri::command]
@@ -157,6 +198,23 @@ fn get_missions_snapshot() -> Result<Vec<missions::MissionSummary>, String> {
   missions::get_missions_snapshot()
 }
 
+#[tauri::command]
+fn get_workbench_snapshot() -> Result<workbench::WorkbenchSnapshot, String> {
+  workbench::get_workbench_snapshot()
+}
+
+#[tauri::command]
+fn inspect_operator_recovery() -> Result<orchestrator::OperatorRecoveryInventory, String> {
+  orchestrator::inspect_operator_recovery()
+}
+
+#[tauri::command]
+fn apply_operator_recovery(
+  request: orchestrator::OperatorRecoveryApplyRequest,
+) -> Result<orchestrator::OperatorRecoveryApplyResult, String> {
+  orchestrator::apply_operator_recovery(request)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -178,8 +236,15 @@ pub fn run() {
       start_scheduler_daemon,
       stop_scheduler_daemon,
       get_missions_snapshot,
+      get_workbench_snapshot,
+      inspect_operator_recovery,
+      apply_operator_recovery,
     ])
     .setup(|app| {
+      if !cfg!(debug_assertions) {
+        let resource_dir = app.path().resource_dir()?;
+        orchestrator::configure_bundled_runtime(&resource_dir).map_err(io::Error::other)?;
+      }
       let handle = app.handle().clone();
       std::thread::spawn(move || {
         loop {
@@ -201,4 +266,49 @@ pub fn run() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+  use super::resolve_workbench_root;
+  use std::fs;
+  use std::path::PathBuf;
+  use std::time::{SystemTime, UNIX_EPOCH};
+
+  fn temp_root(label: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("clock")
+      .as_nanos();
+    std::env::temp_dir().join(format!("juno-settings-{label}-{}-{nonce}", std::process::id()))
+  }
+
+  #[test]
+  fn dotenv_configures_a_non_default_workbench_without_process_env() {
+    let project = temp_root("dotenv-workbench");
+    let expected = project.join("custom-workbench");
+    fs::create_dir_all(&project).expect("create project");
+    fs::write(
+      project.join(".env.local"),
+      format!("AGENT_WORKBENCH_ROOT=\"{}\"\n", expected.display()),
+    )
+    .expect("write dotenv");
+
+    assert_eq!(resolve_workbench_root(None, &project), expected);
+    fs::remove_dir_all(project).expect("remove project");
+  }
+
+  #[test]
+  fn process_environment_overrides_project_dotenv() {
+    let project = temp_root("env-precedence");
+    fs::create_dir_all(&project).expect("create project");
+    fs::write(project.join(".env.local"), "AGENT_WORKBENCH_ROOT=dotenv-root\n")
+      .expect("write dotenv");
+
+    assert_eq!(
+      resolve_workbench_root(Some("explicit-root"), &project),
+      PathBuf::from("explicit-root")
+    );
+    fs::remove_dir_all(project).expect("remove project");
+  }
 }

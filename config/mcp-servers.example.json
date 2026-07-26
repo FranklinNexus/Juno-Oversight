@@ -1,5 +1,5 @@
 {
-  "defaultForComposer": ["cursor-browser", "github"],
+  "defaultForAgents": ["github"],
   "servers": [
     {
       "id": "github",
@@ -7,15 +7,8 @@
       "enabled": true,
       "devOnly": true,
       "missions": ["juno-overseer-hardening-2026", "juno-self-iterate-p2-2026"],
-      "notes": "Dev branch — PR/issue ops via Cursor MCP"
-    },
-    {
-      "id": "cursor-browser",
-      "server": "cursor-ide-browser",
-      "enabled": true,
-      "devOnly": false,
-      "notes": "Optional web fetch for literature missions"
+      "notes": "Use only when the current Codex session exposes the GitHub MCP server"
     }
   ],
-  "notes": "Copy to AgentWorkbench/config/mcp-servers.json. Vault still blocked by .cursor/hooks vault-gate."
+  "notes": "Copy to AgentWorkbench/config/mcp-servers.json. Entries are capability hints, not proof that a server is mounted."
 }

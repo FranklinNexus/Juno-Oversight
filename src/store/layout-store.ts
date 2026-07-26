@@ -27,7 +27,6 @@ import {
 } from "@/lib/layout/symbol-popout-layout";
 import type { PanelState } from "@/lib/layout/types";
 import type { WidgetType } from "@/lib/layout/widget-registry";
-import { normalizeWidgetType } from "@/lib/layout/widget-registry";
 
 export type { PanelState };
 export { clampPanel };
@@ -43,6 +42,7 @@ type LayoutStore = {
   syncLayout: (layout: Layout) => void;
   clearFocusPanel: () => void;
   addPanel: (widgetType?: WidgetType) => void;
+  openSingletonPanel: (widgetType: WidgetType) => void;
   spawnMarketSymbolPanel: (symbol: string, options?: { forceNew?: boolean }) => void;
   bringPanelToFront: (id: string) => void;
   removePanel: (id: string) => void;
@@ -73,6 +73,10 @@ function findNextPosition(panels: PanelState[], size: { w: number; h: number }) 
   if (panels.length === 0) return { x: 0, y: 0 };
   const maxY = Math.max(...panels.map((panel) => panel.y + panel.h), 0);
   return { x: 0, y: Math.min(maxY, GRID_MAX_ROWS - size.h) };
+}
+
+function defaultPanelSize(widgetType: WidgetType): { w: number; h: number } {
+  return widgetType === "incidents" ? { w: 6, h: 8 } : SIZE_PRESETS.quarter;
 }
 
 function withFreshIds(panels: PanelState[]): PanelState[] {
@@ -132,16 +136,50 @@ export const useLayoutStore = create<LayoutStore>()(
         });
       },
       addPanel: (widgetType: WidgetType = "runqueue") => {
-        const size = SIZE_PRESETS.quarter;
+        const size = defaultPanelSize(widgetType);
         const position = findNextPosition(get().panels, size);
         const panel: PanelState = {
-          i: `panel-${Date.now()}`,
+          i: `panel-${widgetType}-${Date.now()}`,
           widgetType,
           contentZoom: 1,
           ...position,
           ...size,
         };
         set({ panels: [...get().panels, ensureContentZoom(clampPanel(panel))], maximizeCache: {} });
+      },
+      openSingletonPanel: (widgetType) => {
+        const panels = get().panels;
+        const existing = panels.find((panel) => panel.widgetType === widgetType);
+        if (existing) {
+          set({
+            panels: panels.map((panel) =>
+              panel.i === existing.i
+                ? { ...panel, stackOrder: nextStackOrder(panels) }
+                : panel,
+            ),
+            focusPanelId: existing.i,
+            maximizeCache: {},
+          });
+          triggerSizeAnim(set, existing.i);
+          return;
+        }
+
+        const size = defaultPanelSize(widgetType);
+        const position = findNextPosition(panels, size);
+        const panel = ensureContentZoom(clampPanel({
+          i: `panel-${widgetType}-${Date.now()}`,
+          widgetType,
+          contentZoom: 1,
+          stackOrder: nextStackOrder(panels),
+          ...position,
+          ...size,
+        }));
+        set({
+          panels: [...panels, panel],
+          focusPanelId: panel.i,
+          maximizeCache: {},
+        });
+        triggerSizeAnim(set, panel.i);
       },
       spawnMarketSymbolPanel: (symbol, options) => {
         const panels = dedupePinnedSymbolPanels(get().panels);
@@ -242,11 +280,12 @@ export const useLayoutStore = create<LayoutStore>()(
         set({
           panels: get().panels.map((panel) =>
             panel.i === id
-              ? {
+              ? ensureContentZoom(clampPanel({
                   ...panel,
                   widgetType,
+                  ...(widgetType === "incidents" && panel.h < 8 ? { h: 8 } : {}),
                   pinnedSymbol: widgetType === "market" ? panel.pinnedSymbol : undefined,
-                }
+                }))
               : panel,
           ),
         });
@@ -394,13 +433,13 @@ export const useLayoutStore = create<LayoutStore>()(
 );
 
 export function panelsToGridLayout(panels: PanelState[]): Layout {
-  return panels.map(({ i, x, y, w, h, pinnedSymbol }) => ({
+  return panels.map(({ i, x, y, w, h, pinnedSymbol, widgetType }) => ({
     i,
     x,
     y,
     w,
     h,
     minW: 3,
-    minH: pinnedSymbol ? 8 : 2,
+    minH: pinnedSymbol || widgetType === "incidents" ? 8 : 2,
   }));
 }

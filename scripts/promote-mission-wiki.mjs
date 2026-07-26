@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { hasUniqueCompleteStatus } from "./lib/checkpoint-status.mjs";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +24,7 @@ if (!existsSync(cpPath)) {
 }
 
 const cp = readFileSync(cpPath, "utf8");
-if (!/STATUS:\s*COMPLETE/i.test(cp)) {
+if (!hasUniqueCompleteStatus(cp)) {
   console.error(`Mission ${missionId} not COMPLETE — skip promote`);
   process.exit(1);
 }

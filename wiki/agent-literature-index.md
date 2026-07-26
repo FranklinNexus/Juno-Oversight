@@ -3,7 +3,7 @@
 **Mission**：`juno-agent-literature-2026`
 **最后更新**：2026-06-01
 
-本表为 [`papers/batch-*.yaml`](../../AgentWorkbench/missions/juno-agent-literature-2026/papers/) 的只读汇总；主题 slug 定义见 mission [`taxonomy.md`](../../AgentWorkbench/missions/juno-agent-literature-2026/taxonomy.md)。
+本表为 Workbench 中 `missions/juno-agent-literature-2026/papers/batch-*.yaml` 的只读汇总；主题 slug 定义见同一 mission 的 `taxonomy.md`。Workbench 根由 `AGENT_WORKBENCH_ROOT` 决定，不假定它位于仓库父目录。
 
 架构归纳见 [juno-agent-architecture.md](./juno-agent-architecture.md)。
 
@@ -78,7 +78,7 @@
 | 65 | DiscoveryWorld: A Virtual Environment for Developing and Evaluating Automated Scientific Discovery Agents | environment, evaluation | Mission north-star + phased queue emulate DiscoveryWorld's structured scientific task decomposition. | [link](https://arxiv.org/abs/2406.10880) |
 | 66 | DyLAN: A Dynamic LLM-Powered Agent Network for Task-Oriented Agent Collaboration | multi-agent, orchestration | Scheduler picks next queue head; future DyLAN-style routing could rank among backlog candidates. | [link](https://arxiv.org/abs/2310.05585) |
 | 67 | OpenAgents: An Open Platform for Language Agents in the Wild | tools, environment | Juno HUD + Workbench + orchestrator is an OpenAgents-style platform narrowed to long-horizon dev missions. | [link](https://arxiv.org/abs/2310.10628) |
-| 68 | XAgent: An Autonomous Agent for Complex Task Solving | planning, tools | spawn-run dispatches Composer slots with manifest-defined tools—XAgent dispatcher pattern at mission scale. | [link](https://arxiv.org/abs/2312.03253) |
+| 68 | XAgent: An Autonomous Agent for Complex Task Solving | planning, tools | spawn-run dispatches provider-neutral Codex slots with manifest-defined boundaries—XAgent dispatcher pattern at mission scale. | [link](https://arxiv.org/abs/2312.03253) |
 | 69 | GuardAgent: Safeguard LLM Agents by a Guard Agent via Knowledge-Enabled Reasoning | safety, verification | executor_review + destructive-ops hook + loop-gate form a GuardAgent layer over implement slots. | [link](https://arxiv.org/abs/2406.09139) |
 | 70 | CollabLLM: From Passive Responders to Active Collaborators | human-in-loop, communication | Promote panel + REVISE must_fix lists implement CollabLLM-style human-agent co-construction. | [link](https://arxiv.org/abs/2412.01153) |
 | 71 | MacNet: Multi-Agent Collaboration Networks for Software Development | multi-agent, orchestration | events.jsonl as message bus + queue phases scale toward MacNet-style SDE agent graphs within missions. | [link](https://arxiv.org/abs/2406.11856) |
@@ -100,7 +100,7 @@
 | 87 | AutoGuide: Automated Generation and Selection of Context-Dependent Instructions for LLM Agents | retrieval, planning | buildUserPrompt injects mission scope-lock + quality doctrine—AutoGuide for Overseer prompts. | [link](https://arxiv.org/abs/2405.05025) |
 | 88 | PaperBench: Evaluating AI Agents on Replicating AI Research | evaluation, environment | Literature mission + synthesis wiki is inverse PaperBench—curate knowledge then map to Juno architecture. | [link](https://arxiv.org/abs/2504.01848) |
 | 89 | ST-WebAgentBench: A Benchmark for Evaluating Safety and Trustworthiness of Web Agents | safety, evaluation | Vault-gate + destructive hook are ST-WebAgentBench-style trust constraints on agent file/shell access. | [link](https://arxiv.org/abs/2410.06790) |
-| 90 | OctoTools: An Agentic Framework with Extensible Tools for Complex Reasoning | tools, orchestration | Manifest provider routing (Composer vs api_token) + MCP tools mirror OctoTools manager/planner split. | [link](https://arxiv.org/abs/2502.11276) |
+| 90 | OctoTools: An Agentic Framework with Extensible Tools for Complex Reasoning | tools, orchestration | Manifest provider canonicalization + capability-scoped MCP hints mirror OctoTools manager/planner split. | [link](https://arxiv.org/abs/2502.11276) |
 | 91 | SafeAgentBench: A Benchmark for Safe Task Planning of Embodied LLM Agents | safety, planning | scope-lock forbidden paths + BLOCK on destructive events are SafeAgentBench-style plan safety checks. | [link](https://arxiv.org/abs/2412.03568) |
 | 92 | Agent-FLAN: Designing Data and Methods for Effective Agent Tuning | tools, self-improvement | Curated prompts/ in Workbench are Agent-FLAN-style task templates for specialized run kinds. | [link](https://arxiv.org/abs/2407.01476) |
 | 93 | Voyager Skill Library (follow-on): Automatic Skill Discovery in Minecraft | memory, self-improvement | Completed mission checkpoints + wiki artifacts form a reusable skill library for future Juno missions. | [link](https://arxiv.org/abs/2405.04217) |

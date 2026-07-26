@@ -7,6 +7,11 @@ import {
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { writeTrustedCompletionReceiptFixture } from "./completion-receipt.test-helper.js";
+
+function completeMission(workbench: string, missionId: string): void {
+  writeTrustedCompletionReceiptFixture(workbench, missionId);
+}
 
 function tempWorkbench(): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), "juno-loop-gate-"));
@@ -39,18 +44,10 @@ describe("evaluateLoopGate", () => {
     expect(r.reason).toContain("loop_gate_blocked");
   });
 
-  it("passes when smoke and meta checkpoints complete", () => {
+  it("passes when smoke and meta have trusted completion receipts", () => {
     const wb = tempWorkbench();
-    writeFileSync(
-      path.join(wb, "missions/juno-smoke-loop-2026/checkpoint.md"),
-      "STATUS: COMPLETE\n",
-      "utf8",
-    );
-    writeFileSync(
-      path.join(wb, "missions/juno-loop-meta-2026/checkpoint.md"),
-      "STATUS: COMPLETE\n",
-      "utf8",
-    );
+    completeMission(wb, "juno-smoke-loop-2026");
+    completeMission(wb, "juno-loop-meta-2026");
     expect(evaluateLoopGate(wb).ok).toBe(true);
   });
 

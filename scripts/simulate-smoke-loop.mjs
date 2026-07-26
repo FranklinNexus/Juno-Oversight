@@ -3,12 +3,13 @@
  * Dry simulation: materialize smoke-loop slots, evaluate gate actions, simulate dequeue.
  * Does NOT call Cursor API or start scheduler daemon.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluateCompletedRun } from "../orchestrator/dist/mission-progress.js";
 import { materializeQueueRun } from "../orchestrator/dist/manifest.js";
 import { validateReviewAlternation } from "../orchestrator/dist/review-loop.js";
+import { hasUniqueCompleteStatus } from "./lib/checkpoint-status.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -103,14 +104,14 @@ for (const item of queue) {
   const runDir = path.join(workbench, "runs", runId);
   writeFileSync(path.join(runDir, "checkpoint.md"), checkpoints[runId] ?? "# empty\n", "utf8");
 
-  const action = evaluateCompletedRun(workbench, runId);
+  const action = evaluateCompletedRun(workbench, runId, missionId);
   const head = simulatedQueue[0];
   const headMatch = head?.id === runId;
 
   let dequeue = false;
   if (action.action === "dequeue") {
     if (item.run_kind === "implement") {
-      dequeue = /STATUS:\s*COMPLETE/i.test(checkpoints[runId]);
+      dequeue = hasUniqueCompleteStatus(checkpoints[runId]);
     } else {
       dequeue = true;
     }

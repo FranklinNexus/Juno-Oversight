@@ -1,3 +1,7 @@
-ignoredBuiltDependencies:
+packages:
+  - orchestrator
+
+onlyBuiltDependencies:
+  - esbuild
   - sharp
   - unrs-resolver

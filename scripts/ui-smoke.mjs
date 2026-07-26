@@ -9,6 +9,8 @@ const FORBIDDEN = [
   "Internal Server Error",
   "Turbopack error",
   "Runtime Error",
+  "Cannot find module",
+  "[turbopack]_runtime.js",
 ];
 
 const base = (process.env.JUNO_DEV_URL ?? DEFAULT_URL).replace(/\/$/, "");

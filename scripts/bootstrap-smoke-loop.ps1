@@ -1,8 +1,14 @@
 # Bootstrap short "smoke loop" mission (~75min, 3 slots) to validate implement→review→verify.
 param(
   [string]$Workbench = "E:\AgentWorkbench",
-  [string]$RepoRoot = "C:\Users\kfr34\Desktop\Entrepreneurship\Juno Oversight"
+  [string]$RepoRoot = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
+
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
 
 $missionId = "juno-smoke-loop-2026"
 $missionDir = Join-Path $Workbench "missions/$missionId"
@@ -72,6 +78,33 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $missionDir "north-star.md"), $northStar, $utf8)
 [System.IO.File]::WriteAllText((Join-Path $missionDir "progress.md"), $progress, $utf8)
 
+$promptDir = Join-Path $Workbench "prompts"
+New-Item -ItemType Directory -Force -Path $promptDir | Out-Null
+$promptTemplates = [ordered]@{
+  executor_implement = @"
+# executor_implement — 实现 slot
+
+读取 Mission 的 scope-lock.md 与 north-star.md，只修改允许路径。完成后运行相关测试，并在 checkpoint.md 写明状态与变更文件。
+"@
+  executor_review = @"
+# executor_review — Review slot
+
+独立检查 scope、代码 diff 与 checkpoint。禁止新增功能；在 checkpoint.md 写入 REVIEW_VERDICT（PASS、REVISE 或 BLOCK）。
+"@
+  executor_verify = @"
+# executor_verify — 验证 slot
+
+只运行 Mission 要求的验证并记录 VERIFY_REPORT。验证失败时如实报告，不在 verify slot 修复代码。
+"@
+}
+
+foreach ($entry in $promptTemplates.GetEnumerator()) {
+  $promptPath = Join-Path $promptDir ("{0}.md" -f $entry.Key)
+  if (-not (Test-Path -LiteralPath $promptPath)) {
+    [System.IO.File]::WriteAllText($promptPath, $entry.Value, $utf8)
+  }
+}
+
 $hardeningBacklog = @"
   - id: juno-h06-review-loop-gate
     horizon: mission
@@ -81,7 +114,7 @@ $hardeningBacklog = @"
     mission_id: juno-overseer-hardening-2026
     phase_id: h06-review-loop-gate
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on review loop"
 "@
@@ -97,7 +130,7 @@ now:
     mission_id: $missionId
     phase_id: sl00-implement-ui-smoke
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "scripts/ui-smoke.mjs + pnpm ui:smoke；checkpoint 含 CHANGES"
   - id: juno-sl01-review-ui-smoke
@@ -108,7 +141,7 @@ now:
     mission_id: $missionId
     phase_id: sl01-review-ui-smoke
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on ui-smoke"
   - id: juno-sl02-verify-smoke
@@ -119,14 +152,14 @@ now:
     mission_id: $missionId
     phase_id: sl02-verify-smoke
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "VERIFY_REPORT: test PASS, check-orchestrator-deps PASS, ui:smoke PASS or documented SKIP"
 backlog:
 $hardeningBacklog
 "@
 
-[System.IO.File]::WriteAllText((Join-Path $Workbench "queue/now.yaml"), $nowYaml, $utf8)
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $nowYaml -BackupPrefix "bak-pre-smoke-loop"
 
 $orch = @"
 {

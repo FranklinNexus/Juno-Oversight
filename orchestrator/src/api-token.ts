@@ -139,14 +139,15 @@ export async function runApiToken(
       status: "finished",
       result: fullText.slice(0, 8000),
     });
-    recordApiSuccess(workbench, providerId, {
-      tokens: estimatedTokens,
-      latencyMs: Date.now() - started,
+      recordApiSuccess(workbench, providerId, {
+        tokens: estimatedTokens,
+        latencyMs: Date.now() - started,
+        requestId: gate.leaseId,
     });
     return { ok: true, text: fullText };
   } finally {
     clearInterval(heartbeat);
-    releaseApiSlot(workbench, providerId);
+    releaseApiSlot(workbench, providerId, gate.leaseId);
   }
 }
 

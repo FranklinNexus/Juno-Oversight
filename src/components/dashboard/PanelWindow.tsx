@@ -116,15 +116,6 @@ export function PanelWindow({ panelId, widgetType }: PanelWindowProps) {
           </span>
         ) : null}
 
-        {panel.pinnedSymbol ? (
-          <span
-            className="text-[10px] font-mono-numeric text-[var(--accent-gold)] truncate max-w-[88px]"
-            title={panel.pinnedSymbol}
-          >
-            {panel.pinnedSymbol}
-          </span>
-        ) : null}
-
         <HudSelect
           value={widgetType}
           onChange={(event) => setWidgetType(panelId, event.target.value as WidgetType)}
@@ -141,7 +132,7 @@ export function PanelWindow({ panelId, widgetType }: PanelWindowProps) {
           {Math.round(contentZoom * 100)}%
         </span>
 
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="panel-size-controls flex items-center gap-1 ml-auto">
           {(["quarter", "half", "full"] as PanelSizePreset[]).map((preset) => (
             <HudButton
               key={preset}

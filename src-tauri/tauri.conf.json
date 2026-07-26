@@ -2,12 +2,12 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Juno Oversight",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.franklinnexus.junooversight",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "corepack pnpm build:desktop"
   },
   "app": {
     "windows": [
@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "resources/juno-runtime/": "juno-runtime/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

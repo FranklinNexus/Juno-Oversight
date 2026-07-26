@@ -1,9 +1,17 @@
 /**
  * Book mission queue advance — local gates + live-agent handoff.
  */
-import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { hasUniqueCompleteStatus } from "./checkpoint-status.mjs";
+import { spawnPnpmWithTimeout } from "./pnpm-runner.mjs";
+import {
+  inspectMissionQueueHead,
+  liveSlotTimeoutMs,
+  spawnWithTimeout,
+  VERIFY_TIMEOUT_MS,
+} from "./specialized-loop-guard.mjs";
 import {
   BOOK_MISSION_ID,
   CHAPTER_COUNT,
@@ -11,15 +19,17 @@ import {
   runBookDecision,
   validatePlanningArtifacts,
   validateChapter,
+  validateBookCompletionEvidence,
   parseChapterFromPhase,
-  countBookHan,
   needsLiveAgent,
   missionDir,
   chapterPath,
 } from "./book-decision.mjs";
 
+const DEFAULT_JUNO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
 function junoRoot() {
-  return process.env.JUNO_OVERSIGHT_ROOT ?? "C:\\Users\\kfr34\\Desktop\\Entrepreneurship\\Juno Oversight";
+  return process.env.JUNO_OVERSIGHT_ROOT ?? DEFAULT_JUNO_ROOT;
 }
 
 function checkpointImplement(phaseId, changes) {
@@ -57,19 +67,28 @@ function checkpointDebate(phaseId, ruling) {
 - verdict: PASS
 - drift: none
 - quality_tier: tier1_ok
+- scope_violations: []
+- must_fix_next_slot: []
 - reviewer_notes: debate slot — ${ruling}
 `;
 }
 
 async function checkpointVerify(workbench, phaseId) {
-  const total = countBookHan(workbench);
+  const evidence = validateBookCompletionEvidence(workbench);
+  if (!evidence.ok) throw new Error(`book evidence invalid: ${evidence.reason}`);
+  const total = evidence.mergedHan;
   const merged = path.join(missionDir(workbench), "book", "全书.md");
   const repoRoot = junoRoot();
+  const testResult = await spawnPnpmWithTimeout(
+    ["test"],
+    { cwd: repoRoot, stdio: "inherit" },
+    VERIFY_TIMEOUT_MS,
+  );
   const checks = [
     { label: "book_han>=95000", ok: total >= 95_000 },
     { label: "book/全书.md", ok: existsSync(merged) },
     { label: "axioms.md", ok: existsSync(path.join(missionDir(workbench), "axioms.md")) },
-    { label: "pnpm test", ok: spawnSync("pnpm", ["test"], { cwd: repoRoot, shell: true }).status === 0 },
+    { label: "pnpm test", ok: !testResult.error && testResult.status === 0 },
   ];
   for (let i = 1; i <= CHAPTER_COUNT; i++) {
     const v = validateChapter(workbench, i);
@@ -105,10 +124,8 @@ function mergeChapters(workbench) {
   return out;
 }
 
-function markMissionComplete(workbench) {
-  writeFileSync(
-    path.join(missionDir(workbench), "checkpoint.md"),
-    `# Checkpoint — ${BOOK_MISSION_ID}
+function missionCompleteCheckpoint() {
+  return `# Checkpoint — ${BOOK_MISSION_ID}
 
 STATUS: COMPLETE
 
@@ -119,27 +136,38 @@ Mission **COMPLETE** — 公理之书 ≥${TOTAL_CHARS_TARGET} 字 + verify PASS
 - book/全书.md
 - axioms.md / outline.md / quality-rubric.md
 - chapters/ch01..ch${String(CHAPTER_COUNT).padStart(2, "0")}.md
-`,
-    "utf8",
-  );
+`;
 }
 
-export function writeBookLoopState(workbench, state) {
+function writeBookRuntimeState(workbench, fileName, state) {
   writeFileSync(
-    path.join(workbench, "state", "book-loop.json"),
+    path.join(workbench, "state", fileName),
     `${JSON.stringify({ ...state, updatedAt: new Date().toISOString() }, null, 2)}\n`,
     "utf8",
   );
 }
 
+export function writeBookLoopState(workbench, state) {
+  writeBookRuntimeState(workbench, "book-loop.json", state);
+}
+
+export function writeBookQualityLoopState(workbench, state) {
+  writeBookRuntimeState(workbench, "book-quality-loop.json", state);
+}
+
 export async function advanceOneBookSlot(workbench, deps) {
-  const { parseNowYaml, saveNowQueue } = deps.queueIo;
-  const { materializeQueueRun } = deps.manifest;
+  const {
+    readNowQueueSnapshot,
+    replaceQueueHeadConditional,
+    replaceQueueSnapshotConditional,
+  } = deps.queueIo;
+  const { loadRunState, materializeQueueRun, saveRunState } = deps.manifest;
   const { evaluateCompletedRun, markMissionPhaseDone, readRunKind, shouldMarkPhaseDone } =
     deps.missionProgress;
   const { mergeOrchestratorState } = deps.idempotency;
 
-  let { now, backlog } = parseNowYaml(workbench);
+  let queueSnapshot = readNowQueueSnapshot(workbench);
+  let { now, backlog } = queueSnapshot;
   if (now.length === 0) {
     const promoted = backlog.filter((i) => i.mission_id === BOOK_MISSION_ID).slice(0, 3);
     if (promoted.length === 0) {
@@ -148,7 +176,24 @@ export async function advanceOneBookSlot(workbench, deps) {
     const ids = new Set(promoted.map((p) => p.id));
     backlog = backlog.filter((i) => !ids.has(i.id));
     now = promoted;
-    saveNowQueue(workbench, now, backlog);
+    const promotion = replaceQueueSnapshotConditional(workbench, {
+      expectedRevision: queueSnapshot.revision,
+      now,
+      backlog,
+    });
+    if (!promotion.ok) {
+      if (promotion.reason === "busy") {
+        return { advanced: false, stopped: true, busy: true, reason: "queue_mutation_busy" };
+      }
+      return {
+        advanced: false,
+        stopped: true,
+        blocked: true,
+        reason: "queue_revision_conflict:backlog_promotion",
+      };
+    }
+    queueSnapshot = promotion.current;
+    ({ now, backlog } = queueSnapshot);
   }
 
   const head = now[0];
@@ -197,24 +242,61 @@ export async function advanceOneBookSlot(workbench, deps) {
   materializeQueueRun(head);
   const runDir = path.join(workbench, "runs", head.id);
   writeFileSync(path.join(runDir, "checkpoint.md"), cp, "utf8");
+  const runState = loadRunState(runDir);
+  runState.slotIndex += 1;
+  runState.lastStatus = "done";
+  runState.updatedAt = new Date().toISOString();
+  saveRunState(runDir, runState);
   mergeOrchestratorState(workbench, { activeRunId: head.id, activeRunStatus: "done" });
 
-  const action = evaluateCompletedRun(workbench, head.id);
+  const action = evaluateCompletedRun(workbench, head.id, BOOK_MISSION_ID);
   const runKind = readRunKind(workbench, head.id);
   const ready =
     action.action === "dequeue" &&
-    (runKind !== "implement" || /STATUS:\s*COMPLETE/i.test(cp));
+    (runKind !== "implement" || hasUniqueCompleteStatus(cp));
 
   if (!ready) throw new Error(`slot ${head.id} not ready: ${action.action}`);
 
+  const remainingNow = queueSnapshot.now.slice(1);
+  if (
+    phase === "ax46-verify" &&
+    [...remainingNow, ...backlog].some((item) => item.mission_id === BOOK_MISSION_ID)
+  ) {
+    throw new Error("Book completion refused while mission queue items remain");
+  }
+  const terminalVerify = phase === "ax46-verify";
+  if (terminalVerify) {
+    const evidence = validateBookCompletionEvidence(workbench);
+    if (!evidence.ok || evidence.completedChapters !== CHAPTER_COUNT) {
+      throw new Error(`Book completion evidence invalid: ${evidence.reason ?? "chapter count"}`);
+    }
+  }
+  const queueUpdate = terminalVerify
+    ? deps.missionCompletion.finalizeSpecializedVerifyQueueHead(workbench, {
+        expectedQueueRevision: queueSnapshot.revision,
+        expectedHead: head,
+        missionCheckpointText: missionCompleteCheckpoint(),
+      })
+    : replaceQueueHeadConditional(workbench, {
+        expectedRevision: queueSnapshot.revision,
+        expectedHead: head,
+        replacement: [],
+      });
+  if (!queueUpdate.ok) {
+    if (queueUpdate.reason === "busy") {
+      return { advanced: false, stopped: true, busy: true, reason: "queue_mutation_busy" };
+    }
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "blocked" });
+    return {
+      advanced: false,
+      stopped: true,
+      blocked: true,
+      reason: `queue_${queueUpdate.reason}:${head.id}`,
+    };
+  }
   if (shouldMarkPhaseDone(runKind, cp)) {
     markMissionPhaseDone(workbench, BOOK_MISSION_ID, head.phase_id);
   }
-
-  if (phase === "ax46-verify") markMissionComplete(workbench);
-
-  ({ now, backlog } = parseNowYaml(workbench));
-  saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
 
   return { advanced: true, runId: head.id, runKind };
@@ -231,25 +313,31 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
     readRunKind,
     shouldMarkPhaseDone,
     buildReviseImplementItem,
+    nextRevisionAttempt,
   } = deps.missionProgress;
-  const { parseNowYaml, saveNowQueue } = deps.queueIo;
+  const { readNowQueueSnapshot, replaceQueueHeadConditional } = deps.queueIo;
   const { mergeOrchestratorState } = deps.idempotency;
 
-  if (!process.env.CURSOR_API_KEY?.trim()) {
-    return { ok: false, reason: "CURSOR_API_KEY not set — cannot run live write/review slot" };
+  const initialQueue = readNowQueueSnapshot(workbench);
+  const initialGuard = inspectMissionQueueHead(initialQueue.now[0], BOOK_MISSION_ID);
+  if (!initialGuard.ok || initialQueue.now[0]?.id !== head.id) {
+    return {
+      ok: false,
+      reason: initialGuard.ok ? `queue_head_changed:${head.id}` : initialGuard.reason,
+    };
   }
 
   const manifestPath = materializeQueueRun(head);
   const spawnScript = path.join(repoRoot, "orchestrator", "dist", "spawn-run.js");
-  const r = spawnSync("node", [spawnScript, "--manifest", manifestPath], {
+  const r = await spawnWithTimeout(process.execPath, [spawnScript, "--manifest", manifestPath], {
     cwd: repoRoot,
     env: { ...process.env, AGENT_WORKBENCH_ROOT: workbench, JUNO_OVERSIGHT_ROOT: repoRoot },
     stdio: "inherit",
     shell: false,
-  });
+  }, liveSlotTimeoutMs(head.max_minutes ?? 25));
 
-  if ((r.status ?? 1) !== 0) {
-    return { ok: false, reason: `spawn-run exit ${r.status}` };
+  if (r.error || r.status !== 0) {
+    return { ok: false, reason: r.error?.message ?? `spawn-run exit ${r.status}` };
   }
 
   const runDir = path.join(workbench, "runs", head.id);
@@ -261,7 +349,7 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
   const cp = readFileSync(cpPath, "utf8");
   const runKind = readRunKind(workbench, head.id);
   const ch = parseChapterFromPhase(head.phase_id ?? "");
-  let action = evaluateCompletedRun(workbench, head.id);
+  let action = evaluateBookRunCompletion(workbench, head.id, evaluateCompletedRun);
 
   if (ch && runKind === "implement" && /-write|-revise/.test(head.phase_id ?? "")) {
     const { validateChapterText, autoFixChapterSpacedBold } = await import(
@@ -288,16 +376,40 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
   }
 
   if (action.action === "revise") {
-    const fix = buildReviseImplementItem(head, Date.now(), action.mustFix ?? []);
-    fix.repo_target = "workbench";
-    fix.prompt = "executor_book_write";
-    fix.phase_id = head.phase_id?.includes("-revise-")
+    const revisionAttempt = nextRevisionAttempt(
+      workbench,
+      head.id,
+      [...initialQueue.now, ...initialQueue.backlog],
+    );
+    const revisionPhaseId = head.phase_id?.includes("-revise-")
       ? head.phase_id
-      : `${head.phase_id?.replace(/-review$/, "-write") ?? "fix"}-revise-${Date.now()}`;
-    let { now, backlog } = parseNowYaml(workbench);
-    saveNowQueue(workbench, [fix, ...now.slice(1)], backlog);
+      : `${head.phase_id?.replace(/-review$/, "-write") ?? "fix"}-revise-${revisionAttempt}`;
+    const fix = buildReviseImplementItem(
+      { ...head, repo_target: "workbench", phase_id: revisionPhaseId },
+      revisionAttempt,
+      action.mustFix ?? [],
+    );
+    const queueUpdate = replaceQueueHeadConditional(workbench, {
+      expectedRevision: initialQueue.revision,
+      expectedHead: head,
+      replacement: [fix],
+    });
+    if (!queueUpdate.ok) {
+      mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "blocked" });
+      return {
+        ok: false,
+        busy: queueUpdate.reason === "busy",
+        reason: `queue_${queueUpdate.reason}:${head.id}`,
+      };
+    }
     mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
-    return { ok: true, revised: true, runId: head.id, mustFix: action.mustFix };
+    return {
+      ok: true,
+      dequeued: false,
+      revised: true,
+      runId: head.id,
+      mustFix: action.mustFix,
+    };
   }
 
   if (ch && runKind === "implement") {
@@ -311,15 +423,29 @@ export async function spawnLiveBookSlot(workbench, head, deps) {
     return { ok: false, reason: `live slot not dequeue-ready: ${action.action}` };
   }
 
+  const queueUpdate = replaceQueueHeadConditional(workbench, {
+    expectedRevision: initialQueue.revision,
+    expectedHead: head,
+    replacement: [],
+  });
+  if (!queueUpdate.ok) {
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "blocked" });
+    return {
+      ok: false,
+      busy: queueUpdate.reason === "busy",
+      reason: `queue_${queueUpdate.reason}:${head.id}`,
+    };
+  }
   if (shouldMarkPhaseDone(runKind, cp)) {
     markMissionPhaseDone(workbench, BOOK_MISSION_ID, head.phase_id);
   }
-
-  let { now, backlog } = parseNowYaml(workbench);
-  saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
 
-  return { ok: true, runId: head.id };
+  return { ok: true, dequeued: true, runId: head.id };
+}
+
+export function evaluateBookRunCompletion(workbench, runId, evaluateCompletedRun) {
+  return evaluateCompletedRun(workbench, runId, BOOK_MISSION_ID);
 }
 
 export { needsLiveAgent, BOOK_MISSION_ID };

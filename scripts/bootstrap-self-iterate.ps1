@@ -1,21 +1,18 @@
 # Bootstrap self-iterate mission (P0) — queue 3 slots, backup current now.yaml
 param(
   [string]$Workbench = "E:\AgentWorkbench",
-  [string]$RepoRoot = "C:\Users\kfr34\Desktop\Entrepreneurship\Juno Oversight"
+  [string]$RepoRoot = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
+
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
 
 $missionId = "juno-self-iterate-2026"
 $missionDir = Join-Path $Workbench "missions/$missionId"
 New-Item -ItemType Directory -Force -Path $missionDir | Out-Null
-
-$nowPath = Join-Path $Workbench "queue/now.yaml"
-if (Test-Path $nowPath) {
-  $bak = Join-Path $Workbench "queue/now.yaml.bak-pre-self-iterate-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-  Copy-Item $nowPath $bak
-  Write-Host "Backed up queue -> $bak"
-}
-
-$utf8 = New-Object System.Text.UTF8Encoding $false
 
 $nowYaml = @"
 updated: $(Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
@@ -28,7 +25,7 @@ now:
     mission_id: $missionId
     phase_id: si00-implement-p0
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate
     eval_profile: orchestrator
     max_minutes: 25
@@ -41,7 +38,7 @@ now:
     mission_id: $missionId
     phase_id: si01-review-p0
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate
     max_minutes: 15
     success_criteria: "REVIEW_VERDICT PASS P0 deliverables"
@@ -53,7 +50,7 @@ now:
     mission_id: $missionId
     phase_id: si02-verify-p0
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate
     eval_profile: orchestrator
     max_minutes: 20
@@ -62,7 +59,7 @@ backlog:
   []
 "@
 
-[System.IO.File]::WriteAllText($nowPath, $nowYaml, $utf8)
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $nowYaml -BackupPrefix "bak-pre-self-iterate"
 Write-Host "Mission $missionId queued (3 slots)."
 Write-Host "Run: pnpm loop:self-iterate-run  (local runner)"
 Write-Host "Live: enable scheduler + spawn-run per slot (see wiki/architecture-loop.md §8)"

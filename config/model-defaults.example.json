@@ -1,5 +1,7 @@
 {
-  "cursorComposerDefault": "auto",
-  "cursorComposerFallback": ["auto", "composer-2.5", "composer-2"],
-  "notes": "Copy to AgentWorkbench/config/model-defaults.json. auto 在当前 API 账户上通常比 composer-2.5 更稳。"
+  "defaultProvider": "openai_codex",
+  "providerAliases": {
+    "cursor_composer": "openai_codex"
+  },
+  "notes": "Copy to AgentWorkbench/config/model-defaults.json. cursor_composer 仅作为旧队列标识迁移到本机 Codex。"
 }

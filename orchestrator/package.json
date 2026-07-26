@@ -1,6 +1,7 @@
 {
   "name": "juno-orchestrator",
   "version": "0.1.0",
+  "private": true,
   "engines": {
     "node": ">=22.13"
   },
@@ -8,10 +9,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "spawn": "node dist/spawn-run.js",
-    "preinstall": "node ../scripts/check-orchestrator-deps.mjs"
+    "preinstall": "node ../scripts/check-package-manager.mjs && node ../scripts/check-orchestrator-deps.mjs"
   },
   "dependencies": {
-    "@cursor/sdk": "^1.0.0"
+    "@openai/codex-sdk": "^0.144.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^20",

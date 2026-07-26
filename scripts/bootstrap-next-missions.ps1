@@ -93,7 +93,7 @@ function New-QueueItem([hashtable]$s) {
     mission_id = $s.mission_id
     phase_id = $s.phase
     prompt = $s.prompt
-    provider = "cursor_composer"
+    provider = "openai_codex"
     max_minutes = $s.max
     success_criteria = $s.criteria
   }
@@ -162,10 +162,16 @@ if ($PatchOnly) {
   $queuePayload.now = $patchItems + $litItems
 }
 
-$tmpJson = Join-Path $env:TEMP "juno-queue-$(Get-Date -Format 'yyyyMMddHHmmss').json"
-[System.IO.File]::WriteAllText($tmpJson, ($queuePayload | ConvertTo-Json -Depth 6 -Compress), $utf8)
-node "$root\scripts\write-queue.mjs" --json $tmpJson --out (Join-Path $Workbench "queue/now.yaml")
-Remove-Item $tmpJson -ErrorAction SilentlyContinue
+$tmpJson = Join-Path $env:TEMP ("juno-queue-{0}.json" -f [guid]::NewGuid().ToString("N"))
+try {
+  [System.IO.File]::WriteAllText($tmpJson, ($queuePayload | ConvertTo-Json -Depth 6 -Compress), $utf8)
+  & node "$root\scripts\write-queue.mjs" --json $tmpJson --out (Join-Path $Workbench "queue/now.yaml") --backup-prefix "bak-pre-next-missions"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Strict queue submission failed with exit code $LASTEXITCODE"
+  }
+} finally {
+  Remove-Item -LiteralPath $tmpJson -Force -ErrorAction SilentlyContinue
+}
 
 if (-not $PatchOnly -and -not $LiteratureOnly) {
   $orch = @"

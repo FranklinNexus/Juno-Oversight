@@ -6,6 +6,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasUniqueCompleteStatus } from "./lib/checkpoint-status.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
@@ -87,7 +88,11 @@ const build = await import("node:child_process").then(({ spawnSync }) =>
 );
 if (build.status !== 0) process.exit(build.status ?? 1);
 
-const { parseNowYaml, saveNowQueue } = await import("../orchestrator/dist/queue-io.js");
+const {
+  readNowQueueSnapshot,
+  replaceQueueHeadConditional,
+  replaceQueueSnapshotConditional,
+} = await import("../orchestrator/dist/queue-io.js");
 const { materializeQueueRun } = await import("../orchestrator/dist/manifest.js");
 const { evaluateCompletedRun, markMissionPhaseDone, readRunKind, shouldMarkPhaseDone } =
   await import("../orchestrator/dist/mission-progress.js");
@@ -95,7 +100,8 @@ const { mergeOrchestratorState } = await import("../orchestrator/dist/idempotenc
 
 let processed = 0;
 while (processed < maxSlots) {
-  const { now, backlog } = parseNowYaml(workbench);
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now } = queueSnapshot;
   const head = now[0];
   if (!head || head.mission_id !== missionId) {
     log(now.length ? `head is ${head?.id ?? "empty"} — stop` : "queue empty — done for now");
@@ -121,31 +127,47 @@ while (processed < maxSlots) {
   writeFileSync(path.join(runDir, "checkpoint.md"), cp, "utf8");
   mergeOrchestratorState(workbench, { activeRunId: head.id, activeRunStatus: "done" });
 
-  const action = evaluateCompletedRun(workbench, head.id);
+  const action = evaluateCompletedRun(workbench, head.id, missionId);
   const runKind = readRunKind(workbench, head.id);
   const ready =
     action.action === "dequeue" &&
-    (runKind !== "implement" || /STATUS:\s*COMPLETE/i.test(cp));
+    (runKind !== "implement" || hasUniqueCompleteStatus(cp));
 
   if (!ready) throw new Error(`slot ${head.id} not ready: ${action.action}`);
 
+  const queueUpdate = replaceQueueHeadConditional(workbench, {
+    expectedRevision: queueSnapshot.revision,
+    expectedHead: head,
+    replacement: [],
+  });
+  if (!queueUpdate.ok) {
+    log(`queue ${queueUpdate.reason} after ${head.id}`);
+    process.exit(queueUpdate.reason === "busy" ? 4 : 5);
+  }
   if (shouldMarkPhaseDone(runKind, cp)) {
     markMissionPhaseDone(workbench, missionId, head.phase_id);
   }
-
-  saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
   log(`dequeued ${head.id} (${runKind})`);
   processed += 1;
 }
 
-const { now: n0, backlog: b0 } = parseNowYaml(workbench);
+const finalSnapshot = readNowQueueSnapshot(workbench);
+const { now: n0, backlog: b0 } = finalSnapshot;
 if (n0.length === 0) {
   const promoted = b0.filter((i) => i.mission_id === missionId).slice(0, 3);
   if (promoted.length > 0) {
     const promotedIds = new Set(promoted.map((p) => p.id));
     const rest = b0.filter((i) => !promotedIds.has(i.id));
-    saveNowQueue(workbench, promoted, rest);
+    const promotion = replaceQueueSnapshotConditional(workbench, {
+      expectedRevision: finalSnapshot.revision,
+      now: promoted,
+      backlog: rest,
+    });
+    if (!promotion.ok) {
+      log(`queue ${promotion.reason} during backlog promotion`);
+      process.exit(promotion.reason === "busy" ? 4 : 5);
+    }
     log(`promoted ${promoted.length} backlog → now (head: ${promoted[0]?.id})`);
   }
 }

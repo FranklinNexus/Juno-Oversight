@@ -3,18 +3,20 @@
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const BOOK_MISSION_ID = "juno-axiom-book-2026";
 export const CHAPTER_COUNT = 20;
 export const CHARS_PER_CHAPTER = 5000;
 export const TOTAL_CHARS_TARGET = 100_000;
+const DEFAULT_JUNO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 export function missionDir(workbench) {
   return path.join(workbench, "missions", BOOK_MISSION_ID);
 }
 
 function junoRoot() {
-  return process.env.JUNO_OVERSIGHT_ROOT ?? "C:\\Users\\kfr34\\Desktop\\Entrepreneurship\\Juno Oversight";
+  return process.env.JUNO_OVERSIGHT_ROOT ?? DEFAULT_JUNO_ROOT;
 }
 
 function countHan(text) {
@@ -152,6 +154,15 @@ export function validatePlanningArtifacts(workbench) {
   const required = ["axioms.md", "outline.md", "quality-rubric.md", "book-meta.yaml"];
   const missing = required.filter((f) => !existsSync(path.join(dir, f)));
   if (missing.length) return { ok: false, missing };
+  const invalid = required.filter((file) => {
+    const text = readFileSync(path.join(dir, file), "utf8").trim();
+    if (text.length < 80) return true;
+    if (file === "axioms.md") return !/\bA[1-5]\b/.test(text);
+    if (file === "outline.md") return !/第(?:20|二十)章/.test(text);
+    if (file === "quality-rubric.md") return !/硬门禁|quality/i.test(text);
+    return !/^chapters:\s*20\s*$/m.test(text);
+  });
+  if (invalid.length) return { ok: false, invalid };
   return { ok: true, files: required };
 }
 
@@ -162,11 +173,63 @@ export function chapterPath(workbench, chapterNum) {
 export function validateChapter(workbench, chapterNum) {
   const p = chapterPath(workbench, chapterNum);
   if (!existsSync(p)) return { ok: false, reason: `missing ${path.basename(p)}` };
-  const han = countHan(readFileSync(p, "utf8"));
+  const text = readFileSync(p, "utf8");
+  const hanChars = text.match(/[\u4e00-\u9fff]/g) ?? [];
+  const han = hanChars.length;
   const min = CHARS_PER_CHAPTER - 500;
   const max = CHARS_PER_CHAPTER + 500;
   if (han < min || han > max) return { ok: false, reason: `han=${han} want ${min}-${max}` };
+  const head = text.split("\n").slice(0, 12).join("\n");
+  if (!/公理|M1|A[1-5]/i.test(head)) return { ok: false, reason: "missing axiom tag in opening" };
+  if (!/(?:\*{0,2})本书主张(?:\*{0,2})[：:]/.test(text)) {
+    return { ok: false, reason: "missing 本书主张 marker" };
+  }
+  const spacedBold = (text.match(/\*\*\s+\*\*\s+\*\*/g) ?? []).length
+    + (text.match(/\*\*[^*\n]{1,12}\*\*\s+\*\*/g) ?? []).length;
+  if (spacedBold >= 2) return { ok: false, reason: `spaced-bold artifacts=${spacedBold}` };
+  const frequencies = new Map();
+  for (const char of hanChars) frequencies.set(char, (frequencies.get(char) ?? 0) + 1);
+  const maxFrequency = Math.max(...frequencies.values());
+  if (frequencies.size < 100 || maxFrequency / han > 0.12) {
+    return { ok: false, reason: `repetitive text uniqueHan=${frequencies.size} maxRatio=${(maxFrequency / han).toFixed(3)}` };
+  }
   return { ok: true, han, path: p };
+}
+
+export function validateBookCompletionEvidence(workbench) {
+  const planning = validatePlanningArtifacts(workbench);
+  if (!planning.ok) {
+    const names = planning.missing ?? planning.invalid ?? [];
+    return { ok: false, completedChapters: 0, reason: `invalid planning artifacts: ${names.join(",")}` };
+  }
+
+  const chapterBodies = [];
+  let completedChapters = 0;
+  for (let chapter = 1; chapter <= CHAPTER_COUNT; chapter += 1) {
+    const validation = validateChapter(workbench, chapter);
+    if (!validation.ok) {
+      return { ok: false, completedChapters, reason: `chapter ${chapter}: ${validation.reason}` };
+    }
+    completedChapters += 1;
+    chapterBodies.push(readFileSync(chapterPath(workbench, chapter), "utf8").replace(/\s+/g, ""));
+  }
+  if (new Set(chapterBodies).size !== CHAPTER_COUNT) {
+    return { ok: false, completedChapters, reason: "duplicate chapter bodies" };
+  }
+
+  const mergedPath = path.join(missionDir(workbench), "book", "全书.md");
+  if (!existsSync(mergedPath)) return { ok: false, completedChapters, reason: "missing book/全书.md" };
+  const merged = readFileSync(mergedPath, "utf8");
+  const mergedHan = countHan(merged);
+  if (mergedHan < 95_000) {
+    return { ok: false, completedChapters, reason: `merged book too short: han=${mergedHan}` };
+  }
+  const normalizedMerged = merged.replace(/\s+/g, "");
+  const missingChapter = chapterBodies.findIndex((chapter) => !normalizedMerged.includes(chapter));
+  if (missingChapter >= 0) {
+    return { ok: false, completedChapters, reason: `merged book does not contain chapter ${missingChapter + 1}` };
+  }
+  return { ok: true, completedChapters, reason: null, mergedHan };
 }
 
 export function parseChapterFromPhase(phaseId) {

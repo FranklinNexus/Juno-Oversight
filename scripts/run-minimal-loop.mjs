@@ -6,15 +6,16 @@
  * Usage:
  *   node scripts/run-minimal-loop.mjs [--skip-bootstrap] [--queue-meta]
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
-  copyFileSync,
   existsSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasUniqueCompleteStatus } from "./lib/checkpoint-status.mjs";
+import { backupExistingQueue } from "./lib/pre-loop-queue.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -34,9 +35,12 @@ let markMissionPhaseDone;
 let readRunKind;
 let shouldMarkPhaseDone;
 let validateReviewAlternation;
-let parseNowYaml;
-let saveNowQueue;
+let readNowQueueSnapshot;
+let replaceQueueHeadConditional;
 let writeLoopGateStamp;
+let finalizeOrdinaryVerifyQueueHead;
+let readMissionCompletionReceipt;
+let recoverPendingVerifyCompletions;
 
 async function loadOrchestrator() {
   ({
@@ -50,8 +54,17 @@ async function loadOrchestrator() {
     shouldMarkPhaseDone,
   } = await import("../orchestrator/dist/mission-progress.js"));
   ({ validateReviewAlternation } = await import("../orchestrator/dist/review-loop.js"));
-  ({ parseNowYaml, saveNowQueue } = await import("../orchestrator/dist/queue-io.js"));
+  ({ readNowQueueSnapshot, replaceQueueHeadConditional } = await import(
+    "../orchestrator/dist/queue-io.js"
+  ));
   ({ writeLoopGateStamp } = await import("../orchestrator/dist/loop-gate.js"));
+  ({
+    finalizeOrdinaryVerifyQueueHead,
+    readMissionCompletionReceipt,
+    recoverPendingVerifyCompletions,
+  } = await import(
+    "../orchestrator/dist/mission-completion.js"
+  ));
 }
 
 function log(msg) {
@@ -177,37 +190,7 @@ function assertMetaDeliverables() {
 }
 
 async function runUiSmoke() {
-  return new Promise((resolve) => {
-    const dev = spawn("pnpm", ["dev", "--port", "3000"], {
-      cwd: repoRoot,
-      shell: true,
-      stdio: "ignore",
-    });
-    const deadline = Date.now() + 90_000;
-    const poll = () => {
-      if (Date.now() > deadline) {
-        dev.kill("SIGTERM");
-        resolve(false);
-        return;
-      }
-      fetch("http://localhost:3000/", { redirect: "follow" })
-        .then((r) => {
-          if (r.ok) {
-            const smoke = spawnSync("pnpm", ["ui:smoke"], {
-              cwd: repoRoot,
-              shell: true,
-              stdio: "inherit",
-            });
-            dev.kill("SIGTERM");
-            resolve(smoke.status === 0);
-          } else {
-            setTimeout(poll, 2000);
-          }
-        })
-        .catch(() => setTimeout(poll, 2000));
-    };
-    setTimeout(poll, 4000);
-  });
+  return runCmd("dev smoke", "pnpm", ["dev:smoke"]);
 }
 
 function writeCheckpoint(runDir, text) {
@@ -222,6 +205,7 @@ function advanceSlot(item) {
 }
 
 function completeSlot(item, checkpointText) {
+  const queueSnapshot = readNowQueueSnapshot(workbench);
   const { runId } = advanceSlot(item);
   const runDir = path.join(workbench, "runs", runId);
   writeCheckpoint(runDir, checkpointText);
@@ -232,9 +216,8 @@ function completeSlot(item, checkpointText) {
     lastRunId: runId,
   });
 
-  const action = evaluateCompletedRun(workbench, runId);
-  const { now, backlog } = parseNowYaml(workbench);
-  const head = now[0];
+  const action = evaluateCompletedRun(workbench, runId, item.mission_id);
+  const head = queueSnapshot.now[0];
   if (head?.id !== runId) {
     throw new Error(`queue head mismatch: expected ${runId}, got ${head?.id}`);
   }
@@ -242,17 +225,34 @@ function completeSlot(item, checkpointText) {
   const runKind = readRunKind(workbench, runId);
   const ready =
     action.action === "dequeue" &&
-    (runKind !== "implement" || /STATUS:\s*COMPLETE/i.test(checkpointText));
+    (runKind !== "implement" || hasUniqueCompleteStatus(checkpointText));
 
   if (!ready) {
     throw new Error(`slot ${runId} not ready: action=${action.action}`);
   }
 
+  const terminalOrdinaryVerify =
+    runKind === "verify" &&
+    Boolean(head.mission_id) &&
+    ![...queueSnapshot.now.slice(1), ...queueSnapshot.backlog].some(
+      (queued) => queued.mission_id === head.mission_id,
+    );
+  const queueUpdate = terminalOrdinaryVerify
+    ? finalizeOrdinaryVerifyQueueHead(workbench, {
+        expectedQueueRevision: queueSnapshot.revision,
+        expectedHead: item,
+      })
+    : replaceQueueHeadConditional(workbench, {
+        expectedRevision: queueSnapshot.revision,
+        expectedHead: item,
+        replacement: [],
+      });
+  if (!queueUpdate.ok) {
+    throw new Error(`queue ${queueUpdate.reason} while completing ${runId}`);
+  }
   if (head.mission_id && head.phase_id && shouldMarkPhaseDone(runKind, checkpointText)) {
     markMissionPhaseDone(workbench, head.mission_id, head.phase_id);
   }
-
-  saveNowQueue(workbench, now.slice(1), backlog);
   mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
   log(`dequeued ${runId} (${runKind})`);
 }
@@ -472,17 +472,22 @@ async function slotVerify(item) {
 
 async function main() {
   if (!skipBootstrap) {
-    const backup = path.join(
-      workbench,
-      "queue",
-      `now.yaml.bak-pre-loop-${Date.now()}`,
-    );
-    copyFileSync(path.join(workbench, "queue/now.yaml"), backup);
-    log(`backed up queue → ${backup}`);
+    const backup = backupExistingQueue(workbench);
+    if (backup) log(`backed up queue → ${backup}`);
+    else log("queue absent — bootstrap will create it");
 
     const boot = spawnSync(
       "powershell",
-      ["-ExecutionPolicy", "Bypass", "-File", path.join(repoRoot, "scripts/bootstrap-smoke-loop.ps1")],
+      [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(repoRoot, "scripts/bootstrap-smoke-loop.ps1"),
+        "-Workbench",
+        workbench,
+        "-RepoRoot",
+        repoRoot,
+      ],
       { stdio: "inherit" },
     );
     if (boot.status !== 0) process.exit(boot.status ?? 1);
@@ -493,7 +498,25 @@ async function main() {
   }
   await loadOrchestrator();
 
-  let { now } = parseNowYaml(workbench);
+  const completionRecovery = recoverPendingVerifyCompletions(workbench);
+  if (completionRecovery.status === "busy") {
+    log("completion recovery busy — retry later");
+    process.exit(4);
+  }
+  if (completionRecovery.status === "blocked") {
+    throw new Error(completionRecovery.reason ?? "completion recovery blocked");
+  }
+  if (completionRecovery.status === "recovered") {
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+    log(
+      `recovered completion ${completionRecovery.recovered
+        .map((entry) => entry.terminalRunId)
+        .join(",")}`,
+    );
+    process.exit(0);
+  }
+
+  let { now } = readNowQueueSnapshot(workbench);
   if (now.length === 0) {
     log("queue empty — nothing to run");
     process.exit(1);
@@ -506,6 +529,9 @@ async function main() {
   log(`running ${now.length} slot(s): ${now.map((q) => q.id).join(" → ")}`);
 
   const missionId = now[0]?.mission_id ?? "juno-smoke-loop-2026";
+  const terminalVerify = [...now]
+    .reverse()
+    .find((item) => (item.run_kind ?? item.kind) === "verify" && item.mission_id === missionId);
 
   for (const item of [...now]) {
     const kind = item.run_kind ?? item.kind;
@@ -516,10 +542,19 @@ async function main() {
     else throw new Error(`unknown run kind: ${kind}`);
   }
 
-  ({ now } = parseNowYaml(workbench));
-  if (now.length !== 0) {
+  const remainingQueue = readNowQueueSnapshot(workbench);
+  ({ now } = remainingQueue);
+  if (now.length !== 0 || remainingQueue.backlog.some((item) => item.mission_id === missionId)) {
     log(`FAIL: queue not empty: ${now.map((q) => q.id).join(", ")}`);
     process.exit(1);
+  }
+  if (!terminalVerify) {
+    throw new Error(`Mission ${missionId} has no terminal verify run`);
+  }
+
+  const completionReceipt = readMissionCompletionReceipt(workbench, missionId);
+  if (!completionReceipt || completionReceipt.terminalRunId !== terminalVerify.id) {
+    throw new Error(`Mission ${missionId} terminal verify receipt was not committed`);
   }
 
   const missionCp = path.join(workbench, `missions/${missionId}/checkpoint.md`);

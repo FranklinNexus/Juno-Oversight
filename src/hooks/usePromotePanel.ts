@@ -27,7 +27,19 @@ export function usePromotePanel() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [promoteLog, setPromoteLog] = useState<string[]>([]);
 
-  const defaultRule = rules[0]?.id ?? "jinstone-devlog";
+  const ruleForPath = useCallback(
+    (relativePath: string) => {
+      const normalized = relativePath.replace(/\\/g, "/");
+      return rules.find((rule) => {
+        const prefix = rule.fromGlob.replace(/\\/g, "/").replace(/\/\*\*$/, "").replace(/\/$/, "");
+        return normalized === prefix || normalized.startsWith(`${prefix}/`);
+      });
+    },
+    [rules],
+  );
+  const defaultRule = selectedPath
+    ? (ruleForPath(selectedPath)?.id ?? "")
+    : (rules[0]?.id ?? "");
   const refresh = useCallback(() => setTick((n) => n + 1), []);
 
   useEffect(() => {
@@ -82,9 +94,15 @@ export function usePromotePanel() {
   const selectEntry = useCallback(
     (relativePath: string) => {
       setSelectedPath(relativePath);
-      void loadPreview(relativePath);
+      const rule = ruleForPath(relativePath);
+      if (!rule) {
+        setPreview(null);
+        setMessage(`没有 Promote rule 覆盖 ${relativePath}`);
+        return;
+      }
+      void loadPreview(relativePath, rule.id);
     },
-    [loadPreview],
+    [loadPreview, ruleForPath],
   );
 
   const promote = useCallback(
@@ -92,7 +110,13 @@ export function usePromotePanel() {
       setBusy(true);
       setMessage(null);
       try {
-        const result = await promoteToVault(ruleId, relativePath);
+        const rule = rules.find((candidate) => candidate.id === ruleId);
+        if (!rule) throw new Error(`Promote rule 不存在或不匹配：${ruleId || "(none)"}`);
+        const confirmed = window.confirm(
+          `确认 Promote 到 Vault？\n\n${relativePath}\n→ ${rule.toPath}`,
+        );
+        if (!confirmed) return;
+        const result = await promoteToVault(ruleId, relativePath, true);
         setMessage(result.message);
         const log = await readPromoteLog(30);
         setPromoteLog(log);
@@ -104,7 +128,7 @@ export function usePromotePanel() {
         setBusy(false);
       }
     },
-    [loadPreview, refresh],
+    [loadPreview, refresh, rules],
   );
 
   const showLoading = !tauriReady || loading;

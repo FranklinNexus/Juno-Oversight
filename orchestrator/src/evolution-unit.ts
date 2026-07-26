@@ -1,10 +1,20 @@
 /**
  * Von Neumann self-referential unit v0 — fitness, evolution log, mutation policy.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { todayAutonomyDate } from "./autonomy-day.js";
 import { DEFAULT_AUTONOMY_LIMITS } from "./autonomy-types.js";
+import { observeRunOutcome } from "./run-outcome.js";
+import type { RunKind } from "./types.js";
 
 export interface EvolutionWeights {
   bookQuality: number;
@@ -12,9 +22,16 @@ export interface EvolutionWeights {
   capUtilization: number;
   apiHealth: number;
   idlePenalty: number;
+  runSuccess: number;
+  verifyPass: number;
+  runFailure: number;
+  revisePenalty: number;
+  safetyBlock: number;
 }
 
 export interface EvolutionUnitConfig {
+  /** v2 removes activity-based rewards from fitness. */
+  schemaVersion?: 2;
   enabled?: boolean;
   weights?: Partial<EvolutionWeights>;
   /** Paths (relative to workbench or repo) that genotype mutation may touch without human */
@@ -32,6 +49,8 @@ export interface EvolutionUnitConfig {
     minDailyScores?: number;
     /** Trigger self-optimize on sustained decline */
     selfOptimizeOnDecline?: boolean;
+    /** Minimum time between repeated mutations for the same declining window. */
+    selfOptimizeCooldownHours?: number;
     /** Escalate when decline + API backoff together */
     escalateOnBackoffDecline?: boolean;
   };
@@ -48,6 +67,17 @@ export interface EvolutionFitnessComponents {
   iterationsToday: number;
   maxIterationsPerDay: number;
   apiInBackoff: boolean;
+  runSuccessTerm: number;
+  verifyPassTerm: number;
+  runFailureTerm: number;
+  reviseTerm: number;
+  safetyTerm: number;
+  completedRuns: number;
+  failedRuns: number;
+  verifyPasses: number;
+  verifyFailures: number;
+  revisions: number;
+  safetyBlocks: number;
 }
 
 export interface EvolutionFitnessSnapshot {
@@ -81,11 +111,18 @@ export interface EvolutionFeedback {
 
 const DEFAULT_WEIGHTS: EvolutionWeights = {
   bookQuality: 10,
-  hardening: 5,
-  capUtilization: 2,
+  hardening: 0,
+  capUtilization: 0,
   apiHealth: 20,
   idlePenalty: 3,
+  runSuccess: 25,
+  verifyPass: 20,
+  runFailure: 30,
+  revisePenalty: 10,
+  safetyBlock: 25,
 };
+
+const FITNESS_BASELINE = 50;
 
 const DEFAULT_DENYLIST = [
   "config/autonomy-charter.json",
@@ -147,8 +184,19 @@ const DEFAULT_PLANNER_FEEDBACK = {
   declineThresholdDays: 3,
   minDailyScores: 2,
   selfOptimizeOnDecline: true,
+  selfOptimizeCooldownHours: 24,
   escalateOnBackoffDecline: true,
 };
+
+function normalizeEvolutionWeights(weights?: Partial<EvolutionWeights>): EvolutionWeights {
+  return {
+    ...DEFAULT_WEIGHTS,
+    ...weights,
+    // These legacy dimensions reward activity/history rather than task outcomes.
+    hardening: 0,
+    capUtilization: 0,
+  };
+}
 
 export function readEvolutionLogEntries(workbench: string): EvolutionLogEntry[] {
   const p = logPath(workbench);
@@ -241,6 +289,22 @@ export function shouldSelfOptimizeForFitness(workbench: string): {
   if (feedback.trend !== "declining" || pf.selfOptimizeOnDecline === false) {
     return { yes: false, feedback };
   }
+
+  const cooldownMs = Math.max(0, pf.selfOptimizeCooldownHours ?? 24) * 60 * 60 * 1000;
+  const lastMutation = readEvolutionLogEntries(workbench)
+    .slice()
+    .reverse()
+    .find((entry) => entry.trigger === "self_optimize");
+  if (lastMutation && cooldownMs > 0) {
+    const elapsedMs = Date.now() - Date.parse(lastMutation.ts);
+    if (Number.isFinite(elapsedMs) && elapsedMs < cooldownMs) {
+      return {
+        yes: false,
+        feedback,
+        reason: `self-optimize cooldown active since ${lastMutation.ts}`,
+      };
+    }
+  }
   return {
     yes: true,
     feedback,
@@ -269,7 +333,7 @@ export function shouldEscalateForFitness(workbench: string): {
     return {
       yes: true,
       feedback,
-      detail: `fitness declining ${feedback.consecutiveDeclineDays}d + API backoff — check CURSOR_API_KEY / quota`,
+      detail: `fitness declining ${feedback.consecutiveDeclineDays}d + provider backoff — check provider health`,
     };
   }
   return { yes: false, feedback };
@@ -279,25 +343,69 @@ export function loadEvolutionConfig(workbench: string): EvolutionUnitConfig {
   const p = configPath(workbench);
   if (!existsSync(p)) {
     return {
+      schemaVersion: 2,
       enabled: true,
-      weights: DEFAULT_WEIGHTS,
+      weights: normalizeEvolutionWeights(),
       mutationAllowlist: DEFAULT_ALLOWLIST,
       mutationDenylist: DEFAULT_DENYLIST,
       plannerFeedback: { ...DEFAULT_PLANNER_FEEDBACK },
     };
   }
+  let raw: unknown;
   try {
-    const raw = JSON.parse(readFileSync(p, "utf8")) as EvolutionUnitConfig;
-    return {
-      enabled: raw.enabled !== false,
-      weights: { ...DEFAULT_WEIGHTS, ...raw.weights },
-      mutationAllowlist: raw.mutationAllowlist ?? DEFAULT_ALLOWLIST,
-      mutationDenylist: raw.mutationDenylist ?? DEFAULT_DENYLIST,
-      plannerFeedback: { ...DEFAULT_PLANNER_FEEDBACK, ...raw.plannerFeedback },
-    };
-  } catch {
-    return { enabled: true, weights: DEFAULT_WEIGHTS, plannerFeedback: { ...DEFAULT_PLANNER_FEEDBACK } };
+    raw = JSON.parse(readFileSync(p, "utf8"));
+  } catch (error) {
+    throw new Error(`Evolution config is unreadable; refusing self-mutation: ${p}`, {
+      cause: error,
+    });
   }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Evolution config must be a JSON object: ${p}`);
+  }
+  const config = raw as EvolutionUnitConfig;
+  const weightValues = Object.values(config.weights ?? {});
+  const feedback = config.plannerFeedback ?? {};
+  const feedbackIntegers = [
+    feedback.rollingDays,
+    feedback.declineThresholdDays,
+    feedback.minDailyScores,
+  ].filter((value) => value !== undefined);
+  const feedbackBooleans = [
+    feedback.enabled,
+    feedback.selfOptimizeOnDecline,
+    feedback.escalateOnBackoffDecline,
+  ].filter((value) => value !== undefined);
+  if (
+    (config.schemaVersion !== undefined && config.schemaVersion !== 2) ||
+    (config.enabled !== undefined && typeof config.enabled !== "boolean") ||
+    weightValues.some(
+      (value) => typeof value !== "number" || !Number.isFinite(value) || value < 0,
+    ) ||
+    (config.mutationAllowlist !== undefined &&
+      (!Array.isArray(config.mutationAllowlist) ||
+        config.mutationAllowlist.some((entry) => typeof entry !== "string" || !entry.trim()))) ||
+    (config.mutationDenylist !== undefined &&
+      (!Array.isArray(config.mutationDenylist) ||
+        config.mutationDenylist.some((entry) => typeof entry !== "string" || !entry.trim()))) ||
+    feedbackIntegers.some(
+      (value) => typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0,
+    ) ||
+    (feedback.selfOptimizeCooldownHours !== undefined &&
+      (typeof feedback.selfOptimizeCooldownHours !== "number" ||
+        !Number.isFinite(feedback.selfOptimizeCooldownHours) ||
+        feedback.selfOptimizeCooldownHours < 0)) ||
+    feedbackBooleans.some((value) => typeof value !== "boolean")
+  ) {
+    throw new Error(`Evolution config contains invalid control fields: ${p}`);
+  }
+  return {
+    schemaVersion: 2,
+    enabled: config.enabled !== false,
+    weights: normalizeEvolutionWeights(config.weights),
+    mutationAllowlist: config.mutationAllowlist ?? DEFAULT_ALLOWLIST,
+    mutationDenylist: config.mutationDenylist ?? DEFAULT_DENYLIST,
+    plannerFeedback: { ...DEFAULT_PLANNER_FEEDBACK, ...feedback },
+  };
 }
 
 function readQualityScanInline(workbench: string): { failedChapters: number[] } | null {
@@ -339,14 +447,85 @@ function readAutonomySnapshot(workbench: string): {
   }
 }
 
+export interface RunOutcomeMetrics {
+  completedRuns: number;
+  failedRuns: number;
+  verifyPasses: number;
+  verifyFailures: number;
+  revisions: number;
+  safetyBlocks: number;
+}
+
+/** Aggregate actual terminal run outcomes; newest runs are used to keep fitness responsive. */
+export function readRunOutcomeMetrics(workbench: string, maxRuns = 100): RunOutcomeMetrics {
+  const metrics: RunOutcomeMetrics = {
+    completedRuns: 0,
+    failedRuns: 0,
+    verifyPasses: 0,
+    verifyFailures: 0,
+    revisions: 0,
+    safetyBlocks: 0,
+  };
+  const runsDir = path.join(workbench, "runs");
+  if (!existsSync(runsDir)) return metrics;
+
+  const runs = readdirSync(runsDir)
+    .map((name) => path.join(runsDir, name))
+    .filter((runDir) => {
+      try {
+        return statSync(runDir).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+    .slice(0, maxRuns);
+
+  for (const runDir of runs) {
+    let runKind: RunKind = "implement";
+    try {
+      const manifest = JSON.parse(readFileSync(path.join(runDir, "manifest.json"), "utf8")) as {
+        runKind?: RunKind;
+      };
+      runKind = manifest.runKind ?? runKind;
+    } catch {
+      continue;
+    }
+
+    let lastStatus = "";
+    try {
+      const state = JSON.parse(readFileSync(path.join(runDir, "run-state.json"), "utf8")) as {
+        lastStatus?: string;
+      };
+      lastStatus = state.lastStatus ?? "";
+    } catch {
+      /* a checkpoint may still provide terminal evidence */
+    }
+
+    const checkpointPath = path.join(runDir, "checkpoint.md");
+    const checkpoint = existsSync(checkpointPath) ? readFileSync(checkpointPath, "utf8") : "";
+    const safetyPath = path.join(runDir, "safety-verify.md");
+    const safety = existsSync(safetyPath) ? readFileSync(safetyPath, "utf8") : "";
+    const outcome = observeRunOutcome(runKind, lastStatus, checkpoint, safety);
+    if (outcome.success) metrics.completedRuns += 1;
+    if (outcome.failure) metrics.failedRuns += 1;
+    if (outcome.verifyPass) metrics.verifyPasses += 1;
+    if (outcome.verifyFail) metrics.verifyFailures += 1;
+    if (outcome.revised) metrics.revisions += 1;
+    if (outcome.safetyBlocked) metrics.safetyBlocks += 1;
+  }
+
+  return metrics;
+}
+
 function apiInBackoff(workbench: string): boolean {
   const p = path.join(workbench, "state", "api-quota.json");
   if (!existsSync(p)) return false;
   try {
     const raw = JSON.parse(readFileSync(p, "utf8")) as {
-      providers?: { cursor?: { backoffUntil?: number } };
+      providers?: { openai?: { backoffUntil?: number } };
     };
-    const until = raw.providers?.cursor?.backoffUntil ?? 0;
+    const until = raw.providers?.openai?.backoffUntil ?? 0;
     return until > Date.now();
   } catch {
     return false;
@@ -367,6 +546,13 @@ export function computeEvolutionFitness(
   const capRatio = maxDay > 0 ? autonomy.iterationsToday / maxDay : 0;
   const backoff = apiInBackoff(workbench);
   const idleN = opts.idlePenaltyCount ?? 0;
+  const outcomes = readRunOutcomeMetrics(workbench);
+  const terminalRuns = outcomes.completedRuns + outcomes.failedRuns;
+  const verifyRuns = outcomes.verifyPasses + outcomes.verifyFailures;
+  const successRate = terminalRuns > 0 ? outcomes.completedRuns / terminalRuns : 0;
+  const failureRate = terminalRuns > 0 ? outcomes.failedRuns / terminalRuns : 0;
+  const verifyPassRate = verifyRuns > 0 ? outcomes.verifyPasses / verifyRuns : 0;
+  const reviseRate = terminalRuns > 0 ? outcomes.revisions / terminalRuns : 0;
 
   const components: EvolutionFitnessComponents = {
     bookQualityTerm: -w.bookQuality * failed,
@@ -379,19 +565,31 @@ export function computeEvolutionFitness(
     iterationsToday: autonomy.iterationsToday,
     maxIterationsPerDay: maxDay,
     apiInBackoff: backoff,
+    runSuccessTerm: w.runSuccess * successRate,
+    verifyPassTerm: w.verifyPass * verifyPassRate,
+    runFailureTerm: -w.runFailure * failureRate,
+    reviseTerm: -w.revisePenalty * reviseRate,
+    safetyTerm: -w.safetyBlock * Math.min(1, outcomes.safetyBlocks),
+    ...outcomes,
   };
 
   const score =
+    FITNESS_BASELINE +
     components.bookQualityTerm +
     components.hardeningTerm +
     components.capTerm +
     components.apiHealthTerm +
-    components.idlePenalty;
+    components.idlePenalty +
+    components.runSuccessTerm +
+    components.verifyPassTerm +
+    components.runFailureTerm +
+    components.reviseTerm +
+    components.safetyTerm;
 
   return {
     scoredAt: new Date().toISOString(),
     autonomyDate: todayAutonomyDate(workbench),
-    score: Math.round(score * 100) / 100,
+    score: Math.max(0, Math.min(100, Math.round(score * 100) / 100)),
     components,
     lastPlannerAction: autonomy.lastAction,
     lastMissionId: autonomy.lastMissionId,
@@ -418,22 +616,39 @@ export function appendEvolutionLog(
   entry: Omit<EvolutionLogEntry, "ts" | "autonomyDate" | "score"> & {
     score?: number;
     autonomyDate?: string;
+    previousScore?: number;
   },
 ): EvolutionLogEntry {
   const prev = readEvolutionFitness(workbench);
   const snap = prev ?? computeEvolutionFitness(workbench);
   const score = entry.score ?? snap.score;
+  const previousScore = entry.previousScore ?? prev?.score;
   const full: EvolutionLogEntry = {
     ts: new Date().toISOString(),
     autonomyDate: entry.autonomyDate ?? snap.autonomyDate,
     score,
-    delta: prev ? Math.round((score - prev.score) * 100) / 100 : undefined,
+    delta:
+      previousScore != null
+        ? Math.round((score - previousScore) * 100) / 100
+        : undefined,
     trigger: entry.trigger,
     action: entry.action,
     missionId: entry.missionId,
     note: entry.note,
   };
   mkdirSync(path.join(workbench, "state"), { recursive: true });
+  const latest = readEvolutionLogEntries(workbench).at(-1);
+  if (
+    latest &&
+    latest.autonomyDate === full.autonomyDate &&
+    latest.score === full.score &&
+    latest.trigger === full.trigger &&
+    latest.action === full.action &&
+    latest.missionId === full.missionId &&
+    latest.note === full.note
+  ) {
+    return latest;
+  }
   appendFileSync(logPath(workbench), `${JSON.stringify(full)}\n`, "utf8");
   return full;
 }
@@ -449,18 +664,20 @@ export function recordEvolutionTick(
     note?: string;
   },
 ): EvolutionFitnessSnapshot {
+  const previous = readEvolutionFitness(workbench);
   const snap = computeEvolutionFitness(workbench, {
     idlePenaltyCount: opts.idlePenaltyCount,
   });
-  writeEvolutionFitness(workbench, snap);
   appendEvolutionLog(workbench, {
     trigger: opts.trigger,
     action: opts.action,
     missionId: opts.missionId,
     score: snap.score,
     autonomyDate: snap.autonomyDate,
+    previousScore: previous?.score,
     note: opts.note,
   });
+  writeEvolutionFitness(workbench, snap);
   return snap;
 }
 
@@ -478,8 +695,6 @@ export function isMutationPathAllowed(
     const a = allow.toLowerCase().replace(/\\/g, "/");
     if (normalized.includes(a)) return true;
   }
-  if (repoRoot === "juno-overseer" && normalized.includes("orchestrator/src/")) {
-    return true;
-  }
+  void repoRoot;
   return false;
 }

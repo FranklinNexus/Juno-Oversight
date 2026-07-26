@@ -1,10 +1,11 @@
 @import "tailwindcss";
 @import "react-grid-layout/css/styles.css";
-@import "react-grid-layout/css/styles.css";
 
 /* Night — default institutional terminal */
 :root,
 [data-hud-theme="night"] {
+  --font-ui: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, ui-monospace, monospace;
   --bg-base: #0b0c0e;
   --bg-panel: #111318;
   --bg-elevated: #161a22;
@@ -119,6 +120,9 @@ body {
 
 .layout-canvas {
   background: var(--canvas-bg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .layout-canvas .react-grid-layout {
@@ -184,4 +188,92 @@ body.hud-grid-interacting .panel-chrome.panel-drag-handle {
   background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
   border: 1px dashed var(--accent-gold);
   opacity: 1;
+}
+
+.incident-recovery-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 42%) minmax(0, 1fr);
+}
+
+.operator-recovery-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgb(0 0 0 / 68%);
+}
+
+.operator-recovery-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  border: 1px solid var(--status-warn);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+@media (max-width: 719px) {
+  .global-control-header {
+    display: grid;
+    grid-template-areas:
+      "primary primary"
+      "connection metrics";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
+    gap: 4px 8px;
+    min-height: 72px;
+    padding: 4px 6px;
+  }
+
+  .global-control-header__primary {
+    grid-area: primary;
+    width: 100%;
+  }
+
+  .global-control-header__mode {
+    flex: 1 1 auto;
+  }
+
+  .global-control-header__connection {
+    grid-area: connection;
+    min-width: 0;
+  }
+
+  .global-control-header__metrics {
+    grid-area: metrics;
+    justify-self: end;
+  }
+
+  .global-control-header__layout-tools,
+  .global-control-header__ram-total,
+  .global-control-header__scale,
+  .global-control-header__source {
+    display: none;
+  }
+
+  .incident-recovery-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(112px, 38%) minmax(0, 1fr);
+  }
+
+  .incident-recovery-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-dim);
+  }
+
+  .layout-canvas--stacked .react-grid-item {
+    transition: none;
+  }
+
+  .layout-canvas--stacked .react-resizable-handle,
+  .layout-canvas--stacked .panel-size-controls > button:not(:last-child) {
+    display: none;
+  }
+
+  .layout-canvas--stacked .panel-chrome {
+    cursor: default;
+  }
 }

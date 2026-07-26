@@ -10,8 +10,15 @@ import {
   scanBookQuality,
   type BookQualityScan,
 } from "./quality-gate.js";
-import { listSearchableWorkflows, selectBestWorkflow } from "./workflow-search.js";
+import {
+  listSearchableWorkflows,
+  readActiveWorkflowSelection,
+  scoreWorkflow,
+  workflowSignalsFromRuns,
+} from "./workflow-search.js";
 import { recordEvolutionTick, isMutationPathAllowed } from "./evolution-unit.js";
+import { proposeWorkflowExperiment } from "./workflow-experiment.js";
+import { loadWorkflow } from "./workflow.js";
 
 export interface SelfOptimizeConfig {
   enabled?: boolean;
@@ -22,8 +29,18 @@ export interface SelfOptimizeConfig {
 
 export interface SelfOptimizeReport {
   ranAt: string;
+  autoQueueBookRevise: boolean;
   qualityScan?: BookQualityScan;
-  workflowSelection?: { workflowId: string; score: number; reasons: string[] };
+  workflowSelection?: {
+    workflowId: string;
+    baselineWorkflowId: string;
+    score: number;
+    reasons: string[];
+    evidenceRuns: number;
+    active: boolean;
+    experimentId?: string;
+    experimentStatus?: "proposed";
+  };
   rubricPatched: boolean;
   mcpHintsWritten: boolean;
   recommendedActions: string[];
@@ -46,29 +63,49 @@ export function loadSelfOptimizeConfig(workbench: string): SelfOptimizeConfig {
   if (!existsSync(p)) {
     return { enabled: true, autoQueueBookRevise: true, strictChapterLength: false };
   }
+  let raw: unknown;
   try {
-    return JSON.parse(readFileSync(p, "utf8")) as SelfOptimizeConfig;
-  } catch {
-    return { enabled: true, autoQueueBookRevise: true, strictChapterLength: false };
+    raw = JSON.parse(readFileSync(p, "utf8"));
+  } catch (error) {
+    throw new Error(`Self-optimize config is unreadable; refusing mutation: ${p}`, {
+      cause: error,
+    });
   }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Self-optimize config must be a JSON object: ${p}`);
+  }
+  const config = raw as SelfOptimizeConfig;
+  if (
+    (config.enabled !== undefined && typeof config.enabled !== "boolean") ||
+    (config.autoQueueBookRevise !== undefined &&
+      typeof config.autoQueueBookRevise !== "boolean") ||
+    (config.strictChapterLength !== undefined &&
+      typeof config.strictChapterLength !== "boolean") ||
+    (config.preferredBookWorkflow !== undefined &&
+      (typeof config.preferredBookWorkflow !== "string" ||
+        !config.preferredBookWorkflow.trim()))
+  ) {
+    throw new Error(`Self-optimize config contains invalid control fields: ${p}`);
+  }
+  return config;
 }
 
 export const BOOK_QUALITY_MISSION_ID = "juno-book-quality-2026";
 
-function bookQualityCheckpointComplete(workbench: string): boolean {
+function bookQualityMaintenancePassed(workbench: string): boolean {
   const cp = path.join(workbench, "missions", BOOK_QUALITY_MISSION_ID, "checkpoint.md");
   if (!existsSync(cp)) return false;
-  return /STATUS:\s*COMPLETE/i.test(readFileSync(cp, "utf8"));
+  return /^STATUS:\s*MAINTENANCE_PASS\s*$/m.test(readFileSync(cp, "utf8"));
 }
 
-/** Mark book-quality mission COMPLETE when programmatic scan has zero failures. */
+/** Record maintenance health without pretending that a terminal verify receipt exists. */
 export function syncBookQualityMissionComplete(workbench: string): boolean {
   const scan = readQualityScan(workbench);
   if (!scan || scan.failedChapters.length > 0) return false;
 
   const missionDir = path.join(workbench, "missions", BOOK_QUALITY_MISSION_ID);
   if (!existsSync(missionDir)) return false;
-  if (bookQualityCheckpointComplete(workbench)) return true;
+  if (bookQualityMaintenancePassed(workbench)) return true;
 
   const progressPath = path.join(missionDir, "progress.md");
   if (existsSync(progressPath)) {
@@ -81,10 +118,10 @@ export function syncBookQualityMissionComplete(workbench: string): boolean {
     path.join(missionDir, "checkpoint.md"),
     `# Checkpoint — ${BOOK_QUALITY_MISSION_ID}
 
-STATUS: COMPLETE
+STATUS: MAINTENANCE_PASS
 
 ## 状态
-Programmatic quality scan PASS — all chapters ok (${scan.scannedAt})
+Programmatic quality maintenance scan PASS — all chapters ok (${scan.scannedAt})
 
 `,
     "utf8",
@@ -137,9 +174,11 @@ function patchQualityRubric(workbench: string, scan: BookQualityScan): boolean {
 
 export function runSelfOptimize(workbench: string): SelfOptimizeReport {
   const cfg = loadSelfOptimizeConfig(workbench);
+  const autoQueueBookRevise = cfg.autoQueueBookRevise ?? true;
   if (cfg.enabled === false) {
     return {
       ranAt: new Date().toISOString(),
+      autoQueueBookRevise,
       rubricPatched: false,
       mcpHintsWritten: false,
       recommendedActions: ["self-optimize disabled in config"],
@@ -148,6 +187,74 @@ export function runSelfOptimize(workbench: string): SelfOptimizeReport {
   const recommendedActions: string[] = [];
   let qualityScan: BookQualityScan | undefined;
   let rubricPatched = false;
+
+  // Validate the active selection before this tick writes any durable state.
+  const activeWorkflowId = readActiveWorkflowSelection(workbench, BOOK_MISSION_ID);
+  const workflowIds = listSearchableWorkflows();
+  if (cfg.preferredBookWorkflow && !workflowIds.includes(cfg.preferredBookWorkflow)) {
+    throw new Error(`Preferred workflow does not exist: ${cfg.preferredBookWorkflow}`);
+  }
+  const baselineWorkflowId =
+    activeWorkflowId ?? (workflowIds.includes("axiom-book") ? "axiom-book" : "default");
+  const baselineProfile = loadWorkflow(baselineWorkflowId).evalProfile;
+  const eligibleWorkflowIds = workflowIds.filter(
+    (workflowId) => loadWorkflow(workflowId).evalProfile === baselineProfile,
+  );
+  const bookCandidates = eligibleWorkflowIds.filter(
+    (id) => id.includes("axiom") || id.includes("debate") || id === "default",
+  );
+  const pool = bookCandidates.length ? bookCandidates : eligibleWorkflowIds;
+  const scored = pool
+    .map((workflowId) => {
+      const signals = workflowSignalsFromRuns(workbench, workflowId);
+      return { ...scoreWorkflow(workflowId, signals), signals };
+    })
+    .sort((a, b) => b.score - a.score);
+  const preferredIsEligible = cfg.preferredBookWorkflow === undefined ||
+    eligibleWorkflowIds.includes(cfg.preferredBookWorkflow);
+  const selectedId =
+    (preferredIsEligible ? cfg.preferredBookWorkflow : undefined) ??
+    scored.find((candidate) => candidate.workflowId !== baselineWorkflowId)?.workflowId ??
+    baselineWorkflowId;
+  const selectedSignals = workflowSignalsFromRuns(workbench, selectedId);
+  const selectedScore = scoreWorkflow(selectedId, selectedSignals);
+  const evidenceRuns = selectedSignals.sampleSize ?? 0;
+  const workflowSelection = {
+    workflowId: selectedId,
+    baselineWorkflowId,
+    score: selectedScore.score,
+    reasons: selectedScore.reasons,
+    evidenceRuns,
+    active: false,
+    experimentId: undefined as string | undefined,
+    experimentStatus: undefined as "proposed" | undefined,
+  };
+  if (!preferredIsEligible && cfg.preferredBookWorkflow) {
+    recommendedActions.push(
+      `workflow: preferred ${cfg.preferredBookWorkflow} uses a different eval profile; keep ${baselineWorkflowId}`,
+    );
+    workflowSelection.workflowId = baselineWorkflowId;
+    const baselineSignals = workflowSignalsFromRuns(workbench, baselineWorkflowId);
+    const baselineScore = scoreWorkflow(baselineWorkflowId, baselineSignals);
+    workflowSelection.score = baselineScore.score;
+    workflowSelection.reasons = baselineScore.reasons;
+    workflowSelection.evidenceRuns = baselineSignals.sampleSize ?? 0;
+  } else if (selectedId !== baselineWorkflowId) {
+    const proposal = proposeWorkflowExperiment(workbench, {
+      targetMissionId: BOOK_MISSION_ID,
+      baselineWorkflowId,
+      candidateWorkflowId: selectedId,
+      sourcePhaseId: "book-workflow-canary",
+      requiredEpisodes: 2,
+    });
+    workflowSelection.experimentId = proposal.experimentId;
+    workflowSelection.experimentStatus = "proposed";
+    recommendedActions.push(
+      `workflow: proposed ${selectedId} against ${baselineWorkflowId}; explicit canary required before activation (${proposal.experimentId})`,
+    );
+  } else {
+    recommendedActions.push(`workflow: no distinct candidate available; keep ${baselineWorkflowId}`);
+  }
 
   const bookDir = path.join(workbench, "missions", BOOK_MISSION_ID);
   if (existsSync(bookDir)) {
@@ -174,37 +281,17 @@ export function runSelfOptimize(workbench: string): SelfOptimizeReport {
     }
   }
 
-  const workflowIds = listSearchableWorkflows();
-  const bookCandidates = workflowIds.filter(
-    (id) => id.includes("axiom") || id.includes("debate") || id === "default",
-  );
-  const pool = bookCandidates.length ? bookCandidates : workflowIds;
-  const best = selectBestWorkflow(pool, { verifyPass: true, testsPass: true });
-  const workflowSelection = {
-    workflowId: cfg.preferredBookWorkflow ?? best.workflowId,
-    score: best.score,
-    reasons: best.reasons,
-  };
-  const workflowStatePath = path.join(workbench, "state", "workflow-selection.json");
-  if (isMutationPathAllowed(workbench, workflowStatePath)) {
-    writeFileSync(
-      workflowStatePath,
-      `${JSON.stringify({ ...workflowSelection, updatedAt: new Date().toISOString() }, null, 2)}\n`,
-      "utf8",
-    );
-    recommendedActions.push(`workflow: use ${workflowSelection.workflowId} for next book mission`);
-  }
-
   const mcpHintsPath = path.join(workbench, "state", "mcp-hints.json");
   let mcpHintsWritten = false;
   if (isMutationPathAllowed(workbench, mcpHintsPath)) {
-    writeMcpHints(workbench, { missionId: BOOK_MISSION_ID, repoRoot: "juno-overseer", provider: "cursor_composer" });
+    writeMcpHints(workbench, { missionId: BOOK_MISSION_ID, repoRoot: "juno-overseer", provider: "openai_codex" });
     mcpHintsWritten = true;
     recommendedActions.push("mcp: refreshed state/mcp-hints.json from config/mcp-servers.json");
   }
 
   const report: SelfOptimizeReport = {
     ranAt: new Date().toISOString(),
+    autoQueueBookRevise,
     qualityScan,
     workflowSelection,
     rubricPatched,

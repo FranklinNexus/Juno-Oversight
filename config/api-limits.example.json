@@ -1,15 +1,5 @@
 {
   "providers": {
-    "cursor": {
-      "minIntervalMs": 8000,
-      "maxRpm": 8,
-      "maxRph": 100,
-      "maxRpd": 400,
-      "maxConcurrent": 1,
-      "tokenBudgetDaily": 2500000,
-      "backoffBaseMs": 15000,
-      "backoffMaxMs": 600000
-    },
     "openai": {
       "minIntervalMs": 1000,
       "maxRpm": 60,

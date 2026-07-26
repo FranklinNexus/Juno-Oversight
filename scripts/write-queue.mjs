@@ -1,73 +1,111 @@
 #!/usr/bin/env node
-/** Write AgentWorkbench queue/now.yaml from JSON (avoids PowerShell YAML quoting bugs). */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+/** Strict CAS writer for AgentWorkbench queue/now.yaml bootstrap candidates. */
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  loadStrictQueueIo,
+  replaceQueueSnapshotWithIo,
+} from "./lib/queue-bootstrap.mjs";
 
-function yamlQuote(value) {
-  if (value == null || value === "") return '""';
-  const s = String(value);
-  if (/^[a-zA-Z0-9_./+-]+$/.test(s)) return s;
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+function optionValue(args, name) {
+  const indexes = args.flatMap((value, index) => (value === name ? [index] : []));
+  if (indexes.length > 1) throw new Error(`duplicate ${name}`);
+  if (indexes.length === 0) return null;
+  const value = args[indexes[0] + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+  return value;
 }
 
-function formatItem(item, indent = "  ") {
-  const lines = [`${indent}- id: ${yamlQuote(item.id)}`];
-  const fields = [
-    "horizon",
-    "kind",
-    "run_kind",
-    "repo_target",
-    "mission_id",
-    "phase_id",
-    "prompt",
-    "provider",
-    "max_minutes",
-    "success_criteria",
-  ];
-  for (const key of fields) {
-    if (item[key] == null) continue;
-    if (key === "max_minutes") {
-      lines.push(`${indent}  ${key}: ${Number(item[key])}`);
-    } else {
-      lines.push(`${indent}  ${key}: ${yamlQuote(item[key])}`);
+function parseArgs(args) {
+  const flagsWithValues = new Set(["--json", "--yaml", "--out", "--backup-prefix"]);
+  const flags = new Set(["--if-missing"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (flagsWithValues.has(arg)) {
+      index += 1;
+      if (index >= args.length || args[index].startsWith("--")) {
+        throw new Error(`${arg} requires a value`);
+      }
+    } else if (!flags.has(arg)) {
+      throw new Error(`unknown argument: ${arg}`);
     }
   }
-  return `${lines.join("\n")}\n`;
-}
 
-function writeQueue(outPath, payload) {
-  const { updated, now = [], backlog = [] } = payload;
-  let yaml = `updated: ${yamlQuote(updated ?? new Date().toISOString())}\nnow:\n`;
-  for (const item of now) {
-    yaml += formatItem(item);
+  const jsonPath = optionValue(args, "--json");
+  const yamlPath = optionValue(args, "--yaml");
+  if (Boolean(jsonPath) === Boolean(yamlPath)) {
+    throw new Error("exactly one of --json or --yaml is required");
   }
-  yaml += "backlog:\n";
-  if (backlog.length === 0) {
-    yaml += "  []\n";
-  } else {
-    for (const item of backlog) {
-      yaml += formatItem(item);
-    }
+  return {
+    jsonPath,
+    yamlPath,
+    outPath: path.resolve(
+      optionValue(args, "--out") ?? path.join("E:", "AgentWorkbench", "queue", "now.yaml"),
+    ),
+    backupPrefix: optionValue(args, "--backup-prefix"),
+    onlyIfMissing: args.includes("--if-missing"),
+  };
+}
+
+function workbenchForQueuePath(outPath) {
+  const queueDir = path.dirname(outPath);
+  if (
+    path.basename(outPath).toLowerCase() !== "now.yaml" ||
+    path.basename(queueDir).toLowerCase() !== "queue"
+  ) {
+    throw new Error("--out must be <workbench>/queue/now.yaml");
   }
-  mkdirSync(path.dirname(outPath), { recursive: true });
-  writeFileSync(outPath, yaml, "utf8");
+  return path.dirname(queueDir);
 }
 
-const args = process.argv.slice(2);
-const outIdx = args.indexOf("--out");
-const jsonIdx = args.indexOf("--json");
-const outPath =
-  outIdx >= 0 ? args[outIdx + 1] : path.join("E:", "AgentWorkbench", "queue", "now.yaml");
-const jsonPath = jsonIdx >= 0 ? args[jsonIdx + 1] : null;
-
-if (!jsonPath) {
-  console.error("Usage: node write-queue.mjs --json queue.json [--out path/to/now.yaml]");
-  process.exit(1);
+function parseJsonCandidate(raw, source) {
+  const payload = JSON.parse(raw.replace(/^\uFEFF/, ""));
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error(`${source} must contain a JSON object`);
+  }
+  const unknown = Object.keys(payload).filter(
+    (key) => !["updated", "now", "backlog"].includes(key),
+  );
+  if (unknown.length > 0) throw new Error(`${source} has unknown fields: ${unknown.join(", ")}`);
+  if (!Array.isArray(payload.now) || !Array.isArray(payload.backlog)) {
+    throw new Error(`${source} must contain now and backlog arrays`);
+  }
+  return { now: payload.now, backlog: payload.backlog };
 }
 
-const raw = readFileSync(jsonPath, "utf8").replace(/^\uFEFF/, "");
-const payload = JSON.parse(raw);
-writeQueue(outPath, payload);
-console.error(
-  `[juno] wrote ${outPath} (${payload.now?.length ?? 0} now, ${payload.backlog?.length ?? 0} backlog)`,
-);
+export async function runWriteQueue(args = process.argv.slice(2)) {
+  const options = parseArgs(args);
+  const queueIo = await loadStrictQueueIo();
+  const source = options.jsonPath ?? options.yamlPath;
+  const raw = readFileSync(source, "utf8");
+  const candidate = options.jsonPath
+    ? parseJsonCandidate(raw, source)
+    : queueIo.parseQueueDocument(raw.replace(/^\uFEFF/, ""), source);
+  const workbench = workbenchForQueuePath(options.outPath);
+  const result = replaceQueueSnapshotWithIo(queueIo, {
+    workbench,
+    ...candidate,
+    backupPrefix: options.backupPrefix,
+    onlyIfMissing: options.onlyIfMissing,
+  });
+  if (!result.changed) {
+    process.stderr.write(`[juno] kept existing queue ${options.outPath} (${result.reason})\n`);
+    return result;
+  }
+  process.stderr.write(
+    `[juno] replaced ${options.outPath} (${candidate.now.length} now, ${candidate.backlog.length} backlog)` +
+      `${result.backupPath ? `; backup: ${result.backupPath}` : ""}\n`,
+  );
+  return result;
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) {
+  try {
+    await runWriteQueue();
+  } catch (error) {
+    process.stderr.write(`[juno] queue write blocked: ${error.message}\n`);
+    process.exitCode = 1;
+  }
+}

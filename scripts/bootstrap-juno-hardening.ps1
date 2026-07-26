@@ -1,8 +1,14 @@
 # Bootstrap long-running "Juno Overseer hardening" mission (~5h of 25min slots).
 param(
   [string]$Workbench = "E:\AgentWorkbench",
-  [string]$RepoRoot = "C:\Users\kfr34\Desktop\Entrepreneurship\Juno Oversight"
+  [string]$RepoRoot = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
+
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
 
 $missionId = "juno-overseer-hardening-2026"
 $missionDir = Join-Path $Workbench "missions/$missionId"
@@ -145,7 +151,7 @@ now:
     mission_id: $missionId
     phase_id: h00-audit
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT + gap 分析；列出 6 条 must_fix 优先级"
   - id: juno-h01-quality-doc
@@ -156,7 +162,7 @@ now:
     mission_id: $missionId
     phase_id: h01-quality-doc
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "wiki/overseer-quality 与 prompts 一致；checkpoint 有变更列表"
   - id: juno-h02-review-quality
@@ -167,7 +173,7 @@ now:
     mission_id: $missionId
     phase_id: h02-review-quality
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on quality doc"
   - id: juno-h03-idempotency
@@ -178,7 +184,7 @@ now:
     mission_id: $missionId
     phase_id: h03-idempotency
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "spawn 幂等：同 activeRun 不重复；lastRunId 去重"
   - id: juno-h04-review-idempotency
@@ -189,7 +195,7 @@ now:
     mission_id: $missionId
     phase_id: h04-review-idempotency
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on idempotency"
   - id: juno-h05-review-loop-code
@@ -200,7 +206,7 @@ now:
     mission_id: $missionId
     phase_id: h05-review-loop-code
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "manifest 含 runKind/repoRoot；prompt 注入 scope-lock+events tail"
   - id: juno-h06-review-loop-gate
@@ -211,7 +217,7 @@ now:
     mission_id: $missionId
     phase_id: h06-review-loop-gate
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on review loop"
   - id: juno-h07-promote-preview
@@ -222,7 +228,7 @@ now:
     mission_id: $missionId
     phase_id: h07-promote-preview
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "Promote 干跑或 diff 摘要 Tauri command"
   - id: juno-h08-review-promote
@@ -233,7 +239,7 @@ now:
     mission_id: $missionId
     phase_id: h08-review-promote
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "REVIEW_VERDICT PASS on promote safety"
   - id: juno-h09-verify-all
@@ -244,7 +250,7 @@ now:
     mission_id: $missionId
     phase_id: h09-verify-all
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "VERIFY_REPORT all green"
   - id: juno-h10-drift-audit
@@ -255,7 +261,7 @@ now:
     mission_id: $missionId
     phase_id: h10-drift-audit
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "drift=none；scope_violations 为空"
   - id: juno-h11-final
@@ -266,13 +272,13 @@ now:
     mission_id: $missionId
     phase_id: h11-final
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     max_minutes: 25
     success_criteria: "STATUS: COMPLETE in checkpoint if all PASS"
 backlog: []
 "@
 
-Set-Content -Path (Join-Path $Workbench "queue/now.yaml") -Value $nowYaml -Encoding utf8NoBOM
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $nowYaml -BackupPrefix "bak-pre-hardening"
 
 $scheduler = @"
 {

@@ -1,12 +1,12 @@
 /**
- * Workbench MCP registry — merged into spawn prompts; hooks enforce vault gate.
+ * Workbench MCP registry — scoped capability hints merged into spawn prompts.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface McpServerEntry {
   id: string;
-  /** Cursor MCP server name or descriptor */
+  /** MCP server name or descriptor. */
   server?: string;
   enabled?: boolean;
   /** When true, only attach for juno-overseer repo runs (dev branch) */
@@ -18,7 +18,9 @@ export interface McpServerEntry {
 
 export interface McpConfig {
   servers: McpServerEntry[];
-  /** Default enabled server ids for cursor_composer live slots */
+  /** Default server ids suggested to live agent slots. */
+  defaultForAgents?: string[];
+  /** Deprecated config key retained only for Workbench migration. */
   defaultForComposer?: string[];
 }
 
@@ -38,12 +40,15 @@ function hintsPath(workbench: string): string {
 
 export function loadMcpConfig(workbench: string): McpConfig {
   const p = configPath(workbench);
-  if (!existsSync(p)) return { servers: [], defaultForComposer: [] };
+  if (!existsSync(p)) return { servers: [], defaultForAgents: [] };
   try {
     const raw = JSON.parse(readFileSync(p, "utf8")) as Partial<McpConfig>;
-    return { servers: raw.servers ?? [], defaultForComposer: raw.defaultForComposer ?? [] };
+    return {
+      servers: raw.servers ?? [],
+      defaultForAgents: raw.defaultForAgents ?? raw.defaultForComposer ?? [],
+    };
   } catch {
-    return { servers: [], defaultForComposer: [] };
+    return { servers: [], defaultForAgents: [] };
   }
 }
 
@@ -52,13 +57,13 @@ export function resolveMcpForRun(
   opts: { missionId?: string; repoRoot?: string; provider?: string },
 ): McpServerEntry[] {
   const cfg = loadMcpConfig(workbench);
-  const defaults = new Set(cfg.defaultForComposer ?? []);
+  const defaults = new Set(cfg.defaultForAgents ?? []);
   const isDevRepo = opts.repoRoot === "juno-overseer";
 
   return cfg.servers.filter((s) => {
     if (s.enabled === false) return false;
     if (s.devOnly && !isDevRepo) return false;
-    if (s.missions?.length && opts.missionId && !s.missions.includes(opts.missionId)) {
+    if (s.missions?.length && (!opts.missionId || !s.missions.includes(opts.missionId))) {
       return false;
     }
     if (defaults.has(s.id)) return true;
@@ -68,17 +73,17 @@ export function resolveMcpForRun(
 
 export function buildMcpPromptBlock(servers: McpServerEntry[]): string {
   if (servers.length === 0) {
-    return "（未配置 MCP — 仅使用 Cursor 内置工具与项目 hooks）";
+    return "（Workbench 未提供 MCP capability hint；只使用当前 Codex 会话真实暴露的工具。）";
   }
   const lines = servers.map(
     (s) =>
       `- **${s.id}**${s.server ? ` → \`${s.server}\`` : ""}${s.notes ? ` — ${s.notes}` : ""}`,
   );
   return [
-    "以下 MCP 已在 Workbench 注册（dev 版自动挂载；Obsidian Vault 仍被 hook 拦截）：",
+    "Workbench 建议以下 MCP；仅在当前 Codex 会话确实暴露同名 server 时使用：",
     ...lines,
     "",
-    "优先用 MCP 做可验证操作（测试、API、文档查询），勿绕过 scope-lock。",
+    "不得假定 hint 等于已挂载能力；所有操作仍受 sandbox、scope-lock 与 safety verify 约束。",
   ].join("\n");
 }
 

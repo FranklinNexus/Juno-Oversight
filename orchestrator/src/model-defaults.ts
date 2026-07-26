@@ -3,17 +3,18 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import type { AgentProvider } from "./types.js";
 
 export interface ModelDefaultsConfig {
-  /** Primary model for cursor_composer slots */
-  cursorComposerDefault?: string;
-  /** Try in order on retry or after primary fails at spawn layer */
-  cursorComposerFallback?: string[];
+  /** Provider used when a queue item does not specify one. */
+  defaultProvider?: AgentProvider;
+  /** Explicit migration/routing map for legacy queue providers. */
+  providerAliases?: Partial<Record<AgentProvider, AgentProvider>>;
 }
 
 export const DEFAULT_MODEL_DEFAULTS: ModelDefaultsConfig = {
-  cursorComposerDefault: "auto",
-  cursorComposerFallback: ["auto", "composer-2.5", "composer-2"],
+  defaultProvider: "openai_codex",
+  providerAliases: { cursor_composer: "openai_codex" },
 };
 
 function configPath(workbench: string): string {
@@ -26,26 +27,49 @@ export function loadModelDefaults(workbench: string): ModelDefaultsConfig {
   try {
     const raw = JSON.parse(readFileSync(p, "utf8")) as ModelDefaultsConfig;
     return {
-      cursorComposerDefault: raw.cursorComposerDefault ?? DEFAULT_MODEL_DEFAULTS.cursorComposerDefault,
-      cursorComposerFallback: raw.cursorComposerFallback?.length
-        ? raw.cursorComposerFallback
-        : DEFAULT_MODEL_DEFAULTS.cursorComposerFallback,
+      defaultProvider: raw.defaultProvider ?? DEFAULT_MODEL_DEFAULTS.defaultProvider,
+      providerAliases: {
+        ...DEFAULT_MODEL_DEFAULTS.providerAliases,
+        ...raw.providerAliases,
+      },
     };
   } catch {
     return { ...DEFAULT_MODEL_DEFAULTS };
   }
 }
 
-export function resolveComposerModel(workbench: string, override?: string): string {
-  if (override?.trim()) return override.trim();
-  return loadModelDefaults(workbench).cursorComposerDefault ?? "auto";
+function validProvider(value: unknown): value is AgentProvider {
+  return value === "cursor_composer" || value === "openai_codex" || value === "api_token";
 }
 
-export function composerFallbackChain(workbench: string): string[] {
-  const cfg = loadModelDefaults(workbench);
-  const chain = [
-    cfg.cursorComposerDefault ?? "auto",
-    ...(cfg.cursorComposerFallback ?? DEFAULT_MODEL_DEFAULTS.cursorComposerFallback!),
-  ];
-  return [...new Set(chain.filter(Boolean))];
+export function resolveAgentProvider(
+  workbench: string,
+  requested?: AgentProvider,
+): AgentProvider {
+  const config = loadModelDefaults(workbench);
+  const fallback = config.defaultProvider;
+  const selected = validProvider(requested)
+    ? requested
+    : validProvider(fallback) && fallback !== "api_token"
+      ? fallback
+      : "openai_codex";
+  const aliased = config.providerAliases?.[selected];
+  if (validProvider(aliased) && aliased !== "cursor_composer") return aliased;
+  if (selected === "cursor_composer") return "openai_codex";
+  return selected;
+}
+
+export function resolveAgentModel(
+  provider: AgentProvider,
+  requested?: string,
+): string | undefined {
+  const model = requested?.trim();
+  if (!model) return undefined;
+  if (
+    provider === "openai_codex" &&
+    (model.toLowerCase() === "auto" || /^composer(?:-|$)/i.test(model))
+  ) {
+    return undefined;
+  }
+  return model;
 }

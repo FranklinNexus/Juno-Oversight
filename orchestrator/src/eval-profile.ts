@@ -11,12 +11,12 @@ const PROFILES: Record<EvalProfile, VerifyStep[]> = {
   code: [
     { label: "pnpm test", cmd: "pnpm", args: ["test"] },
     { label: "check-orchestrator-deps", cmd: "node", args: ["scripts/check-orchestrator-deps.mjs"] },
-    { label: "ui_smoke", cmd: "pnpm", args: ["ui:smoke"], optional: true },
+    { label: "dev_smoke", cmd: "pnpm", args: ["dev:smoke"], optional: true },
   ],
   ui: [
     { label: "pnpm test", cmd: "pnpm", args: ["test"] },
     { label: "check-orchestrator-deps", cmd: "node", args: ["scripts/check-orchestrator-deps.mjs"] },
-    { label: "ui_smoke", cmd: "pnpm", args: ["ui:smoke"] },
+    { label: "dev_smoke", cmd: "pnpm", args: ["dev:smoke"] },
   ],
   literature: [
     { label: "pnpm test", cmd: "pnpm", args: ["test"] },

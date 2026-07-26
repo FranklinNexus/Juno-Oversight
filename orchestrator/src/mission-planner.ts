@@ -6,11 +6,14 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 
 import path from "node:path";
 import type { AutonomyDecision, AutonomyLimits, AutonomyState } from "./autonomy-types.js";
 import { DEFAULT_AUTONOMY_LIMITS } from "./autonomy-types.js";
+import { junoProjectRoot } from "./env.js";
 import { evaluateLoopGate } from "./loop-gate.js";
-import { parseNowYaml, saveNowQueue } from "./queue-io.js";
+import { readNowQueueSnapshot, replaceQueueSnapshotConditional } from "./queue-io.js";
 import type { QueueItem } from "./types.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
+import { readMissionCompletionReceipt } from "./mission-completion.js";
+import { resolveMissionDirectory } from "./workbench-paths.js";
 
 export type LoopKind =
   | "local_loop"
@@ -42,6 +45,17 @@ export interface AutonomyCharter {
   forbiddenMissionIds?: string[];
   missionOverrides?: Record<string, Partial<Pick<MissionSpec, "priority" | "autoQueue">>>;
 }
+
+export const PLANNER_ARBITRATION_POLICY = [
+  "charter_and_daily_caps",
+  "fitness_and_quality_gates",
+  "explicit_queue_head",
+  "incomplete_registry_mission",
+  "eligible_auto_queue_or_discovery",
+  "loop_gate",
+  "drive_proposal",
+  "idle",
+] as const;
 
 export const DEFAULT_MISSION_REGISTRY: MissionSpec[] = [
   {
@@ -135,28 +149,133 @@ function registryPath(workbench: string): string {
   return path.join(workbench, "config", "mission-registry.json");
 }
 
+export function loadRuntimeScriptRegistry(
+  projectRoot: string = junoProjectRoot(),
+): ReadonlySet<string> {
+  const packagePath = path.join(projectRoot, "package.json");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(packagePath, "utf8"));
+  } catch (error) {
+    throw new Error(`Runtime script registry is unreadable: ${packagePath}`, { cause: error });
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Runtime script registry must be a package JSON object: ${packagePath}`);
+  }
+  const scripts = (raw as { scripts?: unknown }).scripts;
+  if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) {
+    throw new Error(`Runtime script registry is missing scripts: ${packagePath}`);
+  }
+  const entries = Object.entries(scripts);
+  if (entries.some(([name, command]) => !name.trim() || typeof command !== "string" || !command.trim())) {
+    throw new Error(`Runtime script registry contains an invalid command: ${packagePath}`);
+  }
+  return new Set(entries.map(([name]) => name));
+}
+
 export function loadAutonomyCharter(workbench: string): AutonomyCharter {
   const p = charterPath(workbench);
   if (!existsSync(p)) {
     return { enabled: true, autoDiscoverMissions: true };
   }
+  let raw: unknown;
   try {
-    return JSON.parse(readFileSync(p, "utf8")) as AutonomyCharter;
-  } catch {
-    return { enabled: true, autoDiscoverMissions: true };
+    raw = JSON.parse(readFileSync(p, "utf8"));
+  } catch (error) {
+    throw new Error(`Autonomy charter is unreadable; refusing autonomous work: ${p}`, {
+      cause: error,
+    });
   }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Autonomy charter must be a JSON object: ${p}`);
+  }
+  const charter = raw as AutonomyCharter;
+  if (
+    (charter.enabled !== undefined && typeof charter.enabled !== "boolean") ||
+    (charter.autoDiscoverMissions !== undefined &&
+      typeof charter.autoDiscoverMissions !== "boolean") ||
+    (charter.missionPriority !== undefined &&
+      (!Array.isArray(charter.missionPriority) ||
+        charter.missionPriority.some((id) => typeof id !== "string" || !id.trim()))) ||
+    (charter.forbiddenMissionIds !== undefined &&
+      (!Array.isArray(charter.forbiddenMissionIds) ||
+        charter.forbiddenMissionIds.some((id) => typeof id !== "string" || !id.trim()))) ||
+    (charter.missionOverrides !== undefined &&
+      (!charter.missionOverrides ||
+        typeof charter.missionOverrides !== "object" ||
+        Array.isArray(charter.missionOverrides) ||
+        Object.values(charter.missionOverrides).some(
+          (override) =>
+            !override ||
+            typeof override !== "object" ||
+            (override.priority !== undefined && !Number.isFinite(override.priority)) ||
+            (override.autoQueue !== undefined && typeof override.autoQueue !== "boolean"),
+        )))
+  ) {
+    throw new Error(`Autonomy charter has invalid governance fields: ${p}`);
+  }
+  for (const id of [
+    ...(charter.missionPriority ?? []),
+    ...(charter.forbiddenMissionIds ?? []),
+    ...Object.keys(charter.missionOverrides ?? {}),
+  ]) {
+    resolveMissionDirectory(workbench, id);
+  }
+  return charter;
 }
 
 export function loadMissionRegistry(workbench: string): MissionSpec[] {
   const p = registryPath(workbench);
-  let base = DEFAULT_MISSION_REGISTRY;
+  let base: MissionSpec[] = [...DEFAULT_MISSION_REGISTRY];
   if (existsSync(p)) {
+    let raw: unknown;
     try {
-      const raw = JSON.parse(readFileSync(p, "utf8")) as { missions?: MissionSpec[] };
-      if (raw.missions?.length) base = raw.missions;
-    } catch {
-      /* use default */
+      raw = JSON.parse(readFileSync(p, "utf8"));
+    } catch (error) {
+      throw new Error(`Mission registry is unreadable; refusing autonomous work: ${p}`, {
+        cause: error,
+      });
     }
+    if (!raw || typeof raw !== "object" || !Array.isArray((raw as { missions?: unknown }).missions)) {
+      throw new Error(`Mission registry must contain a missions array: ${p}`);
+    }
+    const missions = (raw as { missions: MissionSpec[] }).missions;
+    const loopKinds = new Set<LoopKind>([
+      "local_loop",
+      "agi_loop",
+      "book_loop",
+      "book_quality_loop",
+      "self_optimize",
+      "generic_queue",
+    ]);
+    const valid = missions.every(
+      (mission) =>
+        mission &&
+        typeof mission.missionId === "string" &&
+        Boolean(mission.missionId.trim()) &&
+        Number.isFinite(mission.priority) &&
+        loopKinds.has(mission.loopKind) &&
+        typeof mission.loopScript === "string" &&
+        Boolean(mission.loopScript.trim()) &&
+        (mission.requiresComplete === undefined ||
+          (Array.isArray(mission.requiresComplete) &&
+            mission.requiresComplete.every((id) => typeof id === "string" && Boolean(id.trim())))) &&
+        (mission.requiresIncomplete === undefined ||
+          typeof mission.requiresIncomplete === "boolean") &&
+        (mission.autoQueue === undefined || typeof mission.autoQueue === "boolean"),
+    );
+    if (!valid || new Set(missions.map((mission) => mission.missionId)).size !== missions.length) {
+      throw new Error(`Mission registry contains invalid or duplicate mission entries: ${p}`);
+    }
+    for (const mission of missions) {
+      if (mission.missionId !== "__self_optimize__") {
+        resolveMissionDirectory(workbench, mission.missionId);
+      }
+      for (const required of mission.requiresComplete ?? []) {
+        resolveMissionDirectory(workbench, required);
+      }
+    }
+    base = [...missions];
   }
   const charter = loadAutonomyCharter(workbench);
   if (charter.missionPriority?.length) {
@@ -178,29 +297,27 @@ export function loadMissionRegistry(workbench: string): MissionSpec[] {
   if (charter.missionPriority?.length) {
     return base;
   }
-  return base.sort((a, b) => a.priority - b.priority);
+  return [...base].sort((a, b) => a.priority - b.priority);
 }
 
 export function missionComplete(workbench: string, missionId: string): boolean {
   if (missionId.startsWith("__")) return false;
-  const cp = path.join(workbench, "missions", missionId, "checkpoint.md");
-  if (!existsSync(cp)) return false;
-  return /STATUS:\s*COMPLETE/i.test(readFileSync(cp, "utf8"));
+  return readMissionCompletionReceipt(workbench, missionId) !== null;
 }
 
 export function missionStarted(workbench: string, missionId: string): boolean {
   if (missionId.startsWith("__")) return true;
-  return existsSync(path.join(workbench, "missions", missionId, "progress.md"));
+  return existsSync(path.join(resolveMissionDirectory(workbench, missionId), "progress.md"));
 }
 
 export function missionHasQueuedPhases(workbench: string, missionId: string): boolean {
-  const progress = path.join(workbench, "missions", missionId, "progress.md");
+  const progress = path.join(resolveMissionDirectory(workbench, missionId), "progress.md");
   if (!existsSync(progress)) return false;
   return /\|\s*queued\s*\|/i.test(readFileSync(progress, "utf8"));
 }
 
 export function queueHeadMissionId(workbench: string): string | null {
-  const { now } = parseNowYaml(workbench);
+  const { now } = readNowQueueSnapshot(workbench);
   return now[0]?.mission_id ?? null;
 }
 
@@ -210,7 +327,8 @@ export function sanitizeAutonomyQueue(
   allowedMissionIds: string[],
 ): { moved: string[]; changed: boolean } {
   const allowed = new Set(allowedMissionIds);
-  const { now, backlog } = parseNowYaml(workbench);
+  const queueSnapshot = readNowQueueSnapshot(workbench);
+  const { now, backlog } = queueSnapshot;
   const kept: QueueItem[] = [];
   const moved: QueueItem[] = [];
   for (const item of now) {
@@ -223,7 +341,12 @@ export function sanitizeAutonomyQueue(
   if (moved.length === 0) {
     return { moved: [], changed: false };
   }
-  saveNowQueue(workbench, kept, [...moved, ...backlog]);
+  const update = replaceQueueSnapshotConditional(workbench, {
+    expectedRevision: queueSnapshot.revision,
+    now: kept,
+    backlog: [...moved, ...backlog],
+  });
+  if (!update.ok) throw new Error(`Autonomy queue sanitization failed: ${update.reason}`);
   return { moved: moved.map((i) => i.mission_id ?? i.id), changed: true };
 }
 
@@ -257,7 +380,18 @@ function specEligible(
   return true;
 }
 
-function decisionForSpec(spec: MissionSpec, reason: string): AutonomyDecision {
+export function decisionForSpec(
+  spec: MissionSpec,
+  reason: string,
+  runtimeScripts: ReadonlySet<string> = loadRuntimeScriptRegistry(),
+): AutonomyDecision {
+  if (!runtimeScripts.has(spec.loopScript)) {
+    return {
+      action: "escalate_human",
+      reason: "runtime_script_unavailable",
+      detail: `${spec.missionId} requires unavailable runtime script ${spec.loopScript}`,
+    };
+  }
   switch (spec.loopKind) {
     case "local_loop":
       return {
@@ -314,6 +448,7 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
   const charter = loadAutonomyCharter(workbench);
   const gate = evaluateLoopGate(workbench);
   const registry = loadMissionRegistry(workbench);
+  const runtimeScripts = loadRuntimeScriptRegistry();
 
   if (charter.enabled === false) {
     return { action: "stop", reason: "autonomy charter disabled" };
@@ -379,8 +514,18 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
       };
     }
     const headSpec = registry.find((s) => s.missionId === headMission);
-    if (headSpec && specEligible(workbench, headSpec, charter, limits)) {
-      return decisionForSpec(headSpec, `queue head active — advance ${headMission}`);
+    if (headSpec) {
+      if (!specEligible(workbench, headSpec, charter, limits)) {
+        return {
+          action: "stop",
+          reason: `queue head ${headMission} is not eligible under charter or mission dependencies`,
+        };
+      }
+      return decisionForSpec(
+        headSpec,
+        `queue head active — advance ${headMission}`,
+        runtimeScripts,
+      );
     }
     return {
       action: "run_generic_loop",
@@ -427,6 +572,7 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
       return decisionForSpec(
         spec,
         `Juno autonomously continues ${spec.missionId} (charter-driven)`,
+        runtimeScripts,
       );
     }
 
@@ -473,6 +619,7 @@ export function planNextMission(input: PlannerInput): AutonomyDecision {
         return decisionForSpec(
           spec,
           `Juno discovered incomplete mission ${missionId} with queued phases`,
+          runtimeScripts,
         );
       }
       return {
@@ -498,6 +645,7 @@ export function writePlannerSnapshot(workbench: string, decision: AutonomyDecisi
   const allowed = new Set(DEFAULT_AUTONOMY_LIMITS.allowedMissionIds);
   const snapshot = {
     decidedAt: new Date().toISOString(),
+    arbitrationPolicy: PLANNER_ARBITRATION_POLICY,
     charter: loadAutonomyCharter(workbench).charter?.slice(0, 200),
     registry: loadMissionRegistry(workbench).map((s) => s.missionId),
     incomplete: discoverIncompleteMissions(workbench).filter((id) => allowed.has(id)),

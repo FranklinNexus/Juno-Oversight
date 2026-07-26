@@ -3,7 +3,7 @@
 **注册表**：`src/lib/layout/widget-registry.tsx`  
 **新增 Widget**：只改 registry + 组件文件；持久化需 `layout-store` migrate。
 
-Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典战术**（行情/infra）。
+Juno HUD 共 **11 种** Widget：7 个 **Overseer**（编排） + 4 个 **经典战术**（行情/infra）。
 
 ---
 
@@ -15,6 +15,7 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 | `daily` | WIDGET-D | Daily Digest | `DailyDigestPanel` | Overseer |
 | `activerun` | WIDGET-R | Active Run | `ActiveRunPanel` | Overseer |
 | `daemon` | WIDGET-S | 24/7 Scheduler | `OverseerDaemonPanel` | Overseer |
+| `incidents` | WIDGET-I | Control Incidents | `IncidentRecoveryPanel` | Overseer |
 | `mission` | WIDGET-M | Mission Board | `MissionBoardPanel` | Overseer |
 | `promote` | WIDGET-P | Promote | `PromotePanel` | Overseer |
 | `market` | WIDGET-A | Alpha Market | `AlphaMarketIngestor` | 战术 |
@@ -48,14 +49,22 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 - **能力**：Spawn Dry / Spawn Live、Kill、events tail  
 - **依赖**：`orchestrator-client` → `spawn_agent_run`  
 - **Dry**：不调用 API，写 events + orchestrator `done`  
-- **Live**：需 `CURSOR_API_KEY`  
+- **Live**：复用本机 Codex 登录态；provider key 不注入子进程
 
 ### WIDGET-S — 24/7 Scheduler
 
 - **文件**：`OverseerDaemonPanel.tsx`  
-- **能力**：Start/Stop `scheduler-daemon.js`  
-- **状态**：`state/scheduler.json` + `daemon.pid`  
+- **能力**：Start/Stop `scripts/run-juno-daemon.mjs`
+- **状态**：`state/juno-daemon.json` + `state/juno-daemon.pid`
 - **仅 Tauri**：浏览器 dev 无 daemon 进程  
+
+### WIDGET-I — Control Incidents
+
+- **文件**：`IncidentRecoveryPanel.tsx`
+- **数据**：签名 desktop runtime 的 `RecoveryInventoryV1`；header 入口保持单例面板
+- **恢复闭集**：当前仅允许精确 `resume_exact_intent`；queue/selection preimage、rollback、temp 与未知条目继续 fail-closed
+- **审计**：操作原因与结果写入 `state/operator-recovery/v1/` 的 create-once intent/receipt journal
+- **确认**：inventory SHA-256 漂移、foreign journal、receipt/queue 证据不一致都会拒绝执行
 
 ### WIDGET-M — Mission Board
 
@@ -137,6 +146,9 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 | `start_scheduler_daemon` | — | SchedulerStatus | 启动 daemon |
 | `stop_scheduler_daemon` | — | — | 停止 daemon |
 | `get_missions_snapshot` | — | MissionSummary[] | Mission Board |
+| `get_workbench_snapshot` | — | WorkbenchSnapshot | Queue / Daily / Active Run 共享快照 |
+| `inspect_operator_recovery` | — | RecoveryInventoryV1 | 纯读控制事件 inventory |
+| `apply_operator_recovery` | request | ApplyOperatorRecoveryResult | 仅执行签发的 exact intent 恢复 |
 | `list_staging_entries` | — | StagingEntry[] | Promote |
 | `list_promote_rules` | — | PromoteRule[] | Promote |
 | `preview_promote_to_vault` | ruleId, relativePath | PromotePreview | Promote 前 diff 干跑 |
@@ -144,6 +156,8 @@ Juno HUD 共 **10 种** Widget：6 个 **Overseer**（编排） + 4 个 **经典
 | `read_promote_log` | maxLines? | string[] | promote.log tail |
 
 前端桥接：`src/lib/workbench/orchestrator-client.ts`
+
+`WorkbenchSnapshotProvider` 在 Dashboard 根只运行一条 5 秒 polling；Queue、Daily 与 Active Run 共享同一份 stale-preserving snapshot。`OperatorRecoveryProvider` 独立使用 15 秒纯读 inventory polling，并在 apply 后立即刷新。
 
 ---
 

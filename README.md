@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tests-128_passing-success" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-passing-success" alt="tests passing" />
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
 </p>
 
@@ -45,7 +45,7 @@ Agent finished
 
 ```bash
 git clone https://github.com/FranklinNexus/Juno-Oversight.git && cd Juno-Oversight
-pnpm install && pnpm loop:smoke
+corepack pnpm install --frozen-lockfile && corepack pnpm loop:smoke
 ```
 
 No API key. Two minutes. `implement → review → verify`.
@@ -93,7 +93,7 @@ Auditable.
 | Model says “done” | **Oversight** decides dequeue |
 | Agents edit anything | **Scope lock** per mission |
 | 24/7 = unbounded risk | **Bounded autonomy** — cap, backoff, escalate |
-| Vault accidents | **Hooks** block writes & destructive ops |
+| Vault accidents | **Sandbox + safety baseline + human-confirmed Promote** |
 
 Juno is not an agent framework. It is an **AI Work Runtime** — queue, spawn, gate, replay, promote.
 
@@ -168,7 +168,7 @@ charter  →  planner  →  implement  →  review  →  verify  →  promote  �
 | **Surface** | HUD — queue, active run, promote preview (`src/` + Tauri) |
 | **State** | Local work dir — missions, checkpoints, audit log (`AgentWorkbench/`, not in git) |
 
-Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT` · `CURSOR_API_KEY` (Live runs).
+Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT`. Live runs reuse the local Codex login and do not inject provider API keys.
 
 ---
 
@@ -177,7 +177,7 @@ Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT` · `CURSOR_API_KEY`
 ```bash
 git clone https://github.com/FranklinNexus/Juno-Oversight.git
 cd Juno-Oversight
-pnpm install
+corepack pnpm install --frozen-lockfile  # installs the HUD and orchestrator workspace together
 pnpm loop:smoke          # no API · end-to-end pass
 ```
 
@@ -187,12 +187,26 @@ pnpm loop:smoke          # no API · end-to-end pass
 ```bash
 cp .env.example .env.local
 .\scripts\scaffold-workbench.ps1          # Windows; see wiki/runtime.md
-node scripts/sync-workbench-hooks.mjs
-pnpm orchestrator:build && pnpm verify:desktop
+node scripts/sync-workbench-hooks.mjs      # manual Cursor sessions only; not a Codex sandbox/gate
+pnpm verify:desktop
 pnpm tauri:dev                            # Surface
 pnpm juno:daemon                          # Runtime loop
+pnpm juno:login:prepare                   # Stage the integrity-checked Node runtime
+pnpm juno:login:install                   # Register Node-only Windows login startup
 pnpm autonomy:tick                        # Preview next mission (dry-run)
 ```
+
+Login startup is opt-in and does not launch the Tauri/WebView surface. Registration does not start
+the daemon immediately; use `scripts/install-juno-login-task.ps1 -StartNow` only when that is
+intentional. A terminally blocked daemon remains stopped and requires explicit recovery.
+
+`pnpm-lock.yaml` is the only dependency lock. Do not run `npm install` inside `orchestrator/`.
+
+Desktop bundles stage an integrity-checked runtime before Tauri builds. Installed Live runs require
+system Node.js `>=22.13` and an executable Codex CLI; use `JUNO_NODE_PATH` or `JUNO_CODEX_PATH`
+when they are not discoverable. The production identifier is
+`com.franklinnexus.junooversight`; old development installs using the template identifier
+`com.tauri.dev` are a separate app identity and do not upgrade in place or share app-data paths.
 
 | You want… | Command |
 |-----------|---------|
@@ -204,6 +218,56 @@ pnpm autonomy:tick                        # Preview next mission (dry-run)
 Config → [config/README.md](./config/README.md) · Troubleshooting → [wiki/maintenance.md](./wiki/maintenance.md)
 
 </details>
+
+---
+
+## Guarded workflow evolution
+
+Workflow selection is changed only through a manual canary. The controller builds the
+orchestrator by default; listing experiments or inspecting an existing ID does not mutate
+Workbench experiment, queue, decision, or selection state. Supplying a proposal definition
+creates or reuses an immutable proposal, but does not queue runs or activate a workflow.
+
+```bash
+# Read-only list / inspect
+pnpm evolution:canary
+pnpm evolution:canary --id=<experiment-id>
+
+# Propose a two-episode, isolated baseline/candidate comparison
+pnpm evolution:canary --baseline=axiom-book --candidate=variants/axiom-book-lean-v2 --target-mission=juno-axiom-book-2026 --source-phase=workflow-canary --episodes=2
+
+# Each state mutation needs exactly one explicit action flag
+pnpm evolution:canary --id=<experiment-id> --queue
+pnpm evolution:canary --id=<experiment-id> --evaluate
+pnpm evolution:canary --id=<experiment-id> --promote
+pnpm evolution:canary --id=<experiment-id> --rollback
+```
+
+Promotion requires an accepted decision receipt, deterministic verify PASS for every episode in
+both arms, no regression, and at least one strict improvement. Proposal bytes bind both workflow
+definitions, every prompt SHA-256, the isolated fixture, compiled queue slots, run manifests, and
+the final evidence receipt. Every observed slot also needs its exact materialized queue item and a
+v2 Codex/verify artifact bound to the manifest, checkpoint, complete event stream, and execution
+attempt. A prompt, workflow, artifact, event, or retry-binding edit after proposal fails closed.
+
+The axiom-book canary uses literature micro fixture v2 instead of the production 20-chapter book:
+each arm and episode receives an isolated `brief.md`, `rubric.md`, and mutable `essay.md`, verified
+against the same attainable 450-900-word contract. It never borrows production mission artifacts.
+
+Legacy `state/workflow-selection.json` is inspected before it is archived:
+
+```bash
+pnpm workflow:selection:migrate
+pnpm workflow:selection:migrate --commit --expected-sha256=<sha256-from-inspect> --reason="Archive obsolete legacy v0 selection"
+```
+
+The default is read-only. Commit accepts only the exact inspected bytes of the strict legacy v0
+schema, requires an idle runtime, and writes a create-once archive plus receipt. Trusted v1 state
+must use canary rollback; malformed, forged, linked, changed, or unknown state is never erased.
+Do not insert a standalone `--` before these flags: pnpm forwards it to the strict parser.
+
+Operational details and the complete trust chain are in
+[evolution.md](./wiki/evolution.md) and [maintenance.md](./wiki/maintenance.md).
 
 ---
 
@@ -232,7 +296,7 @@ Everything else is implementation detail.
 
 ### Deterministic oversight
 
-Intelligence is probabilistic. **Oversight is deterministic.** Juno separates *generation* (Cursor / MCP) from *permission to proceed* (TypeScript gates, hooks, caps).
+Intelligence is probabilistic. **Oversight is deterministic.** Juno separates *generation* (Codex + actually available tools) from *permission to proceed* (TypeScript gates, real command evidence, safety baselines, caps).
 
 ### Bounded autonomy (not “AGI”)
 

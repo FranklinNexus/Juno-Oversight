@@ -124,7 +124,7 @@ pnpm queue:restore-literature
 | API Gateway + self-optimize | **完成** — `pnpm self:optimize` · [evolution.md](./evolution.md) |
 | Von Neumann 自指单元 v0–v1 | **完成** — fitness + planner 反馈 · [evolution.md](./evolution.md) |
 | Overseer Hardening h01–h11 | **完成** — verify:desktop PASS · promote preview |
-| CI 跑 `pnpm loop:smoke` | 待接 |
+| CI 跑 `pnpm loop:smoke` | **完成** — `.github/workflows/ci.yml`（Windows 原生门禁） |
 | Tauri 启 daemon 前 UI 提示 gate | 待接 |
 
 详见 [runtime.md](./runtime.md)。
@@ -147,11 +147,11 @@ pnpm loop:self-iterate-run    # 排队 + 本地三 slot（真实 test + orchestr
 | Eval profile | `orchestrator/src/eval-profile.ts` → manifest `evalProfile` |
 | Events 契约 | `orchestrator/src/events-schema.ts` |
 
-**Live Agent 迭代**（Scheduler spawn 真实 Cursor slot）：
+**Live Agent 迭代**（主 daemon spawn 真实 Codex slot）：
 
 1. `pnpm loop:self-iterate` 排队
-2. Workbench `state/scheduler.json` → `"enabled": true`（可选 `JUNO_REQUIRE_LOOP_GATE=1`）
-3. `pnpm orchestrator:build` 后启动 daemon / Tauri Overseer 面板
+2. `pnpm orchestrator:build` 后运行 `corepack pnpm juno:daemon`，或在 Tauri Overseer 面板启动
+3. 可用 `JUNO_REQUIRE_LOOP_GATE=1` 强制 smoke/meta gate
 4. 每 slot 由 `spawn-run` 写 `runs/<id>/events.jsonl`（可用 `handoff` / `verdict` event）
 
 本地 runner **不消耗 API**；implement/review 为交付物门禁，verify 跑 `orchestrator` profile（test + build + deps，跳过 ui:smoke）。

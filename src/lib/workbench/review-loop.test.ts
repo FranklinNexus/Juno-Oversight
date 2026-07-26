@@ -54,8 +54,24 @@ describe("resolveQueueAdvance", () => {
     });
   });
 
-  it("dequeues implement with STATUS COMPLETE", () => {
-    expect(resolveQueueAdvance("implement", "STATUS: COMPLETE\n")).toEqual({ action: "dequeue" });
+  it("requires STATUS COMPLETE and a non-empty CHANGES section for implement", () => {
+    expect(resolveQueueAdvance("implement", "STATUS: COMPLETE\n")).toEqual({
+      action: "hold",
+      reason: "review_pending",
+    });
+    expect(resolveQueueAdvance("implement", "STATUS: COMPLETE\n\n## CHANGES\n\n")).toEqual({
+      action: "hold",
+      reason: "review_pending",
+    });
+    expect(
+      resolveQueueAdvance("implement", "STATUS: COMPLETE\n\n## CHANGES\n- src/gate.ts\n"),
+    ).toEqual({ action: "dequeue" });
+    expect(
+      resolveQueueAdvance(
+        "implement",
+        "STATUS: COMPLETE\nSTATUS: BLOCKED\n\n## CHANGES\n- src/gate.ts\n",
+      ),
+    ).toEqual({ action: "hold", reason: "review_pending" });
   });
 
   it("holds review slot until PASS", () => {
@@ -70,6 +86,46 @@ describe("resolveQueueAdvance", () => {
     expect(resolveQueueAdvance("review", sampleVerdict)).toEqual({ action: "dequeue" });
     expect(isReviewPass(sampleVerdict)).toBe(true);
     expect(isReviewBlocked(sampleVerdict)).toBe(false);
+  });
+
+  it.each([
+    "drift: none",
+    "scope_violations: []",
+    "must_fix_next_slot: []",
+    "reviewer_notes: ok",
+  ])("does not accept PASS when required evidence is missing: %s", (field) => {
+    const incomplete = sampleVerdict
+      .split("\n")
+      .filter((line) => !line.includes(field))
+      .join("\n");
+    expect(isReviewPass(incomplete)).toBe(false);
+    expect(resolveQueueAdvance("review", incomplete)).not.toEqual({ action: "dequeue" });
+  });
+
+  it("rejects REVISE without a concrete must-fix item", () => {
+    const emptyRevise = sampleVerdict.replace("verdict: PASS", "verdict: REVISE");
+    expect(parseReviewVerdict(emptyRevise)).toBeNull();
+    expect(resolveQueueAdvance("review", emptyRevise)).toEqual({
+      action: "hold",
+      reason: "review_pending",
+    });
+  });
+
+  it("blocks a PASS verdict with major drift", () => {
+    const drifted = sampleVerdict.replace("drift: none", "drift: major");
+    expect(resolveQueueAdvance("review", drifted)).toEqual({ action: "block" });
+    expect(isReviewPass(drifted)).toBe(false);
+    expect(isReviewBlocked(drifted)).toBe(true);
+  });
+
+  it("blocks a PASS verdict with scope violations", () => {
+    const outOfScope = sampleVerdict.replace(
+      "scope_violations: []",
+      'scope_violations: ["src/forbidden.ts"]',
+    );
+    expect(resolveQueueAdvance("review", outOfScope)).toEqual({ action: "block" });
+    expect(isReviewPass(outOfScope)).toBe(false);
+    expect(isReviewBlocked(outOfScope)).toBe(true);
   });
 
   it("blocks on BLOCK verdict", () => {
@@ -91,6 +147,22 @@ describe("resolveQueueAdvance", () => {
     expect(resolveQueueAdvance("verify", failReport)).toEqual({ action: "block" });
   });
 
+  it.each([
+    "- pnpm test: FAIL",
+    "- pnpm test: failed",
+    "- pnpm test: ERROR",
+    "- exit code: 2",
+    "- exit_code=2",
+    "- process exited with code 2",
+    "- process exited with status 2",
+    "- command returned non-zero",
+    "- verdict: BLOCK",
+  ])("blocks verify slot on explicit failure evidence: %s", (result) => {
+    expect(resolveQueueAdvance("verify", `## VERIFY_REPORT\n${result}\n`)).toEqual({
+      action: "block",
+    });
+  });
+
   it("dequeues verify slot on PASS", () => {
     expect(resolveQueueAdvance("verify", sampleVerifyPass)).toEqual({ action: "dequeue" });
   });
@@ -100,6 +172,28 @@ describe("resolveQueueAdvance", () => {
       action: "hold",
       reason: "verify_pending",
     });
+  });
+
+  it("holds verify report without explicit PASS evidence", () => {
+    expect(resolveQueueAdvance("verify", "## VERIFY_REPORT\n- pnpm test completed\n")).toEqual({
+      action: "hold",
+      reason: "verify_pending",
+    });
+  });
+
+  it("accepts PASS with explicit zero-error evidence", () => {
+    expect(
+      resolveQueueAdvance(
+        "verify",
+        "## VERIFY_REPORT\n- pnpm test: PASS\n- exit code: 0\n- 0 errors\n",
+      ),
+    ).toEqual({ action: "dequeue" });
+  });
+
+  it("does not treat a successful HTTP status as a nonzero process exit", () => {
+    expect(
+      resolveQueueAdvance("verify", "## VERIFY_REPORT\n- endpoint status code: 200\n- PASS\n"),
+    ).toEqual({ action: "dequeue" });
   });
 
   it("returns revise action with must_fix list", () => {
@@ -119,8 +213,11 @@ describe("resolveQueueAdvance", () => {
 });
 
 describe("shouldMarkPhaseDone", () => {
-  it("marks implement done on STATUS COMPLETE", () => {
-    expect(shouldMarkPhaseDone("implement", "STATUS: COMPLETE\n")).toBe(true);
+  it("marks implement done only with complete change evidence", () => {
+    expect(shouldMarkPhaseDone("implement", "STATUS: COMPLETE\n")).toBe(false);
+    expect(
+      shouldMarkPhaseDone("implement", "STATUS: COMPLETE\n\n## CHANGES\n- src/gate.ts\n"),
+    ).toBe(true);
     expect(shouldMarkPhaseDone("implement", "")).toBe(false);
   });
 
@@ -129,11 +226,12 @@ describe("shouldMarkPhaseDone", () => {
     expect(shouldMarkPhaseDone("review", "")).toBe(false);
   });
 
-  it("marks verify done when VERIFY_REPORT has no FAIL", () => {
+  it("marks verify done only when VERIFY_REPORT explicitly passes", () => {
     const ok = "## VERIFY_REPORT\n- pnpm test: PASS\n";
     expect(shouldMarkPhaseDone("verify", ok)).toBe(true);
     const fail = "## VERIFY_REPORT\n- **FAIL**: lint\n";
     expect(shouldMarkPhaseDone("verify", fail)).toBe(false);
+    expect(shouldMarkPhaseDone("verify", "## VERIFY_REPORT\n- test completed\n")).toBe(false);
   });
 });
 

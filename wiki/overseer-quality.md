@@ -109,7 +109,7 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 | `## CHANGES` | **implement** | 本 slot 改动文件列表 |
 | `## REVIEW_VERDICT` | review | §2 固定格式 |
 | `## VERIFY_REPORT` | verify | 见 §9 |
-| `STATUS: COMPLETE` | 最终 implement / Mission 收尾 | 仅当 Mission 全部 phase done |
+| `STATUS: COMPLETE` | implement run | 仅证明当前 implement slot；Mission 收尾只认父进程 receipt |
 
 ### 8.1 progress.md 自动更新（`shouldMarkPhaseDone`）
 
@@ -147,7 +147,7 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 |----|--------|------|------|
 | verify BLOCK 仍 dequeue | 高 | **已修** | `resolveQueueAdvance` + scheduler `handleCompletedRun` |
 | `writeOrchestrator("idle", null)` 不清 activeRunId | 高 | **已修** | `mergeOrchestratorState` 显式置空 |
-| orchestrator `juno-hud: file:..` | 高 | **已修** | `install-orchestrator.mjs` + preinstall |
+| orchestrator `juno-hud: file:..` | 高 | **已修** | pnpm workspace 单锁 + `check-orchestrator-deps.mjs` |
 | scheduler 未接 review 门禁 | 高 | **已修** | `evaluateCompletedRun` / `shouldSkipSpawn` |
 | progress 仅 review PASS 才 done | 中 | **已修** | `shouldMarkPhaseDone` 三态 |
 | **Loop gate** | 中 | **已加** | `loop-gate.ts` + `loop_gate_blocked` |
@@ -170,19 +170,22 @@ Mission `juno-overseer-hardening-2026` 完成当且仅当：
 
 ### 11.2 允许的安全替代
 
-- `pnpm clean`（项目脚本，只清 `out`/`.next`）  
-- 单文件 Delete 工具 / 删明确列出的路径  
-- 去重前：`fsutil hardlink list <path>` 确认是否同一 inode  
+- `pnpm clean`（项目脚本，只清 `out`/`.next`）
+- 单文件 Delete 工具 / 删明确列出的路径
+- 去重前：`fsutil hardlink list <path>` 确认是否同一 inode
 
 ### 11.3 技术防护（必须同时存在）
 
-1. **Prompt 注入**：`buildUserPrompt` 附带 §11 摘录  
-2. **Cursor Hook**：`.cursor/hooks/destructive-ops-gate.mjs`（`failClosed: true`）  
-3. **Review 必查**：events 里是否出现被拦/执行的 destructive 命令  
-4. **Git 备份**：重大 Mission 前 push；Scheduler 不应在无 remote 备份时跑 destructive 任务  
+1. **Codex 执行边界**：SDK sandbox + `approvalPolicy: never`；只开放明确 working directory / additional directories
+2. **确定性 Safety Gate**：冻结的 v3 scope baseline + verify preflight；越界、secret 或畸形 baseline 一律 BLOCK
+3. **Prompt 注入**：`buildUserPrompt` 附带 §11 摘录
+4. **Review 必查**：events 里是否出现被拦/执行的 destructive 命令
+5. **Git 备份**：重大 Mission 前 push；daemon 不应在无 remote 备份时跑 destructive 任务
+
+**可选 defense-in-depth**：人工 Cursor 会话可启用 `.cursor/hooks/destructive-ops-gate.mjs`（`failClosed: true`）；Codex SDK slot 不加载该 Hook，不能把它当作主安全边界。
 
 ### 11.4 Review 检查项（追加）
 
-- events / shell 是否尝试删 repo 根或父目录？  
-- 是否误把「统一路径」当成「删重复拷贝」？  
+- events / shell 是否尝试删 repo 根或父目录？
+- 是否误把「统一路径」当成「删重复拷贝」？
 - 任一 yes → **BLOCK**，Scheduler 不得 dequeue

@@ -3,15 +3,9 @@ param(
   [string]$Workbench = "E:\AgentWorkbench"
 )
 
-$missionId = "juno-self-iterate-p1-2026"
-$nowPath = Join-Path $Workbench "queue/now.yaml"
-if (Test-Path $nowPath) {
-  $bak = Join-Path $Workbench "queue/now.yaml.bak-pre-self-iterate-p1-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-  Copy-Item $nowPath $bak
-  Write-Host "Backed up queue -> $bak"
-}
+. (Join-Path $PSScriptRoot "lib/queue-bootstrap.ps1")
 
-$utf8 = New-Object System.Text.UTF8Encoding $false
+$missionId = "juno-self-iterate-p1-2026"
 $nowYaml = @"
 updated: $(Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
 now:
@@ -23,7 +17,7 @@ now:
     mission_id: $missionId
     phase_id: si10-implement-p1
     prompt: executor_implement
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p1
     eval_profile: orchestrator
     max_minutes: 25
@@ -36,7 +30,7 @@ now:
     mission_id: $missionId
     phase_id: si11-review-p1
     prompt: executor_review
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p1
     depends_on: si10-implement-p1
     max_minutes: 15
@@ -49,7 +43,7 @@ now:
     mission_id: $missionId
     phase_id: si12-verify-p1
     prompt: executor_verify
-    provider: cursor_composer
+    provider: openai_codex
     workflow_id: self-iterate-p1
     eval_profile: orchestrator
     depends_on: si11-review-p1
@@ -59,6 +53,6 @@ backlog:
   []
 "@
 
-[System.IO.File]::WriteAllText($nowPath, $nowYaml, $utf8)
+Submit-JunoQueueCandidate -Workbench $Workbench -Yaml $nowYaml -BackupPrefix "bak-pre-self-iterate-p1"
 Write-Host "Mission $missionId queued (3 slots with depends_on)."
 Write-Host "Run: pnpm loop:self-iterate-p1-run"

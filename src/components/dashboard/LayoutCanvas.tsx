@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { GridLayout, useContainerWidth, type Layout, type LayoutItem } from "react-grid-layout";
 import {
   containerBounds,
@@ -20,6 +20,27 @@ import { useHudStore } from "@/store/hud-store";
 
 const GRID_MARGIN: [number, number] = [2, 2];
 const GRID_PADDING: [number, number] = [2, 2];
+const NARROW_SCREEN_BREAKPOINT_PX = 720;
+const NARROW_PANEL_MIN_ROWS = 6;
+
+function stackLayout(layout: Layout): Layout {
+  let nextY = 0;
+
+  return layout.map((item) => {
+    const height = Math.max(NARROW_PANEL_MIN_ROWS, item.h, item.minH ?? 0);
+    const stacked = {
+      ...item,
+      x: 0,
+      y: nextY,
+      w: GRID_COLS,
+      h: height,
+      minW: GRID_COLS,
+      maxW: GRID_COLS,
+    };
+    nextY += height;
+    return stacked;
+  });
+}
 
 export function LayoutCanvas() {
   const panels = useLayoutStore((state) => state.panels);
@@ -39,7 +60,16 @@ export function LayoutCanvas() {
     return [...list].sort((a, b) => (a.stackOrder ?? 0) - (b.stackOrder ?? 0));
   }, [panels, maximizedPanelId]);
 
-  const layout = useMemo(() => panelsToGridLayout(visiblePanels), [visiblePanels]);
+  const desktopLayout = useMemo(() => panelsToGridLayout(visiblePanels), [visiblePanels]);
+  const narrowScreen = mounted && width * uiScale < NARROW_SCREEN_BREAKPOINT_PX;
+  const layout = useMemo(
+    () => (narrowScreen ? stackLayout(desktopLayout) : desktopLayout),
+    [desktopLayout, narrowScreen],
+  );
+  const layoutMaxRows = useMemo(
+    () => Math.max(GRID_MAX_ROWS, ...layout.map((item) => item.y + item.h)),
+    [layout],
+  );
 
   const commitLayout = useCallback(
     (next: Layout) => {
@@ -78,17 +108,17 @@ export function LayoutCanvas() {
     [commitLayout],
   );
 
-  const gridLocked = maximizedPanelId !== null;
+  const gridLocked = maximizedPanelId !== null || narrowScreen;
 
   const gridConfig = useMemo(
     () => ({
       cols: GRID_COLS,
       rowHeight: GRID_ROW_HEIGHT,
-      maxRows: GRID_MAX_ROWS,
+      maxRows: layoutMaxRows,
       margin: GRID_MARGIN,
       containerPadding: GRID_PADDING,
     }),
-    [],
+    [layoutMaxRows],
   );
 
   const dragConfig = useMemo(
@@ -115,7 +145,11 @@ export function LayoutCanvas() {
   const constraints = useMemo(() => [...defaultConstraints, containerBounds], []);
 
   return (
-    <div ref={containerRef} className="layout-canvas flex-1 min-h-0 w-full">
+    <div
+      ref={containerRef}
+      className={`layout-canvas flex-1 min-h-0 w-full${narrowScreen ? " layout-canvas--stacked" : ""}`}
+      data-layout-mode={narrowScreen ? "stacked" : "grid"}
+    >
       {mounted && width > 0 && (
         <GridLayout
           width={width}

@@ -135,6 +135,7 @@ export function validateChapterText(
   const strictLength = opts.strictLength ?? true;
   const issues: ChapterQualityIssue[] = [];
   const han = countHan(text);
+  const hanChars = text.match(/[\u4e00-\u9fff]/g) ?? [];
 
   if (strictLength && (han < minHan || han > maxHan)) {
     issues.push({
@@ -175,6 +176,19 @@ export function validateChapterText(
       message: "缺少「本书主张：」段",
       severity: "fail",
     });
+  }
+
+  if (hanChars.length >= 500) {
+    const frequencies = new Map<string, number>();
+    for (const char of hanChars) frequencies.set(char, (frequencies.get(char) ?? 0) + 1);
+    const maxFrequency = Math.max(...frequencies.values());
+    if (frequencies.size < 100 || maxFrequency / hanChars.length > 0.12) {
+      issues.push({
+        code: "repetitive_text",
+        message: `文本重复度异常（uniqueHan=${frequencies.size}，maxRatio=${(maxFrequency / hanChars.length).toFixed(3)}）`,
+        severity: "fail",
+      });
+    }
   }
 
   const listLines = lines.filter((l) => /^\s*[-*]\s/.test(l)).length;

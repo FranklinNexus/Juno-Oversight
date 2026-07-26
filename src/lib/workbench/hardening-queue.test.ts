@@ -6,6 +6,7 @@ import {
   parseHardeningProgressQueued,
   repairHardeningQueue,
 } from "../../../orchestrator/src/hardening-queue.js";
+import { writeTrustedCompletionReceiptFixture } from "./completion-receipt.test-helper.js";
 
 describe("hardening-queue", () => {
   it("parses queued phases from progress table", () => {
@@ -51,15 +52,11 @@ backlog: []
     expect(yaml).toMatch(/h11-final/);
   });
 
-  it("skips repair when hardening mission checkpoint is COMPLETE", () => {
+  it("skips repair when hardening has a trusted completion receipt", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "juno-hq-done-"));
     mkdirSync(path.join(dir, "missions", "juno-overseer-hardening-2026"), { recursive: true });
     mkdirSync(path.join(dir, "queue"), { recursive: true });
-    writeFileSync(
-      path.join(dir, "missions", "juno-overseer-hardening-2026", "checkpoint.md"),
-      "# Checkpoint\n\nSTATUS: COMPLETE\n",
-      "utf8",
-    );
+    writeTrustedCompletionReceiptFixture(dir, "juno-overseer-hardening-2026");
     writeFileSync(
       path.join(dir, "missions", "juno-overseer-hardening-2026", "progress.md"),
       `# Progress\n\n| Phase | Kind | Status |\n| h09-verify-all | verify | queued |\n`,
