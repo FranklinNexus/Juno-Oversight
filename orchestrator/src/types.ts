@@ -38,6 +38,8 @@ export interface QueueItem {
   workflow_id?: string;
   eval_profile?: "code" | "ui" | "literature" | "orchestrator";
   allowed_tools?: string[];
+  /** Explicit human request; may run during configured quiet hours. */
+  interactive?: boolean;
   /** Override cursor model for this slot */
   model?: string;
 }

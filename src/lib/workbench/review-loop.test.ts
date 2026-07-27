@@ -116,6 +116,22 @@ describe("resolveQueueAdvance", () => {
       mustFix: ["fix tests"],
     });
   });
+
+  it("parses multiline must_fix bullets", () => {
+    const revise = `
+## REVIEW_VERDICT
+- verdict: REVISE
+- drift: minor
+- scope_violations: []
+- must_fix_next_slot:
+  - fix tests
+  - document fallback
+`;
+    expect(resolveQueueAdvance("review", revise)).toEqual({
+      action: "revise",
+      mustFix: ["fix tests", "document fallback"],
+    });
+  });
 });
 
 describe("shouldMarkPhaseDone", () => {

@@ -48,6 +48,19 @@ describe("metacognition", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("accepts multiline new_angles emitted as Markdown bullets", () => {
+    const multiline = sampleReviewPass.replace(
+      '- new_angles: ["could use lazy import instead"]',
+      '- new_angles:\n  - ["could use lazy import instead"]\n  - ["verify the fallback path"]',
+    );
+    const parsed = parseMetacognition(multiline);
+    expect(parsed?.newAngles).toEqual([
+      "could use lazy import instead",
+      "verify the fallback path",
+    ]);
+    expect(validateMetacognitionForAdvance("review", multiline, "E:\\AgentWorkbench").ok).toBe(true);
+  });
+
   it("includes self-questions in prompt block", () => {
     const block = buildMetacognitionPromptBlock("review");
     expect(block).toContain("想明白了吗");

@@ -63,15 +63,28 @@ export function OversightWorkspace() {
 
   const activeMission = useMemo(() => {
     const preferredId = workbench.queue[0]?.mission_id ?? brief.result?.missionId;
-    return missions.missions.find((mission) => mission.id === preferredId)
-      ?? missions.missions.find((mission) => mission.status === "ACTIVE")
-      ?? null;
+    if (!preferredId) return null;
+    return missions.missions.find((mission) => mission.id === preferredId) ?? null;
   }, [brief.result?.missionId, missions.missions, workbench.queue]);
 
   const currentTitle = activeMission?.title
     ?? workbench.queue[0]?.mission_id
     ?? workbench.activeRunId
     ?? null;
+
+  const recentCompletedMission = useMemo(
+    () => missions.missions.find((mission) => mission.status.toUpperCase() === "COMPLETE") ?? null,
+    [missions.missions],
+  );
+  const completedPhaseCount = recentCompletedMission?.phases.filter(
+    (phase) => phase.status.toLowerCase() === "done",
+  ).length ?? 0;
+  const recentMissionVerified = recentCompletedMission?.phases.some(
+    (phase) => /verify/i.test(phase.id) && phase.status.toLowerCase() === "done",
+  ) ?? false;
+  const resultDate = recentCompletedMission?.updatedAtMs
+    ? formatTime(new Date(recentCompletedMission.updatedAtMs).toISOString())
+    : workflow.latest?.date ?? "尚无结果";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -183,13 +196,26 @@ export function OversightWorkspace() {
             <section className={styles.resultsSection} aria-labelledby="results-title">
               <div className={styles.sectionHeader}>
                 <div><span className={styles.stateLabel}>最近结果</span><h2 id="results-title">交付质量</h2></div>
-                <span className={styles.resultDate}>{workflow.latest?.date ?? "尚无结果"}</span>
+                <span className={styles.resultDate}>{resultDate}</span>
               </div>
+              {recentCompletedMission ? (
+                <div className={styles.deliveryReceipt}>
+                  <span>已交付</span>
+                  <strong>{recentCompletedMission.title}</strong>
+                  <small>{recentCompletedMission.id}</small>
+                </div>
+              ) : null}
               {workflow.latest ? (
                 <div className={styles.results}>
                   <div><span>完成</span><strong>{workflow.latest.missionDone}</strong></div>
                   <div><span>验证通过</span><strong>{formatRate(workflow.latest.verifyPassRate)}</strong></div>
                   <div><span>返工</span><strong>{formatRate(workflow.latest.reworkRate)}</strong></div>
+                </div>
+              ) : recentCompletedMission ? (
+                <div className={styles.results}>
+                  <div><span>完成步骤</span><strong>{completedPhaseCount}/{recentCompletedMission.phases.length}</strong></div>
+                  <div><span>最终验证</span><strong>{recentMissionVerified ? "通过" : "待验证"}</strong></div>
+                  <div><span>交付状态</span><strong>完成</strong></div>
                 </div>
               ) : (
                 <p className={styles.emptyCopy}>完成第一项任务后，结果会出现在这里。</p>

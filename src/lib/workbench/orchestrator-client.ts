@@ -61,6 +61,7 @@ export type MissionSummary = {
   title: string;
   status: string;
   provider: string;
+  updatedAtMs: number;
   currentPhaseId: string | null;
   phases: MissionPhase[];
   progressExcerpt: string | null;

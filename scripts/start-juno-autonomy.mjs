@@ -4,7 +4,7 @@
  * Usage: node scripts/start-juno-autonomy.mjs
  */
 import { existsSync, readFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,10 +28,10 @@ const install = spawnSync(
 );
 if (install.status !== 0) process.exit(install.status ?? 1);
 
-const pidPath = path.join(workbench, "state", "juno-daemon.pid");
+const pidPath = path.join(workbench, "state", "daemon.pid");
 if (existsSync(pidPath)) {
   const pid = Number(readFileSync(pidPath, "utf8").trim());
-  if (pid) log(`daemon pid=${pid}`);
+  if (pid) log(`scheduler pid=${pid}`);
 }
 
-log("autonomy armed — daily 0:00 + daemon at logon; queue head will auto-spawn");
+log("runtime armed — one scheduler at logon; queue head will auto-spawn");

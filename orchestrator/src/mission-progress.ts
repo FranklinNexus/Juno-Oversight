@@ -176,10 +176,53 @@ function markProgressRow(workbench: string, missionId: string, phaseId: string):
     `(\\|\\s*${phaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\|[^|]*\\|)\\s*(?:queued|in_progress)\\s*(\\|)`,
     "i",
   );
-  if (!row.test(text)) return false;
+  let changed = false;
+  if (row.test(text)) {
+    text = text.replace(row, "$1 done $2");
+    writeFileSync(progressPath, text, "utf8");
+    changed = true;
+  }
 
-  text = text.replace(row, "$1 done $2");
-  writeFileSync(progressPath, text, "utf8");
+  return syncMissionYamlState(workbench, missionId, text) || changed;
+}
+
+function syncMissionYamlState(
+  workbench: string,
+  missionId: string,
+  progressText: string,
+): boolean {
+  const missionPath = path.join(workbench, "missions", missionId, "mission.yaml");
+  if (!existsSync(missionPath)) return false;
+
+  let text = readFileSync(missionPath, "utf8");
+  const original = text;
+  const phaseRows = progressText
+    .split(/\r?\n/)
+    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 2)
+    .map((cells) => ({ id: cells[0], status: cells[cells.length - 1].toLowerCase() }))
+    .filter(({ status }) => /^(?:queued|in_progress|running|done|failed|blocked)$/.test(status));
+
+  for (const phase of phaseRows) {
+    const escapedPhaseId = phase.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const phaseStatus = new RegExp(
+      `(^\\s{2}-\\s+id:\\s*["']?${escapedPhaseId}["']?\\s*$[\\s\\S]*?^\\s{4}status:\\s*)[\\w-]+`,
+      "m",
+    );
+    text = text.replace(phaseStatus, `$1${phase.status}`);
+  }
+
+  const schedule = text.match(/^schedule:\s*["']?([\w-]+)/m)?.[1]?.toLowerCase();
+  if (
+    schedule === "once" &&
+    phaseRows.length > 0 &&
+    phaseRows.every(({ status }) => status === "done")
+  ) {
+    text = text.replace(/^status:\s*[\w-]+/m, "status: COMPLETE");
+  }
+
+  if (text === original) return false;
+  writeFileSync(missionPath, text, "utf8");
   return true;
 }
 
@@ -205,6 +248,7 @@ export function buildReviseImplementItem(
     mission_id: reviewItem.mission_id,
     phase_id: phaseId,
     success_criteria: `REVISE fix slot ${reviseIndex}:\n${fixList}`,
+    interactive: reviewItem.interactive,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   routeBriefToKnownMission,
   writeBriefMission,
 } from "../../../orchestrator/src/mission-brief.js";
+import { markMissionPhaseDone } from "../../../orchestrator/src/mission-progress.js";
 import { detectMcpNeeds } from "../../../orchestrator/src/mcp-provision.js";
 
 describe("mission-brief", () => {
@@ -57,7 +58,35 @@ describe("mission-brief", () => {
       );
       expect(queue).toContain("id: current-task");
       expect(queue).toContain("juno-brief-visible-test-p01-plan");
+      expect(queue).toContain("interactive: true");
       expect(queue.indexOf("current-task")).toBeLessThan(queue.indexOf("juno-brief-visible-test"));
+    } finally {
+      rmSync(workbench, { recursive: true, force: true });
+    }
+  });
+
+  it("completes a one-time mission when its final phase is done", () => {
+    const workbench = mkdtempSync(path.join(tmpdir(), "juno-brief-complete-"));
+    try {
+      mkdirSync(path.join(workbench, "queue"), { recursive: true });
+      writeFileSync(path.join(workbench, "queue", "now.yaml"), "now:\n  []\nbacklog:\n  []\n", "utf8");
+      const plan = compileBriefFromText("Create a one-time runtime report", {
+        missionId: "juno-brief-complete-test",
+      });
+      const missionDir = writeBriefMission(workbench, plan);
+
+      for (const phase of plan.phases.slice(0, -1)) {
+        expect(markMissionPhaseDone(workbench, plan.missionId, phase.phaseId)).toBe(true);
+      }
+      expect(readFileSync(path.join(missionDir, "mission.yaml"), "utf8")).toContain(
+        "status: ACTIVE",
+      );
+
+      const finalPhase = plan.phases[plan.phases.length - 1];
+      expect(markMissionPhaseDone(workbench, plan.missionId, finalPhase.phaseId)).toBe(true);
+      const missionYaml = readFileSync(path.join(missionDir, "mission.yaml"), "utf8");
+      expect(missionYaml).toContain("status: COMPLETE");
+      expect(missionYaml.match(/    status: done/g)).toHaveLength(plan.phases.length);
     } finally {
       rmSync(workbench, { recursive: true, force: true });
     }

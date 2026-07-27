@@ -85,16 +85,37 @@ function extractSection(checkpointText: string): string | null {
 }
 
 function parseListField(section: string, field: string): string[] {
-  const match = section.match(new RegExp(`${field}:\\s*(\\[[^\\]]*\\])`, "i"));
-  if (!match) return [];
-  try {
-    const parsed = JSON.parse(match[1].replace(/'/g, '"')) as unknown;
-    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-  } catch {
-    const inner = match[1].slice(1, -1).trim();
-    if (!inner) return [];
-    return inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  const lines = section.split(/\r?\n/);
+  const fieldPattern = new RegExp(`^\\s*-?\\s*${field}:\\s*(.*)$`, "i");
+  const fieldIndex = lines.findIndex((line) => fieldPattern.test(line));
+  if (fieldIndex < 0) return [];
+  const inline = lines[fieldIndex].match(fieldPattern)?.[1]?.trim() ?? "";
+
+  const parseValue = (value: string): string[] => {
+    const cleaned = value.trim();
+    if (!cleaned) return [];
+    if (!cleaned.startsWith("[")) {
+      return [cleaned.replace(/^["']|["']$/g, "")].filter(Boolean);
+    }
+    try {
+      const parsed = JSON.parse(cleaned.replace(/'/g, '"')) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {
+      const inner = cleaned.slice(1, -1).trim();
+      if (!inner) return [];
+      return inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    }
+  };
+
+  if (inline) return parseValue(inline);
+
+  const values: string[] = [];
+  for (const line of lines.slice(fieldIndex + 1)) {
+    if (/^\s*-\s*[a-z_][a-z0-9_]*:/i.test(line)) break;
+    const bullet = line.match(/^\s*-\s*(.+)$/);
+    if (bullet) values.push(...parseValue(bullet[1]));
   }
+  return values;
 }
 
 function parseYesNo(section: string, field: string): "yes" | "no" | undefined {
@@ -129,6 +150,7 @@ export function parseMetacognition(checkpointText: string): ParsedMetacognition 
 
 export function metacognitionTemplate(runKind: RunKind | "drive"): string {
   return `## METACOGNITION
+- run_kind: ${runKind}
 - understood: yes|partial|no
 - understanding_gaps: []
 - reviewed: yes|no

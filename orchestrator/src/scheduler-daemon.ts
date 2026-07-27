@@ -1,5 +1,14 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { loadProjectEnv, nowIso, workbenchRoot, junoProjectRoot } from "./env.js";
 import {
@@ -33,7 +42,7 @@ const projectRoot = junoProjectRoot();
 const spawnScript = path.join(projectRoot, "orchestrator/dist/spawn-run.js");
 const nodeBin = process.env.JUNO_NODE_PATH ?? "C:\\nvm4w\\nodejs\\node.exe";
 
-let activeChild: ChildProcessWithoutNullStreams | null = null;
+let activeChild: ChildProcess | null = null;
 let activeManifest = "";
 let activeStartedAt = 0;
 let activeMaxMinutes = 25;
@@ -111,7 +120,7 @@ function spawnSlot(manifestPath: string, maxMinutes: number): void {
   const runId = path.basename(path.dirname(manifestPath));
   activeChild = spawn(node, [spawnScript, "--manifest", manifestPath], {
     env: { ...process.env, AGENT_WORKBENCH_ROOT: workbench, JUNO_OVERSIGHT_ROOT: projectRoot },
-    stdio: "pipe",
+    stdio: "inherit",
   });
   activeManifest = manifestPath;
   activeStartedAt = Date.now();
@@ -152,7 +161,7 @@ function isTaskComplete(runId: string, missionId?: string): boolean {
   return /STATUS:\s*COMPLETE/i.test(cp);
 }
 
-function handleCompletedRun(runId: string): void {
+function handleCompletedRun(runId: string): QueueAdvanceAction {
   const sched = loadSchedulerState();
   const { now } = parseNowYaml(workbench);
   const head = now[0];
@@ -192,7 +201,14 @@ function handleCompletedRun(runId: string): void {
   }
 
   saveSchedulerState(sched);
-  mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  if (action.action === "hold") {
+    mergeOrchestratorState(workbench, { activeRunId: runId, activeRunStatus: "failed" });
+  } else if (action.action === "block") {
+    mergeOrchestratorState(workbench, { activeRunId: runId, activeRunStatus: "blocked" });
+  } else {
+    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+  }
+  return action;
 }
 
 async function tick(): Promise<void> {
@@ -225,6 +241,7 @@ async function tick(): Promise<void> {
     } else {
       writeOrchestrator("idle", null);
     }
+    return;
   } else if (status === "stall" || status === "failed") {
     const runId = orch.activeRunId ?? undefined;
     if (runId) {
@@ -240,10 +257,20 @@ async function tick(): Promise<void> {
         return;
       }
     }
-    writeOrchestrator("idle", null);
+    sched.lastAction = "retry_exhausted";
+    saveSchedulerState(sched);
+    mergeOrchestratorState(workbench, { activeRunStatus: "blocked" });
+    return;
+  } else if (status === "blocked") {
+    sched.lastAction = sched.lastAction ?? "blocked";
+    saveSchedulerState(sched);
+    return;
   }
 
-  if (inQuietHours()) {
+  const { now } = parseNowYaml(workbench);
+  const next = now[0];
+
+  if (inQuietHours() && !next?.interactive) {
     sched.lastAction = "quiet_hours";
     saveSchedulerState(sched);
     return;
@@ -256,8 +283,6 @@ async function tick(): Promise<void> {
     return;
   }
 
-  const { now } = parseNowYaml(workbench);
-  const next = now[0];
   if (!next) {
     sched.lastAction = "queue_empty";
     saveSchedulerState(sched);
@@ -280,11 +305,59 @@ async function tick(): Promise<void> {
   saveSchedulerState(sched);
 }
 
+const pidPath = path.join(workbench, "state/daemon.pid");
+
+function processIsAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function acquireDaemonPid(): boolean {
+  mkdirSync(path.dirname(pidPath), { recursive: true });
+  if (existsSync(pidPath)) {
+    const existingPid = Number(readFileSync(pidPath, "utf8").trim());
+    if (existingPid !== process.pid && processIsAlive(existingPid)) {
+      process.stderr.write(`[scheduler] already running pid=${existingPid}\n`);
+      return false;
+    }
+    try {
+      unlinkSync(pidPath);
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const fd = openSync(pidPath, "wx");
+    writeFileSync(fd, String(process.pid), "utf8");
+    closeSync(fd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanupDaemonPid(): void {
+  try {
+    if (Number(readFileSync(pidPath, "utf8").trim()) === process.pid) {
+      unlinkSync(pidPath);
+    }
+  } catch {
+    // Already removed or replaced by a newer process.
+  }
+}
+
+if (!acquireDaemonPid()) process.exit(0);
+
 const schedInit = loadSchedulerState();
-schedInit.daemonStartedAt = schedInit.daemonStartedAt ?? nowIso();
+schedInit.enabled = true;
+schedInit.daemonStartedAt = nowIso();
 saveSchedulerState(schedInit);
 
-writeFileSync(path.join(workbench, "state/daemon.pid"), String(process.pid), "utf8");
 process.stderr.write(`[scheduler] Juno Overseer daemon pid=${process.pid}\n`);
 
 setInterval(() => {
@@ -296,5 +369,14 @@ void tick();
 
 process.on("SIGTERM", () => {
   if (activeChild) activeChild.kill("SIGTERM");
+  cleanupDaemonPid();
   process.exit(0);
 });
+
+process.on("SIGINT", () => {
+  if (activeChild) activeChild.kill("SIGTERM");
+  cleanupDaemonPid();
+  process.exit(0);
+});
+
+process.on("exit", cleanupDaemonPid);

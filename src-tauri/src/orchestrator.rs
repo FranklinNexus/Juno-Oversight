@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use sysinfo::{Pid, System};
 
 use crate::workbench_root_path;
 
@@ -288,6 +289,56 @@ fn scheduler_daemon_script() -> PathBuf {
   juno_project_root().join("orchestrator/dist/scheduler-daemon.js")
 }
 
+fn scheduler_pid_path() -> PathBuf {
+  workbench_root_path().join("state/daemon.pid")
+}
+
+fn process_is_alive(pid: u32) -> bool {
+  let system = System::new_all();
+  system
+    .process(Pid::from_u32(pid))
+    .map(|process| {
+      process
+        .cmd()
+        .iter()
+        .any(|arg| arg.contains("scheduler-daemon"))
+    })
+    .unwrap_or(false)
+}
+
+fn live_scheduler_pid() -> Option<u32> {
+  let pid_path = scheduler_pid_path();
+  let pid = fs::read_to_string(&pid_path)
+    .ok()
+    .and_then(|text| text.trim().parse::<u32>().ok());
+  match pid {
+    Some(pid) if process_is_alive(pid) => Some(pid),
+    Some(_) => {
+      let _ = fs::remove_file(pid_path);
+      None
+    }
+    None => None,
+  }
+}
+
+fn terminate_process(pid: u32) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  let status = Command::new("taskkill")
+    .args(["/PID", &pid.to_string(), "/T", "/F"])
+    .status()
+    .map_err(|e| format!("failed to stop scheduler pid {pid}: {e}"))?;
+  #[cfg(not(target_os = "windows"))]
+  let status = Command::new("kill")
+    .arg(pid.to_string())
+    .status()
+    .map_err(|e| format!("failed to stop scheduler pid {pid}: {e}"))?;
+  if status.success() {
+    Ok(())
+  } else {
+    Err(format!("failed to stop scheduler pid {pid}"))
+  }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SchedulerStatus {
@@ -359,21 +410,16 @@ pub fn get_scheduler_status() -> Result<SchedulerStatus, String> {
     }
   }
 
-  let pid_path = workbench_root_path().join("state/daemon.pid");
-  if pid_path.is_file() {
-    if let Ok(text) = fs::read_to_string(&pid_path) {
-      if let Ok(pid) = text.trim().parse::<u32>() {
-        status.pid = Some(pid);
-        status.running = true;
-      }
-    }
+  if let Some(pid) = live_scheduler_pid() {
+    status.pid = Some(pid);
+    status.running = true;
   }
 
   Ok(status)
 }
 
 pub fn start_scheduler_daemon(daemon: &SchedulerDaemon) -> Result<SchedulerStatus, String> {
-  if daemon.is_running() {
+  if daemon.is_running() || live_scheduler_pid().is_some() {
     return get_scheduler_status();
   }
 
@@ -402,10 +448,18 @@ pub fn start_scheduler_daemon(daemon: &SchedulerDaemon) -> Result<SchedulerStatu
 }
 
 pub fn stop_scheduler_daemon(daemon: &SchedulerDaemon) -> Result<(), String> {
+  let external_pid = live_scheduler_pid();
   let mut guard = daemon.child.lock().expect("scheduler lock");
+  let mut owned_pid = None;
   if let Some(mut child) = guard.take() {
+    owned_pid = Some(child.id());
     let _ = child.kill();
     let _ = child.wait();
+  }
+  drop(guard);
+
+  if let Some(pid) = external_pid.filter(|pid| Some(*pid) != owned_pid) {
+    terminate_process(pid)?;
   }
 
   let state_path = workbench_root_path().join("state/scheduler.json");
@@ -424,8 +478,7 @@ pub fn stop_scheduler_daemon(daemon: &SchedulerDaemon) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
   }
 
-  let pid_path = workbench_root_path().join("state/daemon.pid");
-  let _ = fs::remove_file(pid_path);
+  let _ = fs::remove_file(scheduler_pid_path());
   Ok(())
 }
 

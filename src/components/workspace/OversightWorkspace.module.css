@@ -82,6 +82,11 @@
 .currentWork span { flex-shrink: 0; color: var(--muted); font-size: 11px; }
 .emptyCopy { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
 
+.deliveryReceipt { display: grid; gap: 7px; margin-top: 26px; padding: 0 0 22px; border-bottom: 1px solid #e0e4e1; }
+.deliveryReceipt > span { color: var(--green); font-family: var(--font-mono), ui-monospace, monospace; font-size: 10px; }
+.deliveryReceipt strong { overflow-wrap: anywhere; font-size: 15px; font-weight: 620; line-height: 1.5; }
+.deliveryReceipt small { overflow: hidden; color: var(--muted); font-family: var(--font-mono), ui-monospace, monospace; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
 .steps { display: grid; margin: 24px 0 0; padding: 0; list-style: none; }
 .steps li { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #e0e4e1; }
 .steps li > span { color: #89928d; font-family: var(--font-mono), ui-monospace, monospace; font-size: 10px; }

@@ -224,6 +224,7 @@ export function writeBriefMission(workbench: string, plan: BriefPlan): string {
     provider: "cursor_composer",
     max_minutes: 60,
     success_criteria: p.criteria,
+    interactive: true,
   }));
 
   const existing = parseNowYaml(workbench);

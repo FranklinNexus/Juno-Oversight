@@ -34,6 +34,9 @@ function formatQueueItem(item: QueueItem): string {
   if (item.max_minutes != null) {
     lines.push(`    max_minutes: ${item.max_minutes}`);
   }
+  if (item.interactive != null) {
+    lines.push(`    interactive: ${item.interactive}`);
+  }
   return lines.join("\n");
 }
 
@@ -110,6 +113,7 @@ export function parseNowYaml(workbench: string): { now: QueueItem[]; backlog: Qu
     if (key === "workflow_id") item.workflow_id = val;
     if (key === "eval_profile") item.eval_profile = val as QueueItem["eval_profile"];
     if (key === "depends_on") item.depends_on = val;
+    if (key === "interactive") item.interactive = val === "true";
   }
   pushItem();
   return { now: sections.now, backlog: sections.backlog };

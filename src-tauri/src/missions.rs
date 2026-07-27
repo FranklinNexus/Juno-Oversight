@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+use std::time::UNIX_EPOCH;
 
 use crate::workbench_root_path;
 
@@ -19,6 +20,7 @@ pub struct MissionSummary {
   pub title: String,
   pub status: String,
   pub provider: String,
+  pub updated_at_ms: u64,
   pub current_phase_id: Option<String>,
   pub phases: Vec<MissionPhase>,
   pub progress_excerpt: Option<String>,
@@ -39,7 +41,7 @@ pub fn get_missions_snapshot() -> Result<Vec<MissionSummary>, String> {
       out.push(summary);
     }
   }
-  out.sort_by(|a, b| a.id.cmp(&b.id));
+  out.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms).then_with(|| b.id.cmp(&a.id)));
   Ok(out)
 }
 
@@ -58,6 +60,12 @@ fn parse_mission_dir(dir: &Path) -> Option<MissionSummary> {
   let title = yaml_field(&text, "title").unwrap_or_else(|| id.clone());
   let status = yaml_field(&text, "status").unwrap_or_else(|| "ACTIVE".to_string());
   let provider = yaml_field(&text, "provider").unwrap_or_else(|| "cursor_composer".to_string());
+  let updated_at_ms = fs::metadata(&mission_yaml)
+    .and_then(|metadata| metadata.modified())
+    .ok()
+    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+    .map(|duration| duration.as_millis() as u64)
+    .unwrap_or(0);
   let phases = parse_phases(&text);
   let current_phase_id = phases
     .iter()
@@ -78,6 +86,7 @@ fn parse_mission_dir(dir: &Path) -> Option<MissionSummary> {
     title,
     status,
     provider,
+    updated_at_ms,
     current_phase_id,
     phases,
     progress_excerpt,
