@@ -13,15 +13,15 @@ import { useWorkbenchSnapshot } from "@/hooks/useWorkbenchSnapshot";
 import { useWorkflowEffectSnapshot } from "@/hooks/useWorkflowEffectSnapshot";
 import type { QueueItem, WorkflowEffectMetrics } from "@/lib/workbench/types";
 
-type ViewId = "overview" | "missions" | "runs" | "knowledge" | "systems";
+type ViewId = "now" | "missions" | "runs" | "knowledge" | "systems";
 type Tone = "neutral" | "success" | "warning" | "danger" | "accent";
 
-const NAV_ITEMS: Array<{ id: ViewId; symbol: string; label: string; description: string }> = [
-  { id: "overview", symbol: "⌂", label: "总览", description: "结果与决策" },
-  { id: "missions", symbol: "◎", label: "任务", description: "目标与阶段" },
-  { id: "runs", symbol: "▷", label: "运行", description: "队列与事件" },
-  { id: "knowledge", symbol: "≡", label: "知识流", description: "日报与发布" },
-  { id: "systems", symbol: "◇", label: "系统", description: "调度与基础设施" },
+const NAV_ITEMS: Array<{ id: ViewId; glyph: string; label: string; hint: string }> = [
+  { id: "now", glyph: "→", label: "现在", hint: "下一步动作" },
+  { id: "missions", glyph: "○", label: "任务", hint: "目标与阶段" },
+  { id: "runs", glyph: "▸", label: "运行", hint: "队列与事件" },
+  { id: "knowledge", glyph: "≡", label: "证据", hint: "日报与发布" },
+  { id: "systems", glyph: "⌁", label: "系统", hint: "环境与自治" },
 ];
 
 function cn(...values: Array<string | false | null | undefined>) {
@@ -47,7 +47,11 @@ function formatTime(value: string | null | undefined) {
 
 function qualityState(metrics: WorkflowEffectMetrics | null, available: boolean) {
   if (!available || !metrics) {
-    return { label: "等待验证", tone: "neutral" as Tone, detail: "尚无持久化门禁结果" };
+    return {
+      label: "未验证",
+      tone: "neutral" as Tone,
+      detail: "完成一次真实运行并通过门禁，Juno 才会放开自治动作。",
+    };
   }
   const degraded =
     (metrics.verifyPassRate != null && metrics.verifyPassRate < 0.8) ||
@@ -55,94 +59,64 @@ function qualityState(metrics: WorkflowEffectMetrics | null, available: boolean)
     metrics.reviewBlock > 0 ||
     metrics.escalations > 2;
   return degraded
-    ? { label: "需要修复", tone: "danger" as Tone, detail: "已暂停扩展，优先稳定工作流" }
-    : { label: "质量健康", tone: "success" as Tone, detail: "自主推进可以继续" };
+    ? { label: "需要修复", tone: "danger" as Tone, detail: "质量信号下降，扩展动作已暂停。" }
+    : { label: "可继续", tone: "success" as Tone, detail: "质量信号稳定，可以继续推进下一项任务。" };
 }
 
-function StatusPill({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
-  return <span className={cn(styles.pill, styles[`tone_${tone}`])}>{children}</span>;
+function Status({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
+  return <span className={cn(styles.status, styles[`tone_${tone}`])}>{children}</span>;
 }
 
-function ToolButton({
+function ActionButton({
   children,
-  symbol,
+  glyph,
   tone = "neutral",
   disabled,
   onClick,
   title,
+  wide = false,
 }: {
-  children?: ReactNode;
-  symbol?: string;
+  children: ReactNode;
+  glyph?: string;
   tone?: Tone;
   disabled?: boolean;
   onClick?: () => void;
   title?: string;
+  wide?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={cn(styles.toolButton, styles[`button_${tone}`])}
+      className={cn(styles.actionButton, styles[`action_${tone}`], wide && styles.actionWide)}
       disabled={disabled}
       onClick={onClick}
       title={title}
     >
-      {symbol ? <span className={styles.buttonSymbol} aria-hidden>{symbol}</span> : null}
-      {children ? <span>{children}</span> : null}
+      {glyph ? <span className={styles.buttonGlyph} aria-hidden>{glyph}</span> : null}
+      <span>{children}</span>
     </button>
   );
 }
 
-function SectionHeader({
+function SectionHeading({
   eyebrow,
   title,
-  meta,
+  detail,
   action,
 }: {
   eyebrow: string;
   title: string;
-  meta?: string;
+  detail?: string;
   action?: ReactNode;
 }) {
   return (
-    <div className={styles.sectionHeader}>
+    <div className={styles.sectionHeading}>
       <div>
         <div className={styles.eyebrow}>{eyebrow}</div>
         <h2>{title}</h2>
-        {meta ? <p>{meta}</p> : null}
+        {detail ? <p>{detail}</p> : null}
       </div>
-      {action ? <div className={styles.sectionActions}>{action}</div> : null}
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone?: Tone;
-}) {
-  return (
-    <div className={cn(styles.metric, styles[`metric_${tone}`])}>
-      <span className={styles.metricLabel}>{label}</span>
-      <strong>{value}</strong>
-      <span className={styles.metricDetail}>{detail}</span>
-    </div>
-  );
-}
-
-function EmptyBlock({ symbol, title, detail }: { symbol: string; title: string; detail: string }) {
-  return (
-    <div className={styles.emptyBlock}>
-      <span className={styles.emptySymbol} aria-hidden>{symbol}</span>
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
-      </div>
+      {action ? <div className={styles.sectionAction}>{action}</div> : null}
     </div>
   );
 }
@@ -151,21 +125,32 @@ function QueueRow({ item, index }: { item: QueueItem; index: number }) {
   const running = item.status === "running";
   return (
     <article className={styles.queueRow}>
-      <div className={cn(styles.queueIndex, running && styles.queueIndexRunning)}>
-        {running ? "▶" : String(index + 1).padStart(2, "0")}
-      </div>
-      <div className={styles.queueMain}>
-        <div className={styles.queueTitleLine}>
+      <span className={cn(styles.queueMark, running && styles.queueMarkLive)}>{running ? "●" : String(index + 1).padStart(2, "0")}</span>
+      <div className={styles.queueBody}>
+        <div className={styles.queueTitle}>
           <strong>{item.id}</strong>
-          <StatusPill tone={running ? "success" : "neutral"}>{running ? "运行中" : "已排队"}</StatusPill>
+          <Status tone={running ? "success" : "neutral"}>{running ? "运行中" : "排队"}</Status>
         </div>
         <p>{item.mission_id ? `${item.mission_id} / ${item.phase_id ?? "next"}` : item.prompt}</p>
       </div>
-      <div className={styles.queueMeta}>
+      <div className={styles.queueAside}>
         <span>{item.kind}</span>
-        <span>{item.max_minutes ?? 25} 分钟</span>
+        <span>{item.max_minutes ?? 25} min</span>
       </div>
     </article>
+  );
+}
+
+function EmptySignal({ title, detail, action }: { title: string; detail: string; action?: ReactNode }) {
+  return (
+    <div className={styles.emptySignal}>
+      <span className={styles.emptyRule} aria-hidden />
+      <div>
+        <strong>{title}</strong>
+        <p>{detail}</p>
+        {action ? <div className={styles.emptyAction}>{action}</div> : null}
+      </div>
+    </div>
   );
 }
 
@@ -178,7 +163,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export function OversightWorkspace() {
-  const [view, setView] = useState<ViewId>("overview");
+  const [view, setView] = useState<ViewId>("now");
   const workbench = useWorkbenchSnapshot();
   const workflow = useWorkflowEffectSnapshot();
   const scheduler = useSchedulerStatus();
@@ -191,12 +176,12 @@ export function OversightWorkspace() {
     workbench.refresh();
     events.refresh();
   });
-
   const quality = qualityState(workflow.latest, workflow.available);
+  const currentNav = NAV_ITEMS.find((item) => item.id === view) ?? NAV_ITEMS[0];
+  const connected = workbench.rootConfigured;
   const runningQueue = workbench.queue.filter((item) => item.status === "running");
   const queuedQueue = workbench.queue.filter((item) => item.status !== "running");
   const activeMissions = missionData.missions.filter((mission) => mission.status === "ACTIVE");
-  const currentNav = NAV_ITEMS.find((item) => item.id === view) ?? NAV_ITEMS[0];
 
   const refreshAll = () => {
     workbench.refresh();
@@ -205,48 +190,24 @@ export function OversightWorkspace() {
     promote.refresh();
   };
 
-  const metricItems = useMemo(() => {
+  const verifiedMetrics = useMemo(() => {
     const latest = workflow.latest;
     return [
-      {
-        label: "已交付任务",
-        value: latest ? String(latest.missionDone) : "—",
-        detail: latest ? `${latest.date} 的已验证结果` : "等待真实完成证据",
-        tone: latest?.missionDone ? "accent" as Tone : "neutral" as Tone,
-      },
-      {
-        label: "验证通过率",
-        value: formatRate(latest?.verifyPassRate),
-        detail: latest ? `${latest.verifyPass} 个验证通过` : "未生成 KPI 快照",
-        tone: latest?.verifyPassRate === 1 ? "success" as Tone : latest?.verifyPassRate != null ? "warning" as Tone : "neutral" as Tone,
-      },
-      {
-        label: "返工率",
-        value: formatRate(latest?.reworkRate),
-        detail: latest ? `${latest.reviewRework} 次 review revise` : "目标低于 25%",
-        tone: latest?.reworkRate != null && latest.reworkRate > 0.25 ? "danger" as Tone : latest ? "success" as Tone : "neutral" as Tone,
-      },
-      {
-        label: "人工升级",
-        value: latest ? String(latest.escalations) : "—",
-        detail: latest ? `${latest.reviewBlock} 个 review block` : "目标每日少于 3 次",
-        tone: latest?.escalations ? "warning" as Tone : latest ? "success" as Tone : "neutral" as Tone,
-      },
+      { label: "通过率", value: formatRate(latest?.verifyPassRate), detail: latest ? `${latest.verifyPass} 次通过` : "等待真实证据", tone: latest?.verifyPassRate === 1 ? "success" as Tone : "neutral" as Tone },
+      { label: "返工率", value: formatRate(latest?.reworkRate), detail: latest ? `${latest.reviewRework} 次 revise` : "目标低于 25%", tone: latest?.reworkRate != null && latest.reworkRate > 0.25 ? "danger" as Tone : "neutral" as Tone },
+      { label: "人工升级", value: latest ? String(latest.escalations) : "—", detail: latest ? `${latest.reviewBlock} 个 block` : "目标少于 3 次", tone: latest?.escalations ? "warning" as Tone : "neutral" as Tone },
     ];
   }, [workflow.latest]);
 
   return (
     <div className={styles.workspace}>
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <div className={styles.brandMark}>J</div>
-          <div>
-            <strong>Juno</strong>
-            <span>Oversight</span>
-          </div>
+      <aside className={styles.rail} aria-label="Juno 工作流导航">
+        <div className={styles.identity}>
+          <span className={styles.identityMark}>J</span>
+          <div><strong>JUNO</strong><span>OVERSIGHT</span></div>
         </div>
-
-        <nav className={styles.nav} aria-label="工作台导航">
+        <div className={styles.railLabel}>工作流</div>
+        <nav className={styles.nav}>
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -255,307 +216,125 @@ export function OversightWorkspace() {
               onClick={() => setView(item.id)}
               aria-current={view === item.id ? "page" : undefined}
             >
-              <span className={styles.navSymbol} aria-hidden>{item.symbol}</span>
-              <span className={styles.navCopy}>
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
-              </span>
+              <span className={styles.navGlyph} aria-hidden>{item.glyph}</span>
+              <span className={styles.navText}><strong>{item.label}</strong><small>{item.hint}</small></span>
             </button>
           ))}
         </nav>
-
-        <div className={styles.sidebarStatus}>
-          <div className={styles.statusLine}>
-            <span className={cn(styles.statusDot, scheduler.status.running && styles.statusDotLive)} />
-            <span>自治调度</span>
-            <strong>{scheduler.status.running ? "运行中" : "已停止"}</strong>
+        <div className={styles.railFooter}>
+          <div className={styles.connectionLine}>
+            <span className={cn(styles.connectionDot, connected && styles.connectionDotLive)} />
+            <span>{connected ? "Workbench 已连接" : "Workbench 未接入"}</span>
           </div>
-          <div className={styles.statusLine}>
-            <span className={cn(styles.statusDot, workbench.rootConfigured && styles.statusDotLive)} />
-            <span>Workbench</span>
-            <strong>{workbench.rootConfigured ? "已连接" : "预览模式"}</strong>
-          </div>
-          <p>{workbench.rootPath ?? "浏览器预览不写入本地工作区"}</p>
+          <p>{connected ? workbench.rootPath : "浏览器只读 · 不写入本地文件"}</p>
         </div>
       </aside>
 
       <main className={styles.main}>
         <header className={styles.topbar}>
-          <div>
-            <div className={styles.breadcrumb}>Juno / {currentNav.label}</div>
+          <div className={styles.pageContext}>
+            <span className={styles.contextPath}>JUNO / {currentNav.label}</span>
             <h1>{currentNav.label}</h1>
           </div>
-          <div className={styles.topbarActions}>
-            <div className={styles.syncMeta}>
-              <span className={styles.syncDot} />
-              <div>
-                <strong>{workbench.rootConfigured ? "桌面数据" : "预览数据"}</strong>
-                <span>更新于 {formatTime(workbench.updatedAt)}</span>
-              </div>
+          <div className={styles.topbarRight}>
+            <div className={styles.liveMeta}>
+              <span className={cn(styles.liveDot, connected && styles.liveDotOn)} />
+              <div><strong>{connected ? "LIVE DATA" : "NO WORKSPACE"}</strong><span>{formatTime(workbench.updatedAt)}</span></div>
             </div>
-            <ToolButton symbol="↻" onClick={refreshAll} title="刷新所有数据">刷新</ToolButton>
+            <button type="button" className={styles.refreshButton} onClick={refreshAll} title="刷新工作区数据"><span aria-hidden>↻</span>刷新</button>
           </div>
         </header>
 
         <div className={styles.content}>
-          {view === "overview" ? (
+          {view === "now" ? (
             <>
-              <section className={styles.outcomeBanner}>
-                <div>
-                  <span className={styles.eyebrow}>Outcome-adaptive workflow</span>
-                  <h2>{quality.label}</h2>
-                  <p>{quality.detail}</p>
+              <section className={cn(styles.focus, !connected && styles.focusDisconnected)}>
+                <div className={styles.focusMain}>
+                  <div className={styles.focusKicker}><span className={styles.focusSignal} />NEXT MOVE · {connected ? "READY" : "SETUP"}</div>
+                  <h2>{connected ? (workbench.activeRunId ? "正在观察一次运行" : workbench.queue.length ? "队列里有下一步" : "工作区已接入") : "先接入你的工作区"}</h2>
+                  <p>{connected ? (workbench.activeRunId ? `${workbench.activeRunId} 正在产生实时证据，先看结果再决定是否继续。` : workbench.queue.length ? `${workbench.queue.length} 个任务等待决策，Juno 不会在没有门禁结果时自动扩张。` : "没有待执行任务。可以先运行一次 Dry Run，建立第一条可验证证据。") : "Juno 不制造任务，也不拿预览数据冒充运行。连接桌面 Workbench 后，所有动作、事件和 KPI 都来自真实文件。"}</p>
+                  {!connected ? (
+                    <div className={styles.setupSteps}>
+                      <div><span>01</span><strong>打开桌面端</strong><small>启动 pnpm tauri:dev</small></div>
+                      <div><span>02</span><strong>指向 Workbench</strong><small>读取本地任务与日报</small></div>
+                      <div><span>03</span><strong>先做 Dry Run</strong><small>通过门禁后再 Live</small></div>
+                    </div>
+                  ) : (
+                    <div className={styles.focusActions}>
+                      <ActionButton glyph="▸" tone="accent" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus === "running"} onClick={() => runControl.spawn(true)} title="启动 Dry Run">Dry Run</ActionButton>
+                      <ActionButton glyph="→" disabled={!workbench.queue.length} onClick={() => setView("runs")}>查看队列</ActionButton>
+                    </div>
+                  )}
+                  {runControl.error ? <p className={styles.errorText}>{runControl.error}</p> : null}
                 </div>
-                <div className={styles.bannerStatus}>
-                  <StatusPill tone={quality.tone}>{quality.label}</StatusPill>
-                  <span>{workflow.latest?.strategy ?? "balanced"} 策略</span>
+                <div className={styles.focusAside}>
+                  <div className={styles.focusAsideLabel}>自治策略</div>
+                  <strong>{workflow.latest?.strategy ?? "BALANCED"}</strong>
+                  <span>{workflow.latest ? "由最近一次门禁结果决定" : "等待首条验证结果"}</span>
                 </div>
               </section>
 
-              <section className={styles.metricsGrid} aria-label="工作流效果">
-                {metricItems.map((item) => <Metric key={item.label} {...item} />)}
-              </section>
-
-              <div className={styles.overviewGrid}>
-                <section className={styles.panel}>
-                  <SectionHeader
-                    eyebrow="Execution"
-                    title="当前执行队列"
-                    meta={`${runningQueue.length} 个运行中 · ${queuedQueue.length} 个等待中`}
-                    action={<button type="button" className={styles.textAction} onClick={() => setView("runs")}>查看全部 →</button>}
-                  />
-                  <div className={styles.queueList}>
-                    {workbench.loading ? (
-                      <div className={styles.skeletonList}><span /><span /><span /></div>
-                    ) : workbench.queue.length ? (
-                      workbench.queue.slice(0, 5).map((item, index) => <QueueRow key={item.id} item={item} index={index} />)
-                    ) : (
-                      <EmptyBlock symbol="✓" title="队列已清空" detail="没有待执行的任务，Drive 可以评估下一步。" />
-                    )}
-                  </div>
+              <div className={styles.commandGrid}>
+                <section className={styles.surface}>
+                  <SectionHeading eyebrow="EXECUTION" title="当前队列" detail={`${runningQueue.length} 运行中 · ${queuedQueue.length} 等待中`} action={<button type="button" className={styles.inlineAction} onClick={() => setView("runs")}>全部运行 →</button>} />
+                  {workbench.loading ? <div className={styles.loadingRows}><span /><span /><span /></div> : workbench.queue.length ? <div className={styles.queueList}>{workbench.queue.slice(0, 6).map((item, index) => <QueueRow key={item.id} item={item} index={index} />)}</div> : <EmptySignal title="队列为空" detail={connected ? "没有待执行 slot。Drive 会在有真实输入时生成下一项。" : "接入桌面 Workbench 后，这里会显示真实任务。"} action={!connected ? <button type="button" className={styles.inlineAction} onClick={() => setView("systems")}>查看接入状态 →</button> : null} />}
                 </section>
 
-                <aside className={styles.sideStack}>
-                  <section className={styles.panel}>
-                    <SectionHeader eyebrow="Autonomy" title="自治控制" meta="有界调度器与运行入口" />
-                    <div className={styles.daemonState}>
-                      <div>
-                        <span className={cn(styles.largeStatusDot, scheduler.status.running && styles.largeStatusDotLive)} />
-                        <div>
-                          <strong>{scheduler.status.running ? "调度器正在工作" : "调度器已停止"}</strong>
-                          <p>{scheduler.status.running ? `PID ${scheduler.status.pid ?? "—"}` : scheduler.tauriReady ? "可安全启动" : "桌面端可用"}</p>
-                        </div>
-                      </div>
-                      <StatusPill tone={scheduler.status.running ? "success" : "neutral"}>{scheduler.status.running ? "LIVE" : "IDLE"}</StatusPill>
-                    </div>
-                    <div className={styles.actionRow}>
-                      <ToolButton
-                        symbol="▶"
-                        tone="accent"
-                        disabled={!scheduler.tauriReady || scheduler.busy || scheduler.status.running}
-                        onClick={scheduler.start}
-                        title="启动自治调度器"
-                      >启动</ToolButton>
-                      <ToolButton
-                        symbol="■"
-                        disabled={!scheduler.tauriReady || scheduler.busy || !scheduler.status.running}
-                        onClick={scheduler.stop}
-                        title="停止自治调度器"
-                      >停止</ToolButton>
-                    </div>
-                    <dl className={styles.compactFacts}>
-                      <div><dt>今日运行</dt><dd>{scheduler.status.runsToday}</dd></div>
-                      <div><dt>最近动作</dt><dd>{scheduler.status.lastAction ?? "—"}</dd></div>
-                      <div><dt>最近心跳</dt><dd>{formatTime(scheduler.status.lastTickAt)}</dd></div>
-                    </dl>
+                <aside className={styles.rightRail}>
+                  <section className={cn(styles.surface, styles.gateSurface)}>
+                    <SectionHeading eyebrow="QUALITY GATE" title="结果门禁" detail={quality.detail} action={<Status tone={quality.tone}>{quality.label}</Status>} />
+                    <div className={styles.gateMetrics}>{verifiedMetrics.map((metric) => <div className={cn(styles.gateMetric, styles[`metric_${metric.tone}`])} key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div>)}</div>
+                    <button type="button" className={styles.linkButton} onClick={() => setView("knowledge")}>打开证据流 →</button>
                   </section>
 
-                  <section className={styles.panel}>
-                    <SectionHeader eyebrow="Daily context" title={workbench.dailyTitle ?? "今日上下文"} />
-                    {workbench.dailyExcerpt ? (
-                      <pre className={styles.digestPreview}>{workbench.dailyExcerpt}</pre>
-                    ) : (
-                      <EmptyBlock symbol="≡" title="还没有今日日报" detail="第一次运行完成后会在这里形成上下文。" />
-                    )}
-                    <button type="button" className={styles.textAction} onClick={() => setView("knowledge")}>进入知识流 →</button>
+                  <section className={styles.surface}>
+                    <SectionHeading eyebrow="AUTONOMY" title="自治控制" detail={scheduler.status.running ? `PID ${scheduler.status.pid ?? "—"} · 最近心跳 ${formatTime(scheduler.status.lastTickAt)}` : "默认停止，先验证再放权"} action={<Status tone={scheduler.status.running ? "success" : "neutral"}>{scheduler.status.running ? "LIVE" : "IDLE"}</Status>} />
+                    <div className={styles.autonomyActions}>
+                      <ActionButton glyph="▶" tone="accent" disabled={!scheduler.tauriReady || scheduler.busy || scheduler.status.running} onClick={scheduler.start}>启动</ActionButton>
+                      <ActionButton glyph="■" disabled={!scheduler.tauriReady || scheduler.busy || !scheduler.status.running} onClick={scheduler.stop}>停止</ActionButton>
+                    </div>
+                    <div className={styles.autonomyFacts}><span>今日运行 <strong>{scheduler.status.runsToday}</strong></span><span>工作区 <strong>{connected ? "真实" : "未接入"}</strong></span></div>
                   </section>
                 </aside>
               </div>
 
-              <div className={styles.overviewLowerGrid}>
-                <section className={styles.panel}>
-                  <SectionHeader
-                    eyebrow="Latest run"
-                    title={workbench.activeRunId ?? "还没有活跃运行"}
-                    meta={workbench.activeRunId ? "实时事件会在运行视图持续刷新" : "从 Dry Run 开始验证执行链路"}
-                    action={<button type="button" className={styles.textAction} onClick={() => setView("runs")}>打开运行 →</button>}
-                  />
-                  <div className={styles.latestRunFacts}>
-                    <div><span>状态</span><StatusPill tone={workbench.activeRunStatus === "running" ? "success" : "neutral"}>{workbench.activeRunStatus.toUpperCase()}</StatusPill></div>
-                    <div><span>任务来源</span><strong>{workbench.rootConfigured ? "AgentWorkbench" : "浏览器预览"}</strong></div>
-                    <div><span>事件读取</span><strong>{events.tauriReady ? `${events.lines.length} 条` : "桌面端可用"}</strong></div>
-                  </div>
-                </section>
-
-                <section className={styles.panel}>
-                  <SectionHeader
-                    eyebrow="Verified evidence"
-                    title="工作流效果"
-                    meta={workflow.latest ? `证据日期 ${workflow.latest.date}` : "只展示持久化门禁结果"}
-                    action={<button type="button" className={styles.textAction} onClick={() => setView("knowledge")}>查看详情 →</button>}
-                  />
-                  {workflow.latest ? (
-                    <div className={styles.evidenceFacts}>
-                      <div><strong>{formatRate(workflow.latest.verifyPassRate)}</strong><span>验证通过率</span></div>
-                      <div><strong>{formatRate(workflow.latest.reworkRate)}</strong><span>返工率</span></div>
-                      <div><strong>{workflow.latest.reviewBlock}</strong><span>Review block</span></div>
-                    </div>
-                  ) : (
-                    <EmptyBlock symbol="◇" title="暂无已验证结果" detail="连接桌面 Workbench 并完成一次门禁闭环后显示。" />
-                  )}
-                </section>
+              <div className={styles.signalGrid}>
+                <section className={styles.signalPanel}><span className={styles.signalLabel}>LATEST RUN</span><strong>{workbench.activeRunId ?? "—"}</strong><span>{workbench.activeRunId ? workbench.activeRunStatus.toUpperCase() : "尚无真实运行"}</span><button type="button" onClick={() => setView("runs")}>查看事件 →</button></section>
+                <section className={styles.signalPanel}><span className={styles.signalLabel}>DAILY CONTEXT</span><strong>{workbench.dailyTitle ?? "今日上下文"}</strong><span>{workbench.dailyExcerpt ? "已从 Workbench 读取" : "运行完成后自动生成"}</span><button type="button" onClick={() => setView("knowledge")}>查看日报 →</button></section>
+                <section className={styles.signalPanel}><span className={styles.signalLabel}>EDGE SIGNAL</span><strong>{telemetry.source === "tauri" ? telemetry.node : "未连接"}</strong><span>{telemetry.source === "tauri" ? `${telemetry.latencyMs} ms · ${telemetry.thermalC}°C` : "浏览器不展示模拟指标"}</span><button type="button" onClick={() => setView("systems")}>查看系统 →</button></section>
               </div>
             </>
           ) : null}
 
           {view === "missions" ? (
             <section className={styles.pageSection}>
-              <SectionHeader eyebrow="Mission portfolio" title="任务组合" meta="按目标检查阶段、执行者和真实进展" />
-              {!missionData.tauriReady ? (
-                <EmptyBlock symbol="◎" title="桌面端连接后显示任务" detail="浏览器模式不会伪造 missions/ 数据。" />
-              ) : missionData.loading ? (
-                <div className={styles.skeletonList}><span /><span /><span /></div>
-              ) : missionData.missions.length ? (
-                <div className={styles.missionGrid}>
-                  {missionData.missions.map((mission) => {
-                    const done = mission.phases.filter((phase) => phase.status === "done").length;
-                    const progress = mission.phases.length ? Math.round((done / mission.phases.length) * 100) : 0;
-                    return (
-                      <article key={mission.id} className={styles.missionCard}>
-                        <div className={styles.missionTop}>
-                          <StatusPill tone={mission.status === "ACTIVE" ? "success" : "neutral"}>{mission.status}</StatusPill>
-                          <span>{mission.provider}</span>
-                        </div>
-                        <h3>{mission.title}</h3>
-                        <p>{mission.id}</p>
-                        <ProgressBar value={progress} />
-                        <div className={styles.missionProgress}><span>{done} / {mission.phases.length} 阶段完成</span><strong>{progress}%</strong></div>
-                        <div className={styles.phaseList}>
-                          {mission.phases.map((phase) => (
-                            <span key={phase.id} className={cn(phase.status === "done" && styles.phaseDone, phase.status === "in_progress" && styles.phaseActive)}>
-                              {phase.id}
-                            </span>
-                          ))}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyBlock symbol="✓" title="没有未完成任务" detail="任务组合为空，等待 Drive 生成下一项工作。" />
-              )}
+              <SectionHeading eyebrow="MISSION PORTFOLIO" title="任务组合" detail="只展示桌面 Workbench 中已存在的目标与阶段。" />
+              {!missionData.tauriReady ? <EmptySignal title="桌面端尚未接入" detail="浏览器模式不会伪造 missions/ 数据。启动桌面端后刷新本页。" action={<button type="button" className={styles.inlineAction} onClick={refreshAll}>重新检查 →</button>} /> : missionData.loading ? <div className={styles.loadingRows}><span /><span /><span /></div> : missionData.missions.length ? <div className={styles.missionTable}>{missionData.missions.map((mission) => { const done = mission.phases.filter((phase) => phase.status === "done").length; const progress = mission.phases.length ? Math.round((done / mission.phases.length) * 100) : 0; return <article key={mission.id} className={styles.missionRow}><div className={styles.missionRowTop}><Status tone={mission.status === "ACTIVE" ? "success" : "neutral"}>{mission.status}</Status><span>{mission.provider}</span></div><h3>{mission.title}</h3><p>{mission.id}</p><ProgressBar value={progress} /><div className={styles.missionProgress}><span>{done} / {mission.phases.length} 阶段</span><strong>{progress}%</strong></div><div className={styles.phaseList}>{mission.phases.map((phase) => <span key={phase.id} className={cn(phase.status === "done" && styles.phaseDone, phase.status === "in_progress" && styles.phaseActive)}>{phase.id}</span>)}</div></article>; })}</div> : <EmptySignal title="没有未完成任务" detail="任务组合为空，等待 Drive 生成下一项工作。" />}
               {activeMissions.length ? <p className={styles.footnote}>{activeMissions.length} 个任务当前处于 ACTIVE 状态。</p> : null}
             </section>
           ) : null}
 
           {view === "runs" ? (
-            <div className={styles.runsGrid}>
-              <section className={styles.panel}>
-                <SectionHeader
-                  eyebrow="Run control"
-                  title={workbench.activeRunId ?? "当前没有运行"}
-                  meta={workbench.activeRunId ? `状态：${workbench.activeRunStatus}` : "从 Dry Run 验证链路，或启动真实运行"}
-                  action={<StatusPill tone={workbench.activeRunStatus === "running" ? "success" : "neutral"}>{workbench.activeRunStatus.toUpperCase()}</StatusPill>}
-                />
-                <div className={styles.actionRow}>
-                  <ToolButton symbol="▷" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus === "running"} onClick={() => runControl.spawn(true)}>Dry Run</ToolButton>
-                  <ToolButton symbol="▶" tone="accent" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus === "running"} onClick={() => runControl.spawn(false)}>Live Run</ToolButton>
-                  <ToolButton symbol="■" tone="danger" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus !== "running"} onClick={runControl.kill}>终止</ToolButton>
-                </div>
+            <div className={styles.twoColumn}>
+              <section className={styles.surface}>
+                <SectionHeading eyebrow="RUN CONTROL" title={workbench.activeRunId ?? "当前没有运行"} detail={workbench.activeRunId ? `状态：${workbench.activeRunStatus}` : "先用 Dry Run 验证链路，再决定是否 Live。"} action={<Status tone={workbench.activeRunStatus === "running" ? "success" : "neutral"}>{workbench.activeRunStatus.toUpperCase()}</Status>} />
+                <div className={styles.actionRow}><ActionButton glyph="▷" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus === "running"} onClick={() => runControl.spawn(true)}>Dry Run</ActionButton><ActionButton glyph="▶" tone="accent" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus === "running"} onClick={() => runControl.spawn(false)}>Live Run</ActionButton><ActionButton glyph="■" tone="danger" disabled={!runControl.tauriReady || runControl.busy || workbench.activeRunStatus !== "running"} onClick={runControl.kill}>终止</ActionButton></div>
                 {runControl.error ? <p className={styles.errorText}>{runControl.error}</p> : null}
-                <div className={styles.eventLog}>
-                  <div className={styles.eventLogHeader}><span>事件流</span><span>{events.lines.length} 条</span></div>
-                  {events.lines.length ? events.lines.map((line, index) => <pre key={`${index}-${line.slice(0, 16)}`}>{line}</pre>) : <EmptyBlock symbol="…" title="等待运行事件" detail={runControl.tauriReady ? "启动运行后 events.jsonl 会实时出现在这里。" : "请在 Tauri 桌面端启动运行。"} />}
-                </div>
+                <div className={styles.eventLog}><div className={styles.eventLogHeader}><span>EVENT STREAM</span><span>{events.lines.length} 条</span></div>{events.lines.length ? events.lines.map((line, index) => <pre key={`${index}-${line.slice(0, 16)}`}>{line}</pre>) : <EmptySignal title="等待运行事件" detail={runControl.tauriReady ? "启动运行后 events.jsonl 会实时出现。" : "请在 Tauri 桌面端启动运行。"} />}</div>
               </section>
-              <section className={styles.panel}>
-                <SectionHeader eyebrow="Queue" title="完整队列" meta={`${workbench.queue.length} 个 slot`} />
-                <div className={styles.queueList}>{workbench.queue.length ? workbench.queue.map((item, index) => <QueueRow key={item.id} item={item} index={index} />) : <EmptyBlock symbol="✓" title="队列为空" detail="当前没有等待执行的 slot。" />}</div>
-              </section>
+              <section className={styles.surface}><SectionHeading eyebrow="QUEUE" title="完整队列" detail={`${workbench.queue.length} 个 slot`} />{workbench.queue.length ? <div className={styles.queueList}>{workbench.queue.map((item, index) => <QueueRow key={item.id} item={item} index={index} />)}</div> : <EmptySignal title="没有待执行 slot" detail="真实任务会在 Workbench 接入后出现在这里。" />}</section>
             </div>
           ) : null}
 
           {view === "knowledge" ? (
-            <div className={styles.knowledgeGrid}>
-              <section className={styles.panel}>
-                <SectionHeader eyebrow="Daily brief" title={workbench.dailyTitle ?? "今日运行摘要"} meta="由已发生的运行与门禁结果生成" />
-                {workbench.dailyExcerpt ? <pre className={styles.digestFull}>{workbench.dailyExcerpt}</pre> : <EmptyBlock symbol="≡" title="暂无摘要" detail="运行完成后会自动形成当日上下文。" />}
-              </section>
-              <section className={styles.panel}>
-                <SectionHeader eyebrow="Promote" title="发布到知识库" meta="预览差异后再写入 Vault" />
-                {!promote.tauriReady ? (
-                  <EmptyBlock symbol="↑" title="桌面端连接后可发布" detail="浏览器模式不会触碰 Vault 文件。" />
-                ) : promote.loading ? (
-                  <div className={styles.skeletonList}><span /><span /></div>
-                ) : promote.staging.length ? (
-                  <div className={styles.promoteLayout}>
-                    <div className={styles.stagingList}>
-                      {promote.staging.map((entry) => (
-                        <button key={entry.relativePath} type="button" className={cn(styles.stagingItem, promote.selectedPath === entry.relativePath && styles.stagingItemActive)} onClick={() => promote.selectEntry(entry.relativePath)}>
-                          <span>{entry.relativePath}</span><small>{entry.sizeBytes} B</small>
-                        </button>
-                      ))}
-                    </div>
-                    <div className={styles.diffPreview}>
-                      <pre>{promote.previewText ?? "选择一个 staging 文件查看差异。"}</pre>
-                      <ToolButton symbol="↑" tone="accent" disabled={!promote.selectedPath || promote.previewLoading || promote.busy} onClick={() => promote.selectedPath && promote.promote(promote.defaultRule, promote.selectedPath)}>确认发布</ToolButton>
-                    </div>
-                  </div>
-                ) : (
-                  <EmptyBlock symbol="✓" title="Staging 已清空" detail="没有等待发布的知识资产。" />
-                )}
-                {promote.message ? <p className={styles.noticeText}>{promote.message}</p> : null}
-              </section>
+            <div className={styles.twoColumn}>
+              <section className={styles.surface}><SectionHeading eyebrow="DAILY BRIEF" title={workbench.dailyTitle ?? "今日运行摘要"} detail="由已经发生的运行与门禁结果生成。" />{workbench.dailyExcerpt ? <pre className={styles.digest}>{workbench.dailyExcerpt}</pre> : <EmptySignal title="暂无摘要" detail="运行完成后会自动形成当日上下文。" />}</section>
+              <section className={styles.surface}><SectionHeading eyebrow="PROMOTE" title="发布到知识库" detail="先预览差异，再写入 Vault。" />{!promote.tauriReady ? <EmptySignal title="桌面端尚未接入" detail="浏览器模式不会触碰 Vault 文件。" /> : promote.loading ? <div className={styles.loadingRows}><span /><span /></div> : promote.staging.length ? <div className={styles.promoteLayout}><div className={styles.stagingList}>{promote.staging.map((entry) => <button key={entry.relativePath} type="button" className={cn(styles.stagingItem, promote.selectedPath === entry.relativePath && styles.stagingItemActive)} onClick={() => promote.selectEntry(entry.relativePath)}><span>{entry.relativePath}</span><small>{entry.sizeBytes} B</small></button>)}</div><div className={styles.diffPreview}><pre>{promote.previewText ?? "选择一个 staging 文件查看差异。"}</pre><ActionButton glyph="↑" tone="accent" disabled={!promote.selectedPath || promote.previewLoading || promote.busy} onClick={() => promote.selectedPath && promote.promote(promote.defaultRule, promote.selectedPath)}>确认发布</ActionButton></div></div> : <EmptySignal title="Staging 已清空" detail="没有等待发布的知识资产。" />}{promote.message ? <p className={styles.noticeText}>{promote.message}</p> : null}</section>
             </div>
           ) : null}
 
           {view === "systems" ? (
-            <section className={styles.pageSection}>
-              <SectionHeader eyebrow="System health" title="运行环境" meta="本机、边缘节点与自治调度状态" />
-              <div className={styles.systemMetrics}>
-                <Metric label="CPU" value={`${runtime.cpuPct}%`} detail={`${runtime.source} 运行时`} tone={runtime.cpuPct > 85 ? "danger" : "neutral"} />
-                <Metric label="内存" value={`${runtime.ramMb} MB`} detail={runtime.ramTotalMb ? `总计 ${runtime.ramTotalMb} MB` : "实时占用"} />
-                <Metric label="边缘温度" value={`${telemetry.thermalC}°C`} detail={telemetry.node} tone={telemetry.thermalC > 62 ? "warning" : "success"} />
-                <Metric label="边缘延迟" value={`${telemetry.latencyMs} ms`} detail={telemetry.sshConnected ? "SSH 已连接" : "SSH 未连接"} tone={telemetry.sshConnected ? "success" : "danger"} />
-              </div>
-              <div className={styles.systemGrid}>
-                <section className={styles.panel}>
-                  <SectionHeader eyebrow="Scheduler" title="自治调度器" action={<StatusPill tone={scheduler.status.running ? "success" : "neutral"}>{scheduler.status.running ? "RUNNING" : "STOPPED"}</StatusPill>} />
-                  <dl className={styles.detailFacts}>
-                    <div><dt>PID</dt><dd>{scheduler.status.pid ?? "—"}</dd></div>
-                    <div><dt>今日运行</dt><dd>{scheduler.status.runsToday}</dd></div>
-                    <div><dt>最近动作</dt><dd>{scheduler.status.lastAction ?? "—"}</dd></div>
-                    <div><dt>最近心跳</dt><dd>{formatTime(scheduler.status.lastTickAt)}</dd></div>
-                    <div><dt>启动时间</dt><dd>{formatTime(scheduler.status.daemonStartedAt)}</dd></div>
-                  </dl>
-                  <div className={styles.actionRow}>
-                    <ToolButton symbol="▶" tone="accent" disabled={!scheduler.tauriReady || scheduler.busy || scheduler.status.running} onClick={scheduler.start}>启动调度器</ToolButton>
-                    <ToolButton symbol="■" disabled={!scheduler.tauriReady || scheduler.busy || !scheduler.status.running} onClick={scheduler.stop}>停止</ToolButton>
-                  </div>
-                </section>
-                <section className={styles.panel}>
-                  <SectionHeader eyebrow="Edge node" title={telemetry.node} action={<StatusPill tone={telemetry.sshConnected ? "success" : "danger"}>{telemetry.sshConnected ? "CONNECTED" : "OFFLINE"}</StatusPill>} />
-                  <dl className={styles.detailFacts}>
-                    <div><dt>数据源</dt><dd>{telemetry.source}</dd></div>
-                    <div><dt>SSH</dt><dd>{telemetry.sshConnected ? "已连接" : "未连接"}</dd></div>
-                    <div><dt>温度</dt><dd>{telemetry.thermalC}°C</dd></div>
-                    <div><dt>NPU</dt><dd>{telemetry.npuPct}%</dd></div>
-                    <div><dt>延迟</dt><dd>{telemetry.latencyMs} ms</dd></div>
-                  </dl>
-                  {telemetry.alert ? <p className={styles.errorText}>节点指标超出建议范围，请检查负载与散热。</p> : <p className={styles.noticeText}>节点指标在正常范围内。</p>}
-                </section>
-              </div>
-            </section>
+            <section className={styles.pageSection}><SectionHeading eyebrow="SYSTEM HEALTH" title="运行环境" detail="本机、边缘节点与自治调度状态。模拟数据不会被标记为真实。" /><div className={styles.systemMetrics}><div className={styles.systemMetric}><span>CPU</span><strong>{runtime.source === "tauri" ? `${runtime.cpuPct}%` : "—"}</strong><small>{runtime.source === "tauri" ? "桌面端实时" : "未接入桌面端"}</small></div><div className={styles.systemMetric}><span>内存</span><strong>{runtime.source === "tauri" ? `${runtime.ramMb} MB` : "—"}</strong><small>{runtime.source === "tauri" && runtime.ramTotalMb ? `总计 ${runtime.ramTotalMb} MB` : "不展示模拟占用"}</small></div><div className={styles.systemMetric}><span>边缘温度</span><strong>{telemetry.source === "tauri" ? `${telemetry.thermalC}°C` : "—"}</strong><small>{telemetry.source === "tauri" ? telemetry.node : "未连接边缘节点"}</small></div><div className={styles.systemMetric}><span>边缘延迟</span><strong>{telemetry.source === "tauri" ? `${telemetry.latencyMs} ms` : "—"}</strong><small>{telemetry.source === "tauri" ? "SSH 已连接" : "不展示模拟延迟"}</small></div></div><div className={styles.twoColumn}><section className={styles.surface}><SectionHeading eyebrow="SCHEDULER" title="自治调度器" action={<Status tone={scheduler.status.running ? "success" : "neutral"}>{scheduler.status.running ? "RUNNING" : "STOPPED"}</Status>} /><dl className={styles.detailFacts}><div><dt>PID</dt><dd>{scheduler.status.pid ?? "—"}</dd></div><div><dt>今日运行</dt><dd>{scheduler.status.runsToday}</dd></div><div><dt>最近动作</dt><dd>{scheduler.status.lastAction ?? "—"}</dd></div><div><dt>最近心跳</dt><dd>{formatTime(scheduler.status.lastTickAt)}</dd></div><div><dt>启动时间</dt><dd>{formatTime(scheduler.status.daemonStartedAt)}</dd></div></dl><div className={styles.actionRow}><ActionButton glyph="▶" tone="accent" disabled={!scheduler.tauriReady || scheduler.busy || scheduler.status.running} onClick={scheduler.start}>启动调度器</ActionButton><ActionButton glyph="■" disabled={!scheduler.tauriReady || scheduler.busy || !scheduler.status.running} onClick={scheduler.stop}>停止</ActionButton></div></section><section className={styles.surface}><SectionHeading eyebrow="EDGE NODE" title={telemetry.source === "tauri" ? telemetry.node : "未连接"} action={<Status tone={telemetry.source === "tauri" && telemetry.sshConnected ? "success" : "neutral"}>{telemetry.source === "tauri" && telemetry.sshConnected ? "CONNECTED" : "OFFLINE"}</Status>} /><dl className={styles.detailFacts}><div><dt>数据源</dt><dd>{telemetry.source === "tauri" ? "桌面端" : "浏览器只读"}</dd></div><div><dt>SSH</dt><dd>{telemetry.source === "tauri" && telemetry.sshConnected ? "已连接" : "未连接"}</dd></div><div><dt>温度</dt><dd>{telemetry.source === "tauri" ? `${telemetry.thermalC}°C` : "—"}</dd></div><div><dt>NPU</dt><dd>{telemetry.source === "tauri" ? `${telemetry.npuPct}%` : "—"}</dd></div><div><dt>延迟</dt><dd>{telemetry.source === "tauri" ? `${telemetry.latencyMs} ms` : "—"}</dd></div></dl><p className={telemetry.source === "tauri" && !telemetry.alert ? styles.noticeText : styles.errorText}>{telemetry.source === "tauri" ? (telemetry.alert ? "节点指标超出建议范围，请检查负载与散热。" : "节点指标在正常范围内。") : "桌面端接入后才读取边缘指标。"}</p></section></div></section>
           ) : null}
         </div>
       </main>

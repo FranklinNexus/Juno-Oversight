@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  DEMO_WORKBENCH,
+  EMPTY_WORKBENCH,
   type WorkbenchSnapshot,
 } from "@/lib/workbench/types";
 
@@ -17,11 +17,11 @@ async function fetchWorkbenchSnapshot(): Promise<WorkbenchSnapshot> {
     return await Promise.race([
       request,
       new Promise<WorkbenchSnapshot>((resolve) => {
-        window.setTimeout(() => resolve(DEMO_WORKBENCH), TAURI_READ_TIMEOUT_MS);
+        window.setTimeout(() => resolve(EMPTY_WORKBENCH), TAURI_READ_TIMEOUT_MS);
       }),
     ]);
   } catch {
-    return DEMO_WORKBENCH;
+    return EMPTY_WORKBENCH;
   }
 }
 
@@ -29,7 +29,7 @@ export function useWorkbenchSnapshot(): WorkbenchSnapshot & {
   loading: boolean;
   refresh: () => void;
 } {
-  const [snapshot, setSnapshot] = useState<WorkbenchSnapshot>(DEMO_WORKBENCH);
+  const [snapshot, setSnapshot] = useState<WorkbenchSnapshot>(EMPTY_WORKBENCH);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
 
