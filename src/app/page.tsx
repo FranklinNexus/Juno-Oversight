@@ -1,10 +1,10 @@
-import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { OversightWorkspace } from "@/components/workspace/OversightWorkspace";
 import { HudErrorBoundary } from "@/components/dashboard/HudErrorBoundary";
 
 export default function Home() {
   return (
     <HudErrorBoundary>
-      <DashboardGrid />
+      <OversightWorkspace />
     </HudErrorBoundary>
   );
 }

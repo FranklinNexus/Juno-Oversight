@@ -13,8 +13,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Juno Oversight HUD",
-  description: "Tactical command HUD for real-time surveillance.",
+  title: "Juno Oversight",
+  description: "AI workflow command center for missions, runs, and verified outcomes.",
 };
 
 export default function RootLayout({

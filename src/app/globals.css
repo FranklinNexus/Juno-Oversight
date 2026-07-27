@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "react-grid-layout/css/styles.css";
-@import "react-grid-layout/css/styles.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 /* Night — default institutional terminal */
 :root,
@@ -92,7 +97,23 @@ body {
   background: var(--bg-base);
   color: var(--text-porcelain);
   font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
-  overflow: hidden;
+  overflow: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0;
+}
+
+::selection {
+  background: #cde7dd;
+  color: #15221e;
 }
 
 .font-mono-numeric {
