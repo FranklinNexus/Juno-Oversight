@@ -22,6 +22,61 @@ pub struct RunEventsResult {
   pub lines: Vec<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitBriefResult {
+  pub mission_id: String,
+  pub message: String,
+  pub scheduler_running: bool,
+}
+
+pub fn submit_mission_brief(brief: String) -> Result<SubmitBriefResult, String> {
+  let brief = brief.trim();
+  if brief.chars().count() < 4 {
+    return Err("请把目标描述得更具体一些".to_string());
+  }
+  if brief.chars().count() > 4000 {
+    return Err("目标描述不能超过 4000 个字符".to_string());
+  }
+  let workbench = workbench_root_path();
+  if !workbench.is_dir() {
+    return Err(format!("Workbench 不存在：{}", workbench.display()));
+  }
+  let project_root = juno_project_root();
+  let script = project_root.join("scripts/juno-brief.mjs");
+  if !script.is_file() {
+    return Err(format!("任务编译器不存在：{}", script.display()));
+  }
+
+  let mut cmd = Command::new(node_binary());
+  cmd.arg(&script).arg("--execute").arg(brief);
+  cmd.current_dir(&project_root);
+  apply_project_env(&mut cmd);
+  cmd.env("AGENT_WORKBENCH_ROOT", &workbench);
+
+  let output = cmd
+    .output()
+    .map_err(|e| format!("无法创建任务：{e}"))?;
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    return Err(if stderr.is_empty() { stdout } else { stderr });
+  }
+
+  let plan_path = workbench.join("state/last-brief-plan.json");
+  let mission_id = fs::read_to_string(plan_path)
+    .ok()
+    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    .and_then(|value| value.get("missionId").and_then(|id| id.as_str()).map(str::to_string))
+    .unwrap_or_else(|| "new-mission".to_string());
+
+  Ok(SubmitBriefResult {
+    mission_id,
+    message: "目标已创建，Juno 正在准备执行。".to_string(),
+    scheduler_running: false,
+  })
+}
+
 #[derive(Deserialize)]
 struct RunManifestMeta {
   #[serde(rename = "runId")]

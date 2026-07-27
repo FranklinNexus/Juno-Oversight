@@ -85,13 +85,12 @@ fn parse_mission_dir(dir: &Path) -> Option<MissionSummary> {
 }
 
 fn yaml_field(text: &str, key: &str) -> Option<String> {
+  let prefix = format!("{key}:");
   for line in text.lines() {
     let trimmed = line.trim();
-    if trimmed.starts_with(&format!("{key}:")) {
+    if let Some(value) = trimmed.strip_prefix(&prefix) {
       return Some(
-        trimmed
-          .split(':')
-          .nth(1)?
+        value
           .trim()
           .trim_matches('"')
           .trim_matches('\'')
@@ -131,11 +130,11 @@ fn parse_phases(text: &str) -> Vec<MissionPhase> {
       continue;
     }
     if let Some(ref mut p) = current {
-      if line.trim_start().starts_with("goal:") {
-        p.goal = line.split(':').nth(1).unwrap_or("").trim().to_string();
+      if let Some(value) = line.trim_start().strip_prefix("goal:") {
+        p.goal = value.trim().trim_matches('"').to_string();
       }
-      if line.trim_start().starts_with("status:") {
-        p.status = line.split(':').nth(1).unwrap_or("").trim().to_string();
+      if let Some(value) = line.trim_start().strip_prefix("status:") {
+        p.status = value.trim().trim_matches('"').to_string();
       }
     }
   }

@@ -186,6 +186,22 @@ export function writeBriefMission(workbench: string, plan: BriefPlan): string {
   writeFileSync(path.join(missionDir, "north-star.md"), plan.northStar, "utf8");
   writeFileSync(path.join(missionDir, "scope-lock.md"), plan.scopeLock, "utf8");
 
+  const missionYaml = [
+    `id: ${JSON.stringify(plan.missionId)}`,
+    `title: ${JSON.stringify(plan.title)}`,
+    "status: ACTIVE",
+    "provider: openai_codex",
+    `schedule: ${plan.schedule}`,
+    "phases:",
+    ...plan.phases.flatMap((phase) => [
+      `  - id: ${phase.phaseId}`,
+      `    goal: ${JSON.stringify(phase.criteria)}`,
+      "    status: queued",
+    ]),
+    "",
+  ].join("\n");
+  writeFileSync(path.join(missionDir, "mission.yaml"), missionYaml, "utf8");
+
   const progressLines = [
     "# Mission Progress — " + plan.missionId,
     "",
@@ -210,9 +226,14 @@ export function writeBriefMission(workbench: string, plan: BriefPlan): string {
     success_criteria: p.criteria,
   }));
 
-  const { backlog } = parseNowYaml(workbench);
-  saveNowQueue(workbench, now, backlog);
+  const existing = parseNowYaml(workbench);
+  if (existing.now.length > 0) {
+    saveNowQueue(workbench, existing.now, [...existing.backlog, ...now]);
+  } else {
+    saveNowQueue(workbench, now, existing.backlog);
+  }
 
+  mkdirSync(path.join(workbench, "state"), { recursive: true });
   const planPath = path.join(workbench, "state", "last-brief-plan.json");
   writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
 

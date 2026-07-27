@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getMissionsSnapshot,
   hasTauriRuntime,
@@ -11,6 +11,8 @@ export function useMissionsSnapshot() {
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [tauriReady, setTauriReady] = useState(false);
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((value) => value + 1), []);
 
   useEffect(() => {
     hasTauriRuntime().then(setTauriReady);
@@ -38,9 +40,9 @@ export function useMissionsSnapshot() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [tauriReady]);
+  }, [tauriReady, tick]);
 
   const showLoading = !tauriReady || loading;
 
-  return { missions, loading: showLoading, tauriReady };
+  return { missions, loading: showLoading, tauriReady, refresh };
 }

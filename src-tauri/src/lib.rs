@@ -1,6 +1,7 @@
 mod missions;
 mod orchestrator;
 mod promote;
+mod workbench;
 mod workflow_effect;
 
 use serde::Serialize;
@@ -163,6 +164,28 @@ fn get_workflow_effect_snapshot() -> Result<workflow_effect::WorkflowEffectSnaps
   workflow_effect::get_workflow_effect_snapshot()
 }
 
+#[tauri::command]
+fn get_workbench_snapshot() -> Result<workbench::WorkbenchSnapshot, String> {
+  workbench::get_workbench_snapshot()
+}
+
+#[tauri::command]
+fn submit_mission_brief(
+  daemon: State<'_, SchedulerDaemon>,
+  brief: String,
+) -> Result<orchestrator::SubmitBriefResult, String> {
+  let mut result = orchestrator::submit_mission_brief(brief)?;
+  match orchestrator::start_scheduler_daemon(&daemon) {
+    Ok(status) => {
+      result.scheduler_running = status.running;
+    }
+    Err(error) => {
+      result.message = format!("目标已创建，但自动执行尚未启动：{error}");
+    }
+  }
+  Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -185,6 +208,8 @@ pub fn run() {
       stop_scheduler_daemon,
       get_missions_snapshot,
       get_workflow_effect_snapshot,
+      get_workbench_snapshot,
+      submit_mission_brief,
     ])
     .setup(|app| {
       let handle = app.handle().clone();

@@ -13,6 +13,12 @@ export type SpawnRunResult = {
   status: string;
 };
 
+export type SubmitMissionResult = {
+  missionId: string;
+  message: string;
+  schedulerRunning: boolean;
+};
+
 export async function hasTauriRuntime(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const w = window as Window & { __TAURI_INTERNALS__?: unknown };
@@ -33,6 +39,10 @@ export async function spawnAgentRun(
 
 export async function killAgentRun(): Promise<void> {
   await invoke("kill_agent_run");
+}
+
+export async function submitMissionBrief(brief: string): Promise<SubmitMissionResult> {
+  return invoke<SubmitMissionResult>("submit_mission_brief", { brief });
 }
 
 export type SchedulerStatus = {
