@@ -680,6 +680,9 @@ export function refreshStatusBoard(workbench) {
       `- 最后扫描：${drive?.lastScanAt ?? "—"}`,
       `- Top proposal：${drive?.lastTopHypothesis ?? "—"}`,
       `- Top mission：${drive?.lastTopMissionId ?? "—"}`,
+      `- Workflow quality：${drive?.workflowQualityStatus ?? "unmeasured"}`,
+      `- Scope expansion：${drive?.workflowExpansionAllowed === false ? "blocked" : "allowed"}`,
+      `- Quality reason：${drive?.workflowQualityReason ?? "—"}`,
       "",
     );
   }

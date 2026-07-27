@@ -12,7 +12,12 @@ import type { QueueItem } from "./types.js";
 import { hasPendingBookQualityFixes, needsSelfOptimizeRun, readQualityScan, syncBookQualityMissionComplete } from "./self-optimize.js";
 import { shouldEscalateForFitness, shouldSelfOptimizeForFitness } from "./evolution-unit.js";
 import { loadConstitution } from "./constitution.js";
-import { scanEnvironment, observationsToProposals } from "./drive-engine.js";
+import {
+  applyWorkflowQualityPolicy,
+  observationsToProposals,
+  readWorkflowQualityDecision,
+  scanEnvironment,
+} from "./drive-engine.js";
 import { loadFounderContext } from "./founder-context.js";
 
 export type LoopKind =
@@ -572,7 +577,10 @@ function planFromDriveEngine(
   if (!junoRoot) return null;
   const founderCtx = loadFounderContext(workbench);
   const obs = scanEnvironment(workbench, junoRoot, constitution, founderCtx);
-  const proposals = observationsToProposals(obs, constitution, founderCtx);
+  const proposals = applyWorkflowQualityPolicy(
+    observationsToProposals(obs, constitution, founderCtx),
+    readWorkflowQualityDecision(workbench),
+  );
   const threshold = constitution.autoQueueThreshold ?? 0.55;
   const top = proposals.find((p) => p.score >= threshold && !p.needsHumanApproval);
   if (!top) {

@@ -24,7 +24,35 @@ export type TensionKind =
   | "human_inbox"
   | "research_gap"
   | "regression"
-  | "founder_alignment";
+  | "founder_alignment"
+  | "workflow_quality";
+
+export const WORKFLOW_QUALITY_THRESHOLDS = {
+  minVerifyPassRate: 0.8,
+  maxReworkRate: 0.25,
+  maxEscalations: 2,
+} as const;
+
+export type WorkflowQualityStatus = "unmeasured" | "healthy" | "degraded";
+
+export interface WorkflowKpiMetrics {
+  date?: string;
+  missionDone: number;
+  verifyPass: number;
+  reviewRework: number;
+  reviewBlock: number;
+  escalations: number;
+  verifyPassRate: number | null;
+  reworkRate: number | null;
+}
+
+export interface WorkflowQualityDecision {
+  status: WorkflowQualityStatus;
+  allowExpansion: boolean;
+  reason: string;
+  sourcePath: string;
+  metrics?: WorkflowKpiMetrics;
+}
 
 export interface DriveObservation {
   source: string;
@@ -54,6 +82,7 @@ export interface DriveTickResult {
   observations: DriveObservation[];
   proposals: DriveProposal[];
   topProposal: DriveProposal | null;
+  workflowQuality: WorkflowQualityDecision;
   digestPath?: string;
   queued: boolean;
   missionId?: string;
@@ -122,6 +151,140 @@ function missionStarted(workbench: string, missionId: string): boolean {
 
 function driveStatePath(workbench: string): string {
   return path.join(workbench, "state", "drive-engine.json");
+}
+
+function workflowKpiPath(workbench: string): string {
+  return path.join(workbench, "state", "kpi-latest.json");
+}
+
+function previousQualityLatch(workbench: string): string | null {
+  const statePath = driveStatePath(workbench);
+  if (!existsSync(statePath)) return null;
+  try {
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, unknown>;
+    if (state.workflowQualityStatus !== "degraded" || state.workflowExpansionAllowed !== false) return null;
+    return typeof state.workflowQualityReason === "string" ? state.workflowQualityReason : "previous quality gate failed";
+  } catch {
+    return null;
+  }
+}
+
+function nonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function rate(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+}
+
+export function readWorkflowQualityDecision(workbench: string): WorkflowQualityDecision {
+  const sourcePath = workflowKpiPath(workbench);
+  const latchedReason = previousQualityLatch(workbench);
+  if (!existsSync(sourcePath)) {
+    if (latchedReason) {
+      return {
+        status: "degraded",
+        allowExpansion: false,
+        reason: `Quality recovery remains latched until a healthy verify outcome: ${latchedReason}`,
+        sourcePath,
+      };
+    }
+    return {
+      status: "unmeasured",
+      allowExpansion: true,
+      reason: "No verified KPI snapshot; continuing in observation mode.",
+      sourcePath,
+    };
+  }
+
+  let latest: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(readFileSync(sourcePath, "utf8")) as { latest?: unknown };
+    if (!parsed.latest || typeof parsed.latest !== "object" || Array.isArray(parsed.latest)) {
+      throw new Error("missing latest KPI row");
+    }
+    latest = parsed.latest as Record<string, unknown>;
+  } catch {
+    if (latchedReason) {
+      return {
+        status: "degraded",
+        allowExpansion: false,
+        reason: `Quality recovery remains latched until a healthy verify outcome: ${latchedReason}`,
+        sourcePath,
+      };
+    }
+    return {
+      status: "unmeasured",
+      allowExpansion: true,
+      reason: "Verified KPI snapshot is unreadable; continuing in observation mode.",
+      sourcePath,
+    };
+  }
+
+  const metrics: WorkflowKpiMetrics = {
+    date: typeof latest.date === "string" ? latest.date : undefined,
+    missionDone: nonNegativeNumber(latest.missionDone),
+    verifyPass: nonNegativeNumber(latest.verifyPass),
+    reviewRework: nonNegativeNumber(latest.reviewRework),
+    reviewBlock: nonNegativeNumber(latest.reviewBlock),
+    escalations: nonNegativeNumber(latest.escalations),
+    verifyPassRate: rate(latest.verifyPassRate),
+    reworkRate: rate(latest.reworkRate),
+  };
+
+  const failures: string[] = [];
+  if (
+    metrics.verifyPassRate !== null &&
+    metrics.verifyPassRate < WORKFLOW_QUALITY_THRESHOLDS.minVerifyPassRate
+  ) {
+    failures.push(`verify pass rate ${Math.round(metrics.verifyPassRate * 100)}% < 80%`);
+  }
+  if (metrics.reworkRate !== null && metrics.reworkRate > WORKFLOW_QUALITY_THRESHOLDS.maxReworkRate) {
+    failures.push(`rework rate ${Math.round(metrics.reworkRate * 100)}% > 25%`);
+  }
+  if (metrics.reviewBlock > 0) failures.push(`${metrics.reviewBlock} review block(s)`);
+  if (metrics.escalations > WORKFLOW_QUALITY_THRESHOLDS.maxEscalations) {
+    failures.push(`${metrics.escalations} escalations > 2`);
+  }
+
+  if (failures.length > 0) {
+    return {
+      status: "degraded",
+      allowExpansion: false,
+      reason: failures.join("; "),
+      sourcePath,
+      metrics,
+    };
+  }
+
+  if (metrics.verifyPass === 0 || metrics.verifyPassRate === null) {
+    if (latchedReason) {
+      return {
+        status: "degraded",
+        allowExpansion: false,
+        reason: `Quality recovery remains latched; latest KPI has no healthy verify evidence: ${latchedReason}`,
+        sourcePath,
+        metrics,
+      };
+    }
+    return {
+      status: "unmeasured",
+      allowExpansion: true,
+      reason: "No persisted verify outcome yet; continuing in observation mode.",
+      sourcePath,
+      metrics,
+    };
+  }
+
+  return {
+    status: "healthy",
+    allowExpansion: true,
+    reason: `Verified quality is healthy: ${Math.round(metrics.verifyPassRate * 100)}% pass, ${Math.round(
+      (metrics.reworkRate ?? 0) * 100,
+    )}% rework, ${metrics.reviewBlock} blocks.`,
+    sourcePath,
+    metrics,
+  };
 }
 
 export function readDriveState(workbench: string): { lastScanAt?: string; lastProposalId?: string } {
@@ -506,6 +669,41 @@ export function observationsToProposals(
   return [...passthrough, ...byMission.values(), ...byBrief.values()].sort((a, b) => b.score - a.score);
 }
 
+function workflowRepairBrief(decision: WorkflowQualityDecision): string {
+  const metrics = decision.metrics;
+  return [
+    "Outcome recovery: repair verified workflow quality before expanding scope.",
+    `Gate reason: ${decision.reason}`,
+    `Evidence date: ${metrics?.date ?? "unknown"}.`,
+    "Scope lock: do not add product features, research tracks, or new autonomous missions.",
+    "Reproduce the failed verify, rework, block, or escalation evidence; identify the smallest root cause; implement the repair.",
+    "Run the relevant review and verification gates and persist their real outcomes in Juno_Execution_Log.md.",
+    "Completion requires verify pass rate >= 80%, rework rate <= 25%, zero review blocks, and fewer than 3 escalations.",
+  ].join("\n");
+}
+
+export function applyWorkflowQualityPolicy(
+  proposals: DriveProposal[],
+  decision: WorkflowQualityDecision,
+): DriveProposal[] {
+  if (decision.allowExpansion) return proposals;
+
+  return [
+    {
+      id: `prop-workflow-repair-${Date.now()}`,
+      hypothesis: `Stabilize verified workflow quality before expanding scope — ${decision.reason}`,
+      tensionKinds: ["workflow_quality", "regression"],
+      score: 1,
+      confidence: 0.99,
+      needsHumanApproval: false,
+      action: "compile_brief",
+      missionId: "juno-workflow-stabilization-2026",
+      briefText: workflowRepairBrief(decision),
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
+
 export function writeDriveDigest(
   workbench: string,
   result: Omit<DriveTickResult, "digestPath">,
@@ -524,6 +722,14 @@ export function writeDriveDigest(
     ...result.observations.slice(0, 12).map((o) => `- [${o.kind}] (${o.score.toFixed(2)}) ${o.summary}`),
     "",
   ];
+  lines.push(
+    "## Workflow quality gate",
+    "",
+    `- Status: **${result.workflowQuality.status.toUpperCase()}**`,
+    `- Expansion: **${result.workflowQuality.allowExpansion ? "allowed" : "blocked"}**`,
+    `- Reason: ${result.workflowQuality.reason}`,
+    "",
+  );
   if (result.founderContext?.alignmentSummary.length) {
     lines.push("## 与你的目标对齐", "");
     for (const line of result.founderContext.alignmentSummary) {
@@ -576,7 +782,11 @@ export function runDriveTick(
   const founderContext = loadFounderContext(workbench);
   writeFounderContextSnapshot(workbench, founderContext);
   const observations = scanEnvironment(workbench, junoRepoRoot, constitution, founderContext);
-  const proposals = observationsToProposals(observations, constitution, founderContext);
+  const workflowQuality = readWorkflowQualityDecision(workbench);
+  const proposals = applyWorkflowQualityPolicy(
+    observationsToProposals(observations, constitution, founderContext),
+    workflowQuality,
+  );
   const minScore = opts.minScore ?? constitution?.autoQueueThreshold ?? 0.55;
   const top = proposals.find((p) => p.score >= minScore && !p.needsHumanApproval) ?? null;
 
@@ -585,13 +795,14 @@ export function runDriveTick(
     observations,
     proposals,
     topProposal: top,
+    workflowQuality,
     queued: false,
     founderContext,
   };
 
   if (opts.autoQueue && top) {
     if (top.action === "compile_brief" && top.briefText) {
-      const plan = compileBriefFromText(top.briefText);
+      const plan = compileBriefFromText(top.briefText, { missionId: top.missionId });
       writeBriefMission(workbench, plan);
       result.queued = true;
       result.missionId = plan.missionId;
@@ -608,11 +819,24 @@ export function runDriveTick(
     lastTopMissionId: top?.missionId,
     lastObservations: observations.length,
     lastQueued: result.queued,
+    workflowQualityStatus: workflowQuality.status,
+    workflowExpansionAllowed: workflowQuality.allowExpansion,
+    workflowQualityReason: workflowQuality.reason,
+    workflowQualityMetrics: workflowQuality.metrics,
   });
 
   appendFileSync(
     path.join(workbench, "state", "drive-log.jsonl"),
-    `${JSON.stringify({ ts: result.scannedAt, top: top?.id, score: top?.score, queued: result.queued, missionId: result.missionId })}\n`,
+    `${JSON.stringify({
+      ts: result.scannedAt,
+      top: top?.id,
+      score: top?.score,
+      queued: result.queued,
+      missionId: result.missionId,
+      workflowQuality: workflowQuality.status,
+      expansionAllowed: workflowQuality.allowExpansion,
+      workflowQualityReason: workflowQuality.reason,
+    })}\n`,
     "utf8",
   );
 

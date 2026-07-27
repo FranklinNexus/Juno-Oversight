@@ -30,6 +30,7 @@ export const DEFAULT_AUTONOMY_LIMITS: AutonomyLimits = {
     "juno-nl-brief-2026",
     "juno-daily-inbox-2026",
     "juno-agent-drive-research-2026",
+    "juno-workflow-stabilization-2026",
   ],
 };
 
