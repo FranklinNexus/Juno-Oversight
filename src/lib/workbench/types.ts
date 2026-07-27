@@ -23,6 +23,37 @@ export type WorkbenchSnapshot = {
   updatedAt: string;
 };
 
+export type WorkflowEffectMetrics = {
+  date: string;
+  ticks: number;
+  capFilled: boolean;
+  escalations: number;
+  strategy: string;
+  topMission: string;
+  queueHead: boolean;
+  idleAction: string;
+  missionDone: number;
+  verifyPass: number;
+  reviewRework: number;
+  reviewBlock: number;
+  verifyPassRate: number | null;
+  reworkRate: number | null;
+};
+
+export type WorkflowEffectSnapshot = {
+  available: boolean;
+  version: number;
+  generatedAt: string | null;
+  latest: WorkflowEffectMetrics | null;
+};
+
+export const EMPTY_WORKFLOW_EFFECT: WorkflowEffectSnapshot = {
+  available: false,
+  version: 1,
+  generatedAt: null,
+  latest: null,
+};
+
 export const EMPTY_WORKBENCH: WorkbenchSnapshot = {
   rootConfigured: false,
   rootPath: null,

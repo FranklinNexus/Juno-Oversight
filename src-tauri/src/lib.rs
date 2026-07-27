@@ -1,6 +1,7 @@
 mod missions;
 mod orchestrator;
 mod promote;
+mod workflow_effect;
 
 use serde::Serialize;
 use std::path::PathBuf;
@@ -157,6 +158,11 @@ fn get_missions_snapshot() -> Result<Vec<missions::MissionSummary>, String> {
   missions::get_missions_snapshot()
 }
 
+#[tauri::command]
+fn get_workflow_effect_snapshot() -> Result<workflow_effect::WorkflowEffectSnapshot, String> {
+  workflow_effect::get_workflow_effect_snapshot()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -178,6 +184,7 @@ pub fn run() {
       start_scheduler_daemon,
       stop_scheduler_daemon,
       get_missions_snapshot,
+      get_workflow_effect_snapshot,
     ])
     .setup(|app| {
       let handle = app.handle().clone();

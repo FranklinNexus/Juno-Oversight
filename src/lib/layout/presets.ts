@@ -8,7 +8,8 @@ export const DEFAULT_PANELS: PanelState[] = [
   { i: "panel-activerun", x: 0, y: 4, w: 6, h: 5, widgetType: "activerun" },
   { i: "panel-mission", x: 6, y: 4, w: 3, h: 5, widgetType: "mission" },
   { i: "panel-promote", x: 9, y: 4, w: 3, h: 5, widgetType: "promote" },
-  { i: "panel-infra", x: 0, y: 9, w: 12, h: 3, widgetType: "infra" },
+  { i: "panel-effect", x: 0, y: 9, w: 4, h: 3, widgetType: "effect" },
+  { i: "panel-infra", x: 4, y: 9, w: 8, h: 3, widgetType: "infra" },
 ];
 
 export const OPS_FOCUS_PANELS: PanelState[] = [

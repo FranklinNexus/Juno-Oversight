@@ -9,6 +9,7 @@ import { MissionBoardPanel } from "@/components/widgets/MissionBoardPanel";
 import { OverseerDaemonPanel } from "@/components/widgets/OverseerDaemonPanel";
 import { PromotePanel } from "@/components/widgets/PromotePanel";
 import { RunQueuePanel } from "@/components/widgets/RunQueuePanel";
+import { WorkflowEffectPanel } from "@/components/widgets/WorkflowEffectPanel";
 
 export type WidgetPanelProps = {
   panelId: string;
@@ -24,6 +25,7 @@ export type WidgetType =
   | "market"
   | "github"
   | "infra"
+  | "effect"
   | "appslot";
 
 export type WidgetDefinition = {
@@ -87,6 +89,12 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     label: "Infrastructure",
     code: "WIDGET-C",
     Component: InfraTelemetry,
+  },
+  {
+    type: "effect",
+    label: "Workflow Effect",
+    code: "WIDGET-E",
+    Component: WorkflowEffectPanel,
   },
   {
     type: "appslot",

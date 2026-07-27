@@ -308,7 +308,7 @@ export const useLayoutStore = create<LayoutStore>()(
     }),
     {
       name: "juno-layout-store",
-      version: 6,
+      version: 7,
       migrate: (persisted, version) => {
         const base =
           version < 2 || !persisted || typeof persisted !== "object"
@@ -353,6 +353,25 @@ export const useLayoutStore = create<LayoutStore>()(
                 : { x: panel.x, y: panel.y };
             return { ...panel, stackOrder, ...size, ...position };
           });
+        }
+
+        if (version < 7 && !base.panels.some((panel) => panel.widgetType === "effect")) {
+          const defaultInfra = base.panels.find(
+            (panel) =>
+              panel.i === "panel-infra" &&
+              panel.x === 0 &&
+              panel.y === 9 &&
+              panel.w === 12 &&
+              panel.h === 3,
+          );
+          if (defaultInfra) {
+            base.panels = [
+              ...base.panels.map((panel) =>
+                panel.i === defaultInfra.i ? { ...panel, x: 4, w: 8 } : panel,
+              ),
+              { i: "panel-effect", x: 0, y: 9, w: 4, h: 3, widgetType: "effect" },
+            ];
+          }
         }
 
         base.panels = dedupePinnedSymbolPanels(
