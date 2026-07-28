@@ -6,6 +6,7 @@ import { readJsonFile, writeJsonFile } from "./manifest.js";
 export interface OrchestratorState {
   activeRunId?: string | null;
   activeRunStatus?: string | null;
+  activeWorkerPid?: number | null;
   lastRunId?: string | null;
   updatedAt?: string;
 }

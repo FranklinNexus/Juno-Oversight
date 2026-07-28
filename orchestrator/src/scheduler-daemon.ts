@@ -127,6 +127,12 @@ function spawnSlot(manifestPath: string, maxMinutes: number): void {
   activeManifest = manifestPath;
   activeStartedAt = Date.now();
   activeMaxMinutes = maxMinutes;
+  mergeOrchestratorState(workbench, {
+    activeRunId: runId,
+    activeRunStatus: "running",
+    activeWorkerPid: activeChild.pid ?? null,
+    lastRunId: runId,
+  });
   activeChild.on("exit", (code, signal) => {
     const runDir = path.dirname(manifestPath);
     const persistedStatus = readPersistedRunStatus(runDir);
@@ -142,6 +148,7 @@ function spawnSlot(manifestPath: string, maxMinutes: number): void {
     mergeOrchestratorState(workbench, {
       activeRunId: runId,
       activeRunStatus: completionStatus,
+      activeWorkerPid: null,
       lastRunId: runId,
     });
     void tick().catch((err) => {
@@ -213,11 +220,23 @@ function handleCompletedRun(runId: string): QueueAdvanceAction {
 
   saveSchedulerState(sched);
   if (action.action === "hold") {
-    mergeOrchestratorState(workbench, { activeRunId: runId, activeRunStatus: "failed" });
+    mergeOrchestratorState(workbench, {
+      activeRunId: runId,
+      activeRunStatus: "failed",
+      activeWorkerPid: null,
+    });
   } else if (action.action === "block") {
-    mergeOrchestratorState(workbench, { activeRunId: runId, activeRunStatus: "blocked" });
+    mergeOrchestratorState(workbench, {
+      activeRunId: runId,
+      activeRunStatus: "blocked",
+      activeWorkerPid: null,
+    });
   } else {
-    mergeOrchestratorState(workbench, { activeRunId: null, activeRunStatus: "idle" });
+    mergeOrchestratorState(workbench, {
+      activeRunId: null,
+      activeRunStatus: "idle",
+      activeWorkerPid: null,
+    });
   }
   return action;
 }
@@ -277,7 +296,7 @@ async function tick(): Promise<void> {
     }
     sched.lastAction = "retry_exhausted";
     saveSchedulerState(sched);
-    mergeOrchestratorState(workbench, { activeRunStatus: "blocked" });
+    mergeOrchestratorState(workbench, { activeRunStatus: "blocked", activeWorkerPid: null });
     return;
   } else if (status === "blocked") {
     sched.lastAction = sched.lastAction ?? "blocked";

@@ -9,6 +9,7 @@ import { quietSpawnOpts, runOrchestratorBuild } from "./lib/win-spawn.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 const pidPath = path.join(workbench, "state", "daemon.pid");
+const skipBuild = process.argv.includes("--skip-build");
 
 function livePid() {
   if (!existsSync(pidPath)) return null;
@@ -28,8 +29,10 @@ if (existing) {
   process.exit(0);
 }
 
-const build = runOrchestratorBuild(repoRoot);
-if (build.status !== 0) process.exit(build.status ?? 1);
+if (!skipBuild) {
+  const build = runOrchestratorBuild(repoRoot);
+  if (build.status !== 0) process.exit(build.status ?? 1);
+}
 
 const logFd = openSync(path.join(workbench, "state", "scheduler.log"), "a");
 const child = spawn(

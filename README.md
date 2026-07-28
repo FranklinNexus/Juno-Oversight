@@ -191,12 +191,14 @@ node scripts/sync-workbench-hooks.mjs
 pnpm orchestrator:build && pnpm verify:desktop
 pnpm tauri:dev                            # Surface
 pnpm juno:daemon                          # Runtime loop
+node scripts/juno-control.mjs run --brief "your task"  # Direct AI control
 pnpm autonomy:tick                        # Preview next mission (dry-run)
 ```
 
 | You want… | Command |
 |-----------|---------|
 | Run queue head (Live) | `pnpm mission:loop` |
+| Submit and await an AI mission | `pnpm juno:control -- run --brief "your task"` |
 | Safe cleanup | `pnpm workbench:purge` |
 | Full desktop gate | `pnpm verify:desktop` |
 | Evolution fitness tick | `pnpm evolution:tick` |
@@ -281,6 +283,7 @@ Deep dives → [evolution.md](./wiki/evolution.md) · [overseer-quality.md](./wi
 | Wiki index | [wiki/README.md](./wiki/README.md) |
 | Module map & state | [wiki/runtime.md](./wiki/runtime.md) · [juno-architecture.md](./wiki/juno-architecture.md) |
 | Oversight spec (authoritative) | [overseer-quality.md](./wiki/overseer-quality.md) |
+| Direct AI control | [juno-direct-control.md](./docs/juno-direct-control.md) |
 
 ---
 
