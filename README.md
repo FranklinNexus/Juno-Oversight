@@ -129,9 +129,11 @@ The tradeoff is deliberate: governed work uses more calls and takes longer than 
 benefit is not cheaper generation; it is stronger evidence, recoverability, and a smaller gap between
 “the agent answered” and “the task is actually complete.”
 
-A real repository mission completed all four phases with independent review and full desktop verification,
-then returned `COMPLETE`, `4/4`, review `PASS`, verify `PASS`, an empty queue, and no worker process left
-behind. The raw acceptance record is in [docs/juno-direct-control-e2e.md](./docs/juno-direct-control-e2e.md).
+A real product-readiness audit completed all four phases in 628.6 seconds with independent review and full
+desktop verification. It returned `COMPLETE`, `4/4`, review `PASS`, verify `PASS`, an empty queue, and no
+worker process left behind. See the
+[governed audit](./docs/juno-governed-product-readiness-evaluation.md) and the measured
+[direct-agent comparison](./docs/real-world-workflow-comparison.md).
 
 ## Runtime model
 
@@ -189,8 +191,10 @@ and review unattended mission permissions. See [SECURITY.md](./SECURITY.md).
 ## Product status
 
 Juno is a developer preview, currently tested on Windows. The runtime, direct control path, scheduler,
-oversight gates, setup/doctor flow, desktop build, and CI contract are functional. Packaging, signed desktop
-releases, multi-user authentication, and polished visual design are not yet release-grade.
+oversight gates, setup/doctor flow, desktop build, and local CI-equivalent gates are functional. GitHub
+Actions defines the same Windows gate; release evidence depends on a green run for the candidate commit.
+Packaging, signed desktop releases, multi-user authentication, and polished visual design are not yet
+release-grade.
 
 This repository does not claim open-ended AGI or that deterministic gates make model output deterministic.
 Juno makes the workflow around probabilistic models explicit and inspectable.
@@ -212,6 +216,9 @@ build, and Cargo check. CI runs the same gate on Windows and adds Rust tests.
 | First installation and troubleshooting | [docs/getting-started.md](./docs/getting-started.md) |
 | Direct control JSON contract | [docs/juno-direct-control.md](./docs/juno-direct-control.md) |
 | Real end-to-end acceptance record | [docs/juno-direct-control-e2e.md](./docs/juno-direct-control-e2e.md) |
+| Governed product-readiness audit | [docs/juno-governed-product-readiness-evaluation.md](./docs/juno-governed-product-readiness-evaluation.md) |
+| Direct vs governed real-world comparison | [docs/real-world-workflow-comparison.md](./docs/real-world-workflow-comparison.md) |
+| Pre-fix direct-agent audit | [docs/direct-agent-baseline-evaluation.md](./docs/direct-agent-baseline-evaluation.md) |
 | Runtime state and module map | [wiki/runtime.md](./wiki/runtime.md) |
 | Oversight gate specification | [wiki/overseer-quality.md](./wiki/overseer-quality.md) |
 | Configuration reference | [config/README.md](./config/README.md) |
