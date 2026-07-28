@@ -1,7 +1,7 @@
 # Bootstrap short "smoke loop" mission (~75min, 3 slots) to validate implement→review→verify.
 param(
-  [string]$Workbench = "E:\AgentWorkbench",
-  [string]$RepoRoot = "C:\Users\kfr34\Desktop\Entrepreneurship\Juno Oversight"
+  [string]$Workbench = $(if ($env:AGENT_WORKBENCH_ROOT) { $env:AGENT_WORKBENCH_ROOT } else { Join-Path $HOME "JunoWorkbench" }),
+  [string]$RepoRoot = $(Split-Path -Parent $PSScriptRoot)
 )
 
 $missionId = "juno-smoke-loop-2026"
@@ -154,9 +154,4 @@ $sched = @"
 Write-Host "Mission $missionId ready: 3 slots (implement -> review -> verify)."
 Write-Host "Hardening h06+ moved to backlog."
 Write-Host "Ensure: pnpm dev --port 3000 running before sl02 verify."
-Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."
-"Ensure: pnpm dev --port 3000 running before sl02 verify."
-Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."
-
-"Ensure: pnpm dev --port 3000 running before sl02 verify."
 Write-Host "Scheduler left disabled (enabled: false). Set enabled:true before starting daemon."

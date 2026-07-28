@@ -9,9 +9,11 @@ import {
 } from "./lib/juno-control-core.mjs";
 import { submitBrief } from "./lib/juno-submit-core.mjs";
 import { quietSpawnOpts, runOrchestratorBuild } from "./lib/win-spawn.mjs";
+import { defaultWorkbenchRoot, loadProjectEnv } from "./lib/project-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
+loadProjectEnv(repoRoot);
+const workbench = defaultWorkbenchRoot();
 const args = process.argv.slice(2);
 const command = args[0] ?? "status";
 

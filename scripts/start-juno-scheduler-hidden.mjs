@@ -5,9 +5,11 @@ import { existsSync, openSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { quietSpawnOpts, runOrchestratorBuild } from "./lib/win-spawn.mjs";
+import { defaultWorkbenchRoot, loadProjectEnv } from "./lib/project-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
+loadProjectEnv(repoRoot);
+const workbench = defaultWorkbenchRoot();
 const pidPath = path.join(workbench, "state", "daemon.pid");
 const skipBuild = process.argv.includes("--skip-build");
 

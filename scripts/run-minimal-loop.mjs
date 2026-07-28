@@ -10,20 +10,37 @@ import { spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
+  mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultWorkbenchRoot, loadProjectEnv } from "./lib/project-env.mjs";
+import { initializeJuno } from "./lib/juno-setup-core.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
+loadProjectEnv(repoRoot);
+const args = new Set(process.argv.slice(2));
+const isolated = args.has("--isolated");
+const workbench = isolated
+  ? mkdtempSync(path.join(os.tmpdir(), "juno-smoke-"))
+  : defaultWorkbenchRoot();
+
+if (isolated) {
+  initializeJuno({
+    repoRoot,
+    workbench,
+    envFile: path.join(workbench, ".env.local"),
+  });
+}
 
 process.env.AGENT_WORKBENCH_ROOT = workbench;
 process.env.JUNO_OVERSIGHT_ROOT = repoRoot;
 
-const args = new Set(process.argv.slice(2));
 const skipBootstrap = args.has("--skip-bootstrap");
 const queueMeta = args.has("--queue-meta");
 
@@ -328,6 +345,15 @@ STATUS: COMPLETE
 async function slotDebate(item) {
   const cp = `# Checkpoint — ${item.phase_id}
 
+## METACOGNITION
+- understood: yes
+- understanding_gaps: []
+- reviewed: yes
+- review_depth: adequate
+- new_angles: ["bounded debate route checked against the mission scope"]
+- should_revisit: false
+- confidence: 0.9
+
 ## REVIEW_VERDICT
 - verdict: PASS
 - drift: none
@@ -340,6 +366,15 @@ async function slotDebate(item) {
 
 async function slotReview(item) {
   const cp = `# Checkpoint — ${item.phase_id}
+
+## METACOGNITION
+- understood: yes
+- understanding_gaps: []
+- reviewed: yes
+- review_depth: adequate
+- new_angles: ["deliverables and scope were checked independently"]
+- should_revisit: false
+- confidence: 0.9
 
 ## REVIEW_VERDICT
 - verdict: PASS
@@ -482,8 +517,17 @@ async function main() {
 
     const boot = spawnSync(
       "powershell",
-      ["-ExecutionPolicy", "Bypass", "-File", path.join(repoRoot, "scripts/bootstrap-smoke-loop.ps1")],
-      { stdio: "inherit" },
+      [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(repoRoot, "scripts/bootstrap-smoke-loop.ps1"),
+        "-Workbench",
+        workbench,
+        "-RepoRoot",
+        repoRoot,
+      ],
+      { cwd: repoRoot, stdio: "inherit" },
     );
     if (boot.status !== 0) process.exit(boot.status ?? 1);
   }
@@ -562,7 +606,15 @@ Loop passed via run-minimal-loop.mjs (${new Date().toISOString()}).
   }
 }
 
-main().catch((err) => {
-  log(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-});
+main().then(
+  () => {
+    if (!isolated) return;
+    rmSync(workbench, { recursive: true, force: true });
+    log("isolated workbench removed");
+  },
+  (err) => {
+    log(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    if (isolated) log(`failed isolated workbench preserved at ${workbench}`);
+    process.exit(1);
+  },
+);

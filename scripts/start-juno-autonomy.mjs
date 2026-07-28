@@ -7,9 +7,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultWorkbenchRoot, loadProjectEnv } from "./lib/project-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
+loadProjectEnv(repoRoot);
+const workbench = defaultWorkbenchRoot();
 
 function log(m) {
   process.stderr.write(`[juno-autonomy] ${m}\n`);

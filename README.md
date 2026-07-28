@@ -5,294 +5,219 @@
 <h1 align="center">Juno</h1>
 
 <p align="center">
-  <strong>The Runtime for AI Work.</strong>
+  <strong>A governed runtime for autonomous AI work.</strong><br />
+  Submit a goal. Juno plans, executes, reviews, verifies, and returns auditable evidence.
 </p>
 
 <p align="center">
-  <strong>LLMs write. Juno governs.</strong><br/>
-  <em>Models generate. Gates decide.</em>
+  <img src="https://img.shields.io/badge/status-developer_preview-f59e0b" alt="Developer preview" />
+  <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node.js 22.13+" />
+  <img src="https://img.shields.io/badge/platform-Windows-0078D4?logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT license" />
 </p>
 
-<p align="center">
-  Long-running AI work with deterministic checkpoints, review gates, and bounded autonomy.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/tests-128_passing-success" alt="tests" />
-  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
-</p>
-
----
+Juno sits between an AI model and your repository. The model still writes the work; Juno owns the queue,
+scope, checkpoints, retries, independent review, verification, and terminal result.
 
 ```text
-Agent finished
-      │
-      ▼
-   Review  ──►  PASS · REVISE · BLOCK
-      │
-      ▼
-   Verify  ──►  tests · lint · build
-      │
-      ▼
-  Promote  ──►  human confirm
-      │
-      ▼
-    Vault
+Natural-language goal
+        |
+        v
+ plan -> implement -> review -> verify
+        |             |          |
+   checkpoint     PASS/REVISE   tests/build
+        |             |          |
+        +-------------+----------+
+                      |
+              machine-readable result
 ```
 
-**This is not another chat loop. This is a Pull Request for AI work.**
+Juno is not another chat UI and not a multi-agent role-playing framework. It is the local runtime that
+turns agent work into a bounded, replayable workflow.
 
-```bash
-git clone https://github.com/FranklinNexus/Juno-Oversight.git && cd Juno-Oversight
-pnpm install && pnpm loop:smoke
-```
+## What ships
 
-No API key. Two minutes. `implement → review → verify`.
+| Product surface | What it does |
+|-----------------|--------------|
+| Direct control CLI | Submit, observe, wait for, and evaluate missions without desktop automation |
+| Mission runtime | Durable queue, scheduler, worker lifecycle, retries, and recovery |
+| Oversight gates | Independent `PASS`, `REVISE`, or `BLOCK` review plus deterministic verify |
+| Scope and safety | Per-mission scope locks, destructive-operation hooks, bounded autonomy |
+| Evidence store | Mission state, checkpoints, event streams, gate reports, and final JSON |
+| Desktop surface | Tauri/Next.js operational HUD for queue and mission visibility |
 
-<p align="center">
-  <img src="docs/assets/juno-flow-diagram.png" alt="Mission → spawn → checkpoint → review → verify → promote" width="720" />
-</p>
+## Try it without an API key
 
-> **GitHub manages source code. Juno manages AI work.**
+Requirements: Windows 10/11, Node.js 22.13+, pnpm 10, Git, and Rust for the desktop verification gate.
 
-```text
-Git  →  GitHub  →  Juno
-code     collaboration   AI work
-```
-
-Not competitors. **Git** versions files. **GitHub** versions collaboration. **Juno** versions *AI work* — checkpoints, gates, replay, promote.
-
----
-
-## Why
-
-**Without Juno**
-
-```text
-Agent finished.
-
-Trust me.
-```
-
-**With Juno**
-
-```text
-Agent finished.
-
-PASS · BLOCK · REVISE
-
-Machine-readable.
-Replayable.
-Auditable.
-```
-
-| Without Juno | With Juno |
-|--------------|-----------|
-| Context dies between sessions | **Checkpoint** is durable memory |
-| Model says “done” | **Oversight** decides dequeue |
-| Agents edit anything | **Scope lock** per mission |
-| 24/7 = unbounded risk | **Bounded autonomy** — cap, backoff, escalate |
-| Vault accidents | **Hooks** block writes & destructive ops |
-
-Juno is not an agent framework. It is an **AI Work Runtime** — queue, spawn, gate, replay, promote.
-
----
-
-## Oversight
-
-Every engineering team uses **Pull Requests**. Long-running AI work needs the same — but machine-readable.
-
-After each run, the **Oversight layer** emits a verdict:
-
-```markdown
-## REVIEW_VERDICT
-- verdict: PASS | REVISE | BLOCK
-- drift: none | minor | major
-- scope_violations: []
-- must_fix_next_slot: []
-```
-
-| Verdict | What happens |
-|---------|----------------|
-| **PASS** | Queue advances |
-| **REVISE** | Fix run queued with `must_fix` |
-| **BLOCK** | **Stops.** No silent drift. Human decides. |
-
-**Implement** requires `STATUS: COMPLETE` + `## CHANGES`. **Verify** requires `## VERIFY_REPORT`. Empty checkpoint → **hold**.
-
-> **Models are probabilistic. Oversight isn't.**
-
-Most stacks (AutoGen, CrewAI, OpenHands, LangGraph, …) end at *task complete*. Juno adds **audit · replay · resume · promote** — closer to **CI for AI work** than to another chat loop.
-
-Full spec → [wiki/overseer-quality.md](./wiki/overseer-quality.md)
-
----
-
-## Showcase
-
-| Workload | Status |
-|----------|--------|
-| Overnight book (公理之书) | ✅ |
-| Repo hardening (h01–h11) | ✅ |
-| Literature synthesis (1000 papers) | ✅ |
-| Workbench cleanup | ✅ |
-| Self-iteration (P0–P2 loops) | 🟡 |
-| Von Neumann evolution (fitness v1) | 🟡 |
-| Multi-agent debate slot | 🚧 |
-| Weighted Governance Score | 🚧 |
-
-One **`pnpm juno:daemon`**: charter in, gated work out — no hand-assigning every mission.
-
----
-
-## Architecture
-
-**Conceptual**
-
-```text
-Policy  →  Planning  →  Execution  →  Oversight  →  Approval
-```
-
-**Implementation**
-
-```text
-charter  →  planner  →  implement  →  review  →  verify  →  promote  →  Vault
-              │              │            │
-         (hooks)        (spawn)     (REVIEW_VERDICT)
-```
-
-| Layer | Role |
-|-------|------|
-| **Runtime** | Queue · spawn · gates · daemon (`orchestrator/` + `scripts/`) |
-| **Surface** | HUD — queue, active run, promote preview (`src/` + Tauri) |
-| **State** | Local work dir — missions, checkpoints, audit log (`AgentWorkbench/`, not in git) |
-
-Environment: `AGENT_WORKBENCH_ROOT` · `JUNO_OVERSIGHT_ROOT` · `CURSOR_API_KEY` (Live runs).
-
----
-
-## Quick start
-
-```bash
+```powershell
 git clone https://github.com/FranklinNexus/Juno-Oversight.git
 cd Juno-Oversight
 pnpm install
-pnpm loop:smoke          # no API · end-to-end pass
+pnpm juno:setup
+pnpm juno:doctor
+pnpm loop:smoke
 ```
 
-<details>
-<summary><strong>Advanced — daemon, HUD, Live runs</strong></summary>
+`juno:setup` creates an empty workbench outside the repository, installs the safety hooks, writes local
+runtime defaults, and records machine-specific paths in the gitignored `.env.local`. It is idempotent and
+does not replace an existing queue or runtime state.
 
-```bash
-cp .env.example .env.local
-.\scripts\scaffold-workbench.ps1          # Windows; see wiki/runtime.md
-node scripts/sync-workbench-hooks.mjs
-pnpm orchestrator:build && pnpm verify:desktop
-pnpm tauri:dev                            # Surface
-pnpm juno:daemon                          # Runtime loop
-node scripts/juno-control.mjs run --brief "your task"  # Direct AI control
-pnpm autonomy:tick                        # Preview next mission (dry-run)
+`loop:smoke` exercises the same dequeue, checkpoint, review, verify, and progress transitions as the Live
+runtime without calling a model. It runs in a temporary isolated workbench and cannot replace the configured
+Live queue or disable the Live scheduler.
+
+## Run a real AI mission
+
+Add `CURSOR_API_KEY` to `.env.local`, then verify Live readiness:
+
+```powershell
+pnpm juno:doctor -- --live
 ```
 
-| You want… | Command |
-|-----------|---------|
-| Run queue head (Live) | `pnpm mission:loop` |
-| Submit and await an AI mission | `pnpm juno:control -- run --brief "your task"` |
-| Safe cleanup | `pnpm workbench:purge` |
-| Full desktop gate | `pnpm verify:desktop` |
-| Evolution fitness tick | `pnpm evolution:tick` |
+Submit a goal and wait for the governed result:
 
-Config → [config/README.md](./config/README.md) · Troubleshooting → [wiki/maintenance.md](./wiki/maintenance.md)
+```powershell
+node scripts/juno-control.mjs run `
+  --brief "Audit this repository's release readiness and write docs/release-readiness.md; do not commit or push" `
+  --timeout-ms 1800000
+```
 
-</details>
+Progress is newline-delimited JSON on stderr. Stdout contains one final JSON document, so Codex and other
+local agents can call Juno directly:
 
----
+```json
+{
+  "ok": true,
+  "outcome": "complete",
+  "snapshot": {
+    "missionStatus": "COMPLETE",
+    "phaseDone": 4,
+    "phaseTotal": 4,
+    "gates": { "review": "PASS", "verify": "PASS" },
+    "queueDepth": 0,
+    "activeRunStatus": "idle",
+    "workerRunning": false
+  }
+}
+```
 
-## Eight words
+### Control commands
 
-Everything else is implementation detail.
+```powershell
+node scripts/juno-control.mjs status
+node scripts/juno-control.mjs submit --brief "your task"
+node scripts/juno-control.mjs wait --mission <mission-id>
+node scripts/juno-control.mjs run --file .\brief.md
+```
 
-| Term | Meaning |
+Stable terminal exit codes: `0` complete, `2` blocked, `3` failed, `4` timeout, `5` missing mission, and
+`64` invalid input. The control surface is local-only; it does not expose an unauthenticated HTTP port.
+
+## What changes versus a direct agent
+
+| Direct one-shot agent | Juno runtime |
+|-----------------------|--------------|
+| One model call owns implementation and its completion claim | Separate implement, review, and verify runs |
+| Progress usually lives in chat context | Checkpoints and events persist on disk |
+| Retry behavior is client-specific | Retry budget and terminal states are explicit |
+| “Done” can mean the model stopped | Queue advances only after required evidence exists |
+| Scope is prompt guidance | Scope lock is passed to every phase and reviewed for drift |
+| Automation needs UI control or custom glue | Local JSON CLI submits and waits programmatically |
+
+The tradeoff is deliberate: governed work uses more calls and takes longer than a one-shot prompt. The
+benefit is not cheaper generation; it is stronger evidence, recoverability, and a smaller gap between
+“the agent answered” and “the task is actually complete.”
+
+A real repository mission completed all four phases with independent review and full desktop verification,
+then returned `COMPLETE`, `4/4`, review `PASS`, verify `PASS`, an empty queue, and no worker process left
+behind. The raw acceptance record is in [docs/juno-direct-control-e2e.md](./docs/juno-direct-control-e2e.md).
+
+## Runtime model
+
+```text
+Repository                         Workbench (outside git)
+----------                         -----------------------
+orchestrator/  policy + gates      queue/       ordered work
+scripts/       control + setup     missions/    scope + progress
+src-tauri/     desktop bridge      runs/        events + checkpoints
+src/           operational HUD     state/       scheduler + worker state
+config/        safe examples       config/      local runtime policy
+```
+
+Each natural-language mission gets:
+
+1. `north-star.md`: the intended outcome.
+2. `scope-lock.md`: allowed and forbidden changes.
+3. `p01-plan`: an execution plan and change list.
+4. `p02-implement`: the scoped implementation.
+5. `p03-review`: independent drift and quality judgment.
+6. `p04-verify`: tests, lint, build, and task-specific checks.
+
+The scheduler only marks the mission `COMPLETE` after every required phase reaches `done`.
+
+## Operate Juno
+
+| Goal | Command |
 |------|---------|
-| **Mission** | A bounded goal (north-star + scope-lock + phases) |
-| **Queue** | Ordered work in `now.yaml` |
-| **Run** | One Live or local agent execution |
-| **Checkpoint** | Durable memory for a run / mission |
-| **Gate** | Deterministic pass/fail (review · verify · complete) |
-| **Charter** | Your rules — what Juno may do autonomously |
-| **Promote** | Human-approved copy into Vault |
-| **Runtime** | Juno itself — not the LLM |
-| **Oversight** | The layer that decides PASS / BLOCK / REVISE |
+| Initialize or repair local structure | `pnpm juno:setup` |
+| Diagnose this machine | `pnpm juno:doctor` |
+| Start the single scheduler | `pnpm juno:daemon` |
+| Install scheduler at Windows logon | `pnpm juno:autonomy:install` |
+| Run the desktop HUD | `pnpm tauri:dev` |
+| Run the browser surface | `pnpm dev` |
+| Inspect API quota state | `pnpm api:quota` |
+| Run every desktop quality gate | `pnpm verify:desktop` |
+| Safely purge old temporary runs | `pnpm workbench:purge` |
 
----
+The scheduler is single-instance. `juno:control run` starts it when needed and restores a paused scheduler.
+At Windows logon, Juno uses Task Scheduler when permitted and a per-user Startup shortcut otherwise.
 
-## Theory & philosophy
+## Safety defaults
 
-<details>
-<summary><strong>For readers who want the “why it’s built this way” story</strong></summary>
+- Workbench state is outside the repository and is never committed.
+- `.env.local` is gitignored; diagnostics report key presence but never key content.
+- Promote requires human confirmation by default.
+- Auto-push is opt-in per brief and configuration.
+- Review can block scope drift or request a revise slot.
+- Cursor hooks reject destructive commands and Vault writes outside the configured boundary.
+- API limits bound concurrency, request rate, retry backoff, and daily token use.
 
-### Deterministic oversight
+Juno is not a general-purpose sandbox. Use a dedicated branch and workbench, protect production secrets,
+and review unattended mission permissions. See [SECURITY.md](./SECURITY.md).
 
-Intelligence is probabilistic. **Oversight is deterministic.** Juno separates *generation* (Cursor / MCP) from *permission to proceed* (TypeScript gates, hooks, caps).
+## Product status
 
-### Bounded autonomy (not “AGI”)
+Juno is a developer preview, currently tested on Windows. The runtime, direct control path, scheduler,
+oversight gates, setup/doctor flow, desktop build, and CI contract are functional. Packaging, signed desktop
+releases, multi-user authentication, and polished visual design are not yet release-grade.
 
-Juno does **not** promise open-ended self-evolution. It ships **bounded autonomy**: daily iteration cap, mission whitelist, API backoff, `escalate_human` when fitness drops under load. That is engineering, not a manifesto.
+This repository does not claim open-ended AGI or that deterministic gates make model output deterministic.
+Juno makes the workflow around probabilistic models explicit and inspectable.
 
-### Von Neumann unit (v0–v1)
+## Development
 
-Open-system framing: charter + registry = genotype (human-owned); spawn + loops = constructor; git + export + evolution-log = replicator; planner + daemon = controller.
-
+```powershell
+pnpm verify:desktop
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
-observe → plan → act → measure → mutate (∩ whitelist)
-```
 
-Current fitness (project KPIs today):
+The desktop gate runs unit tests, lint, the Next.js production build, a Turbopack smoke test, orchestrator
+build, and Cargo check. CI runs the same gate on Windows and adds Rust tests.
 
-```
-fitness = -10×failedChapters + 5×hardeningDone + 2×capRatio + apiHealth(-20) - 3×idle
-```
+## Documentation
 
-**Direction:** evolve toward a **Weighted Governance Score** — Reliability · Recoverability · Auditability · Human Load · Latency · Token Efficiency — so the same runtime serves coding, research, trading, analysis without rewrites.
-
-### Negative entropy · scalable oversight
-
-Workbench holds ephemeral runs/staging; Vault stays read-only. Agent proposes next mission; human keeps **charter** and **promote**. Amodei-style oversight without unbounded AutoGPT loops.
-
-### The category
-
-Docker invented **containers**. GitHub invented the **Pull Request**. Terraform invented **IaC**. Kubernetes invented **desired state**.
-
-**Juno invents the AI Work Runtime** — the layer where long-running agent work gets checkpoints, gates, and replay. We want teams to say:
-
-> *"We run our agents on Juno Runtime."*
-
-> *"This project needs an AI Work Runtime."*
-
-Deep dives → [evolution.md](./wiki/evolution.md) · [overseer-quality.md](./wiki/overseer-quality.md)
-
-</details>
-
----
-
-## Docs
-
-| When you need… | Link |
-|----------------|------|
-| Wiki index | [wiki/README.md](./wiki/README.md) |
-| Module map & state | [wiki/runtime.md](./wiki/runtime.md) · [juno-architecture.md](./wiki/juno-architecture.md) |
-| Oversight spec (authoritative) | [overseer-quality.md](./wiki/overseer-quality.md) |
-| Direct AI control | [juno-direct-control.md](./docs/juno-direct-control.md) |
-
----
+| Need | Document |
+|------|----------|
+| First installation and troubleshooting | [docs/getting-started.md](./docs/getting-started.md) |
+| Direct control JSON contract | [docs/juno-direct-control.md](./docs/juno-direct-control.md) |
+| Real end-to-end acceptance record | [docs/juno-direct-control-e2e.md](./docs/juno-direct-control-e2e.md) |
+| Runtime state and module map | [wiki/runtime.md](./wiki/runtime.md) |
+| Oversight gate specification | [wiki/overseer-quality.md](./wiki/overseer-quality.md) |
+| Configuration reference | [config/README.md](./config/README.md) |
+| Security and contribution policy | [SECURITY.md](./SECURITY.md) · [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| Release history | [CHANGELOG.md](./CHANGELOG.md) |
 
 ## License
 
-MIT-style — [FranklinNexus/Juno-Oversight](https://github.com/FranklinNexus/Juno-Oversight). Source of truth: `orchestrator/src/` + wiki when aligned.
-
-<p align="center">
-  <img src="docs/assets/juno-architecture-loop.png" alt="" width="48" />
-  <br/>
-  <sub><strong>Juno</strong> — The Runtime for AI Work · LLMs write. Juno governs.</sub>
-</p>
+[MIT](./LICENSE) © 2026 FranklinNexus.
