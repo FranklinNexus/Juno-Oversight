@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run --config vitest.config.mts",
+    "postinstall": "node scripts/install-orchestrator.mjs",
     "tauri": "tauri",
     "orchestrator:build": "node scripts/check-node.mjs && node scripts/install-orchestrator.mjs && node scripts/check-orchestrator-deps.mjs && npm run build --prefix orchestrator",
     "orchestrator:test:dry": "node scripts/check-node.mjs && npm run build --prefix orchestrator && node orchestrator/dist/spawn-run.js --manifest E:\\\\AgentWorkbench\\\\runs\\\\demo-jupiter-bench\\\\manifest.json --dry-run",

@@ -46,10 +46,24 @@ describe("Juno product setup", () => {
 
   it("creates an empty, idempotent, diagnosable workbench", () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "juno-product-"));
+    const repo = path.join(root, "repo");
     const workbench = path.join(root, "workbench");
     const envFile = path.join(root, ".env.local");
     try {
-      const first = initializeJuno({ repoRoot: process.cwd(), workbench, envFile });
+      for (const directory of [
+        path.join(repo, ".cursor"),
+        path.join(repo, "config"),
+        path.join(repo, "node_modules", "next"),
+        path.join(repo, "orchestrator", "node_modules", "@cursor", "sdk"),
+      ]) {
+        mkdirSync(directory, { recursive: true });
+      }
+      writeFileSync(path.join(repo, "package.json"), "{}\n");
+      writeFileSync(path.join(repo, ".cursor", "hooks.json"), "{}\n");
+      writeFileSync(path.join(repo, "config", "api-limits.example.json"), "{}\n");
+      writeFileSync(path.join(repo, "node_modules", "next", "package.json"), "{}\n");
+
+      const first = initializeJuno({ repoRoot: repo, workbench, envFile });
       expect(first.ok).toBe(true);
       expect(readFileSync(path.join(workbench, "queue", "now.yaml"), "utf8")).toContain(
         "now:\n  []",
@@ -58,14 +72,14 @@ describe("Juno product setup", () => {
       expect(existsSync(path.join(workbench, "config", "api-limits.json"))).toBe(true);
       expect(parseEnvText(readFileSync(envFile, "utf8"))).toMatchObject({
         AGENT_WORKBENCH_ROOT: path.resolve(workbench),
-        JUNO_OVERSIGHT_ROOT: path.resolve(process.cwd()),
+        JUNO_OVERSIGHT_ROOT: path.resolve(repo),
       });
 
       writeFileSync(
         path.join(workbench, "queue", "now.yaml"),
         "now:\n  - id: keep-me\nbacklog:\n  []\n",
       );
-      const second = initializeJuno({ repoRoot: process.cwd(), workbench, envFile });
+      const second = initializeJuno({ repoRoot: repo, workbench, envFile });
       expect(second.changes.preserved).toContain(path.join(workbench, "queue", "now.yaml"));
       expect(readFileSync(path.join(workbench, "queue", "now.yaml"), "utf8")).toContain(
         "keep-me",
@@ -75,7 +89,7 @@ describe("Juno product setup", () => {
       const priorKey = process.env.CURSOR_API_KEY;
       delete process.env.CURSOR_API_KEY;
       const report = collectDoctorReport({
-        repoRoot: process.cwd(),
+        repoRoot: repo,
         workbench,
         pidChecker: () => false,
       });
