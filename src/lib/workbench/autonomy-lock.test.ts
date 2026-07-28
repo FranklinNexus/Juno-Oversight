@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {

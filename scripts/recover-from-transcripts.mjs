@@ -3,7 +3,6 @@
  * Recover Juno Overseer files from Cursor agent transcript Write/StrReplace events.
  * Usage: node scripts/recover-from-transcripts.mjs [--dry-run]
  */
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 

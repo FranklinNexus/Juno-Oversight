@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 const pidPath = path.join(workbench, "state", "agi-daemon.pid");

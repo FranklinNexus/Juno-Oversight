@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { Agent, CursorAgentError } from "@cursor/sdk";
 import { runApiToken } from "./api-token.js";
@@ -115,7 +115,6 @@ async function runComposerStreaming(
   });
   updateOrchestrator(workbench, manifest.runId, "running");
 
-  const heartbeat = setInterval(() => touchHeartbeat(runDir), 30_000);
   touchHeartbeat(runDir);
 
   try {
@@ -125,7 +124,11 @@ async function runComposerStreaming(
       local: { cwd, settingSources: ["project"] },
     });
 
-    const run = await agent.send(prompt);
+    const markProgress = () => touchHeartbeat(runDir);
+    const run = await agent.send(prompt, {
+      onStep: markProgress,
+      onDelta: markProgress,
+    });
     let streamed = "";
 
     for await (const event of run.stream()) {
@@ -179,7 +182,6 @@ async function runComposerStreaming(
     }
     throw err;
   } finally {
-    clearInterval(heartbeat);
     releaseApiSlot(workbench, providerId);
   }
 }
@@ -187,6 +189,7 @@ async function runComposerStreaming(
 async function runSlot(manifest: RunManifest, workbench: string, runDir: string): Promise<void> {
   const runState = loadRunState(runDir);
   runState.slotIndex += 1;
+  runState.lastStatus = "running";
   runState.updatedAt = nowIso();
   saveRunState(runDir, runState);
 
@@ -237,6 +240,9 @@ async function runSlot(manifest: RunManifest, workbench: string, runDir: string)
           retryable: err.isRetryable,
         });
         updateOrchestrator(workbench, manifest.runId, "failed");
+        runState.lastStatus = "failed";
+        runState.updatedAt = nowIso();
+        saveRunState(runDir, runState);
         process.exitCode = 1;
         return;
       }
@@ -274,8 +280,11 @@ async function main(): Promise<void> {
   await runSlot(manifest, workbench, runDir);
 }
 
-main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+main().then(
+  () => process.exit(process.exitCode ?? 0),
+  (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    writeSync(2, `${message}\n`);
+    process.exit(1);
+  },
+);

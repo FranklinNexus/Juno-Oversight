@@ -60,12 +60,20 @@ export function OversightWorkspace() {
   }, [refreshMissions, refreshScheduler, refreshWorkbench]);
   const brief = useMissionBrief(refreshAll);
   const connected = brief.tauriReady && workbench.rootConfigured;
+  const submittedMissionComplete = Boolean(
+    brief.result && missions.missions.some(
+      (mission) => mission.id === brief.result?.missionId && mission.status.toUpperCase() === "COMPLETE",
+    ),
+  );
+  const pendingSubmission = brief.result && !submittedMissionComplete ? brief.result : null;
 
   const activeMission = useMemo(() => {
-    const preferredId = workbench.queue[0]?.mission_id ?? brief.result?.missionId;
+    const preferredId = workbench.queue[0]?.mission_id ?? pendingSubmission?.missionId;
     if (!preferredId) return null;
-    return missions.missions.find((mission) => mission.id === preferredId) ?? null;
-  }, [brief.result?.missionId, missions.missions, workbench.queue]);
+    return missions.missions.find(
+      (mission) => mission.id === preferredId && mission.status.toUpperCase() !== "COMPLETE",
+    ) ?? null;
+  }, [missions.missions, pendingSubmission?.missionId, workbench.queue]);
 
   const currentTitle = activeMission?.title
     ?? workbench.queue[0]?.mission_id
@@ -153,10 +161,10 @@ export function OversightWorkspace() {
                 </div>
               </form>
               {brief.error ? <p className={styles.errorMessage}>{brief.error}</p> : null}
-              {brief.result ? (
+              {pendingSubmission ? (
                 <div className={styles.successMessage} role="status">
                   <span aria-hidden>✓</span>
-                  <div><strong>{brief.result.message}</strong><small>{brief.result.missionId}</small></div>
+                  <div><strong>{pendingSubmission.message}</strong><small>{pendingSubmission.missionId}</small></div>
                 </div>
               ) : null}
             </section>
@@ -166,7 +174,7 @@ export function OversightWorkspace() {
                 <div>
                   <span className={styles.stateLabel}>当前进度</span>
                   <h2 id="current-work-title">
-                    {workbench.activeRunId ? "Juno 正在执行" : workbench.queue.length ? "任务已经排好" : brief.result ? "目标已经接收" : "等待你的目标"}
+                    {workbench.activeRunId ? "Juno 正在执行" : workbench.queue.length ? "任务已经排好" : pendingSubmission ? "目标已经接收" : "等待你的目标"}
                   </h2>
                 </div>
                 <span className={styles.runStatus}>{runLabel(workbench.activeRunStatus)}</span>

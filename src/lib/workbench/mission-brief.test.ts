@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   compileBriefFromText,
+  inferAutoPush,
   inferSchedule,
   inferTags,
   routeBriefToKnownMission,
@@ -22,6 +23,17 @@ describe("mission-brief", () => {
     const tags = inferTags("开发板 serial MCP push");
     expect(tags).toContain("hardware-mcp");
     expect(tags).toContain("auto-push");
+  });
+
+  it("honors an explicit prohibition on commit and push", () => {
+    expect(inferAutoPush("修复问题，但不要 commit 或 push")).toBe(false);
+    expect(inferTags("修复问题，但不要 commit 或 push")).not.toContain("auto-push");
+  });
+
+  it("generates unique ids for identical briefs", () => {
+    const first = compileBriefFromText("Create the same runtime report");
+    const second = compileBriefFromText("Create the same runtime report");
+    expect(first.missionId).not.toBe(second.missionId);
   });
 
   it("routes wisdomechoes brief", () => {

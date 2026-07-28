@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { classifyChildExit, readPersistedRunStatus } from "./child-process-state.js";
 import { loadProjectEnv, nowIso, workbenchRoot, junoProjectRoot } from "./env.js";
 import {
   mergeOrchestratorState,
@@ -31,6 +32,7 @@ import { evaluateLoopGate } from "./loop-gate.js";
 import { parseNowYaml, saveNowQueue } from "./queue-io.js";
 import type { QueueAdvanceAction } from "./review-loop.js";
 import type { QueueItem, RunState, SchedulerState } from "./types.js";
+import { appendEvent } from "./events.js";
 
 const TICK_MS = 5_000;
 const HEARTBEAT_STALE_MS = 5 * 60_000;
@@ -125,12 +127,21 @@ function spawnSlot(manifestPath: string, maxMinutes: number): void {
   activeManifest = manifestPath;
   activeStartedAt = Date.now();
   activeMaxMinutes = maxMinutes;
-  activeChild.on("exit", (code) => {
+  activeChild.on("exit", (code, signal) => {
+    const runDir = path.dirname(manifestPath);
+    const persistedStatus = readPersistedRunStatus(runDir);
+    const completionStatus = classifyChildExit(runDir, code);
+    appendEvent(path.join(runDir, "events.jsonl"), {
+      ts: nowIso(),
+      type: "status",
+      status: "child_exit",
+      detail: `code=${String(code)} signal=${signal ?? "none"} persisted=${persistedStatus ?? "none"} classified=${completionStatus}`,
+    });
     activeChild = null;
     activeManifest = "";
     mergeOrchestratorState(workbench, {
       activeRunId: runId,
-      activeRunStatus: code === 0 ? "done" : "failed",
+      activeRunStatus: completionStatus,
       lastRunId: runId,
     });
     void tick().catch((err) => {
@@ -219,6 +230,13 @@ async function tick(): Promise<void> {
 
   if (activeChild) {
     const runDir = path.dirname(activeManifest);
+    if (readPersistedRunStatus(runDir) === "done") {
+      activeChild.kill("SIGTERM");
+      writeOrchestrator("done", path.basename(runDir));
+      sched.lastAction = "reap_completed";
+      saveSchedulerState(sched);
+      return;
+    }
     const elapsedMin = (Date.now() - activeStartedAt) / 60_000;
     if (heartbeatStale(runDir) || elapsedMin > activeMaxMinutes + 1) {
       activeChild.kill("SIGTERM");

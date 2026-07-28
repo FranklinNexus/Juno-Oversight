@@ -27,7 +27,6 @@ import {
 } from "@/lib/layout/symbol-popout-layout";
 import type { PanelState } from "@/lib/layout/types";
 import type { WidgetType } from "@/lib/layout/widget-registry";
-import { normalizeWidgetType } from "@/lib/layout/widget-registry";
 
 export type { PanelState };
 export { clampPanel };

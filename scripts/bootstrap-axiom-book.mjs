@@ -4,7 +4,6 @@
  */
 import { mkdirSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { CHAPTER_COUNT, CHARS_PER_CHAPTER, BOOK_MISSION_ID } from "./lib/book-decision.mjs";
 
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";

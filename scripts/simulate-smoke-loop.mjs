@@ -3,7 +3,7 @@
  * Dry simulation: materialize smoke-loop slots, evaluate gate actions, simulate dequeue.
  * Does NOT call Cursor API or start scheduler daemon.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluateCompletedRun } from "../orchestrator/dist/mission-progress.js";

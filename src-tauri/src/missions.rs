@@ -67,11 +67,7 @@ fn parse_mission_dir(dir: &Path) -> Option<MissionSummary> {
     .map(|duration| duration.as_millis() as u64)
     .unwrap_or(0);
   let phases = parse_phases(&text);
-  let current_phase_id = phases
-    .iter()
-    .find(|p| p.status == "in_progress")
-    .map(|p| p.id.clone())
-    .or_else(|| phases.first().map(|p| p.id.clone()));
+  let current_phase_id = current_phase_id(&phases);
 
   let progress = dir.join("progress.md");
   let progress_excerpt = if progress.is_file() {
@@ -91,6 +87,13 @@ fn parse_mission_dir(dir: &Path) -> Option<MissionSummary> {
     phases,
     progress_excerpt,
   })
+}
+
+fn current_phase_id(phases: &[MissionPhase]) -> Option<String> {
+  phases
+    .iter()
+    .find(|phase| !phase.status.eq_ignore_ascii_case("done"))
+    .map(|phase| phase.id.clone())
 }
 
 fn yaml_field(text: &str, key: &str) -> Option<String> {
@@ -149,4 +152,28 @@ fn parse_phases(text: &str) -> Vec<MissionPhase> {
   }
   flush(&mut phases, &mut current);
   phases
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{current_phase_id, MissionPhase};
+
+  #[test]
+  fn current_phase_skips_completed_phases() {
+    let phases = vec![
+      MissionPhase { id: "plan".to_string(), goal: String::new(), status: "done".to_string() },
+      MissionPhase { id: "build".to_string(), goal: String::new(), status: "in_progress".to_string() },
+    ];
+    assert_eq!(current_phase_id(&phases), Some("build".to_string()));
+  }
+
+  #[test]
+  fn current_phase_is_none_after_all_phases_finish() {
+    let phases = vec![MissionPhase {
+      id: "verify".to_string(),
+      goal: String::new(),
+      status: "DONE".to_string(),
+    }];
+    assert_eq!(current_phase_id(&phases), None);
+  }
 }

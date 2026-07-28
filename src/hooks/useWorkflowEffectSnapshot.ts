@@ -9,19 +9,19 @@ import {
 const POLL_MS = 15_000;
 const TAURI_READ_TIMEOUT_MS = 1000;
 
-async function fetchWorkflowEffectSnapshot(): Promise<WorkflowEffectSnapshot> {
+async function fetchWorkflowEffectSnapshot(): Promise<WorkflowEffectSnapshot | null> {
   try {
     const request = import("@tauri-apps/api/core").then((api) =>
       api.invoke<WorkflowEffectSnapshot>("get_workflow_effect_snapshot"),
     );
     return await Promise.race([
       request,
-      new Promise<WorkflowEffectSnapshot>((resolve) => {
-        window.setTimeout(() => resolve(EMPTY_WORKFLOW_EFFECT), TAURI_READ_TIMEOUT_MS);
+      new Promise<null>((resolve) => {
+        window.setTimeout(() => resolve(null), TAURI_READ_TIMEOUT_MS);
       }),
     ]);
   } catch {
-    return EMPTY_WORKFLOW_EFFECT;
+    return null;
   }
 }
 
@@ -34,7 +34,7 @@ export function useWorkflowEffectSnapshot(): WorkflowEffectSnapshot & { loading:
     const pull = async () => {
       const next = await fetchWorkflowEffectSnapshot();
       if (!cancelled) {
-        setSnapshot(next);
+        if (next) setSnapshot(next);
         setLoading(false);
       }
     };

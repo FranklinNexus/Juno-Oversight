@@ -9,19 +9,19 @@ import {
 const POLL_MS = 5000;
 const TAURI_READ_TIMEOUT_MS = 1000;
 
-async function fetchWorkbenchSnapshot(): Promise<WorkbenchSnapshot> {
+async function fetchWorkbenchSnapshot(): Promise<WorkbenchSnapshot | null> {
   try {
     const request = import("@tauri-apps/api/core").then((api) =>
       api.invoke<WorkbenchSnapshot>("get_workbench_snapshot"),
     );
     return await Promise.race([
       request,
-      new Promise<WorkbenchSnapshot>((resolve) => {
-        window.setTimeout(() => resolve(EMPTY_WORKBENCH), TAURI_READ_TIMEOUT_MS);
+      new Promise<null>((resolve) => {
+        window.setTimeout(() => resolve(null), TAURI_READ_TIMEOUT_MS);
       }),
     ]);
   } catch {
-    return EMPTY_WORKBENCH;
+    return null;
   }
 }
 
@@ -41,7 +41,7 @@ export function useWorkbenchSnapshot(): WorkbenchSnapshot & {
     const pull = async () => {
       const next = await fetchWorkbenchSnapshot();
       if (!cancelled) {
-        setSnapshot(next);
+        if (next) setSnapshot(next);
         setLoading(false);
       }
     };

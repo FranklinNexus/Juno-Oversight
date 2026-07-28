@@ -131,7 +131,7 @@ while (true) {
     break;
   }
 
-  const { status, stderr } = runLoopOnce();
+  const { status } = runLoopOnce();
   const batches = countCompletedBatches(workbench);
   const papers = batches * 25;
 

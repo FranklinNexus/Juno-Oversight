@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { GridLayout, useContainerWidth, type Layout, type LayoutItem } from "react-grid-layout";
 import {
   containerBounds,

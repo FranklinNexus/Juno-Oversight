@@ -2,7 +2,7 @@
  * Book mission queue advance — local gates + live-agent handoff.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import {
   BOOK_MISSION_ID,

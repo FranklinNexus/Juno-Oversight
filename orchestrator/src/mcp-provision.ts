@@ -1,7 +1,7 @@
 /**
  * MCP discovery + scaffold when registry lacks needed effector (e.g. serial dev boards).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadMcpConfig, type McpServerEntry } from "./mcp-config.js";

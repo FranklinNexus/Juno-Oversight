@@ -2,6 +2,7 @@
  * NL brief → mission scaffold (v0 heuristics; Live slot refines in juno-nl-brief-2026).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { saveNowQueue, parseNowYaml } from "./queue-io.js";
 import type { QueueItem } from "./types.js";
@@ -48,20 +49,31 @@ export function inferTags(text: string): string[] {
   const t = text.toLowerCase();
   if (/wisdomechoes|博客|blog/.test(t)) tags.push("wisdomechoes");
   if (/mcp|硬件|开发板|serial|esp32|stm32|arduino|gpio/.test(t)) tags.push("hardware-mcp");
-  if (/push|提交|git|deploy/.test(t)) tags.push("auto-push");
+  if (inferAutoPush(text)) tags.push("auto-push");
   if (/赚钱|revenue|产品|saas|客户/.test(t)) tags.push("revenue");
   if (/juno|runtime|overseer/.test(t)) tags.push("juno-runtime");
   return tags;
+}
+
+export function inferGitWriteForbidden(text: string): boolean {
+  return /(?:不要|禁止|不允许|不能|不可|无需|无须|别|勿)[^。；;\n]{0,32}(?:commit|push|提交|推送)|(?:do\s+not|don't|never|without|no)\s+(?:git\s+)?(?:commit|push)/i.test(text);
+}
+
+export function inferAutoPush(text: string): boolean {
+  if (inferGitWriteForbidden(text)) return false;
+  return /\b(?:auto[- ]?push|git\s+push|push|deploy)\b|自动推送|提交并推送|推送到|部署/i.test(text);
 }
 
 export function compileBriefFromText(text: string, opts: { missionId?: string } = {}): BriefPlan {
   const schedule = inferSchedule(text);
   const tags = inferTags(text);
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const slug = slugify(text.slice(0, 40)) || "task";
-  const missionId = opts.missionId ?? `juno-brief-${date}-${slug}`.slice(0, 48);
+  const slug = slugify(text.slice(0, 40)).slice(0, 18) || "task";
+  const suffix = randomUUID().slice(0, 8);
+  const missionId = opts.missionId ?? `juno-brief-${date}-${slug}-${suffix}`;
 
-  const autoPush = tags.includes("auto-push") || /push|推送|commit/.test(text);
+  const autoPush = inferAutoPush(text);
+  const gitWriteForbidden = inferGitWriteForbidden(text);
   const needsMcp = tags.includes("hardware-mcp") || /\bmcp\b/i.test(text);
 
   const phases: BriefPlan["phases"] = [
@@ -133,7 +145,7 @@ ${autoPush ? "- [ ] git push 成功（见 config/auto-push.json）\n" : ""}
 ## 禁止
 
 - \`git push --force\`
-- Obsidian Vault 除 \`Juno/**\`
+${gitWriteForbidden ? "- `git commit` / `git push`（brief 明确禁止）\n" : ""}- Obsidian Vault 除 \`Juno/**\`
 - 破坏性 shell（§11）
 
 ## Brief 原文

@@ -601,7 +601,6 @@ export function refreshStatusBoard(workbench) {
   const autonomy = readAutonomySnapshot(workbench);
   const drive = readDriveSnapshot(workbench);
   const head = parseQueueHead(workbench);
-  const date = today();
   const ts = nowIso();
 
   const runningMissions = Object.entries(state.byMissionId ?? {}).map(([id, v]) => ({

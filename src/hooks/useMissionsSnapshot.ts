@@ -29,7 +29,7 @@ export function useMissionsSnapshot() {
         const next = await getMissionsSnapshot();
         if (!cancelled) setMissions(next);
       } catch {
-        if (!cancelled) setMissions([]);
+        // A transient desktop bridge failure must not erase the last known missions.
       } finally {
         if (!cancelled) setLoading(false);
       }

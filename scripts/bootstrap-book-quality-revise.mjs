@@ -4,9 +4,6 @@
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workbench = process.env.AGENT_WORKBENCH_ROOT ?? "E:\\AgentWorkbench";
 const MISSION = "juno-book-quality-2026";
 const BOOK = "juno-axiom-book-2026";

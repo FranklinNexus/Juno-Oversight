@@ -7,8 +7,10 @@ import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { repairDevCache } from "./check-dev-cache.mjs";
+import { terminateProcessTree, waitForPortRelease } from "./lib/process-tree.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const nextCli = path.join(root, "node_modules", "next", "dist", "bin", "next");
 const PORT = Number(process.env.JUNO_DEV_SMOKE_PORT ?? 3099);
 const URL = `http://127.0.0.1:${PORT}/`;
 const FORBIDDEN = [
@@ -58,10 +60,10 @@ spawnSync("node", ["scripts/free-port.mjs", String(PORT)], {
   shell: false,
 });
 
-const child = spawn("pnpm", ["exec", "next", "dev", "-p", String(PORT)], {
+const child = spawn(process.execPath, [nextCli, "dev", "-p", String(PORT)], {
   cwd: root,
   stdio: ["ignore", "pipe", "pipe"],
-  shell: true,
+  shell: false,
   env: { ...process.env, FORCE_COLOR: "0" },
 });
 
@@ -74,19 +76,15 @@ const onData = (chunk) => {
 child.stdout?.on("data", onData);
 child.stderr?.on("data", onData);
 
-function killDev() {
-  if (!child.killed) {
-    try {
-      child.kill("SIGTERM");
-    } catch {
-      /* ignore */
-    }
+async function killDev() {
+  terminateProcessTree(child.pid);
+  if (!(await waitForPortRelease(PORT))) {
+    throw new Error(`dev server still owns port ${PORT} after shutdown`);
   }
 }
 
 process.on("SIGINT", () => {
-  killDev();
-  process.exit(130);
+  void killDev().finally(() => process.exit(130));
 });
 
 try {
@@ -95,7 +93,7 @@ try {
   }
   if (!ready) {
     log("FAIL: dev server did not become ready in 30s");
-    killDev();
+    await killDev();
     process.exit(1);
   }
 
@@ -106,24 +104,23 @@ try {
 
   if (res.status !== 200) {
     log(`FAIL: HTTP ${res.status}`);
-    killDev();
+    await killDev();
     process.exit(1);
   }
 
   for (const needle of FORBIDDEN) {
     if (body.includes(needle)) {
       log(`FAIL: body contains "${needle}"`);
-      killDev();
+      await killDev();
       process.exit(1);
     }
   }
 
   log("PASS");
-  killDev();
-  await sleep(400);
+  await killDev();
   process.exit(0);
 } catch (err) {
   log(`FAIL: ${err instanceof Error ? err.message : String(err)}`);
-  killDev();
+  await killDev().catch(() => undefined);
   process.exit(1);
 }

@@ -7,10 +7,6 @@ import path from "node:path";
 
 const IS_WIN = process.platform === "win32";
 
-function npmCmd() {
-  return IS_WIN ? "npm.cmd" : "npm";
-}
-
 /** Run npm on Windows without flashing cmd — uses hidden cmd.exe /c. */
 export function spawnNpm(args, opts = {}) {
   const cwd = opts.cwd ?? process.cwd();

@@ -1,13 +1,26 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function junoProjectRoot(): string {
-  if (process.env.JUNO_OVERSIGHT_ROOT?.trim()) {
-    return process.env.JUNO_OVERSIGHT_ROOT.trim();
-  }
+function moduleProjectRoot(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, "..", "..");
+}
+
+export function resolveJunoProjectRoot(candidate: string | undefined, fallback: string): string {
+  const value = candidate?.trim();
+  if (
+    value
+    && existsSync(path.join(value, "package.json"))
+    && existsSync(path.join(value, "orchestrator"))
+  ) {
+    return path.resolve(value);
+  }
+  return path.resolve(fallback);
+}
+
+export function junoProjectRoot(): string {
+  return resolveJunoProjectRoot(process.env.JUNO_OVERSIGHT_ROOT, moduleProjectRoot());
 }
 
 export function workbenchRoot(): string {
@@ -33,12 +46,17 @@ export function loadProjectEnv(): void {
         ) {
           value = value.slice(1, -1);
         }
-        if (!process.env[key]) process.env[key] = value;
+        if (key === "JUNO_OVERSIGHT_ROOT") {
+          process.env[key] = resolveJunoProjectRoot(value, root);
+        } else if (!process.env[key]) {
+          process.env[key] = value;
+        }
       }
     } catch {
       // optional
     }
   }
+  process.env.JUNO_OVERSIGHT_ROOT = junoProjectRoot();
 }
 
 export function nowIso(): string {

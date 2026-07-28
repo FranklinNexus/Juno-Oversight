@@ -262,6 +262,27 @@ fn heartbeat_stale(run_dir: &Path, stale_secs: u64) -> bool {
     .unwrap_or(true)
 }
 
+fn persisted_run_completed(run_dir: &Path) -> bool {
+  fs::read_to_string(run_dir.join("run-state.json"))
+    .ok()
+    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    .and_then(|value| {
+      value
+        .get("lastStatus")
+        .and_then(|status| status.as_str())
+        .map(str::to_string)
+    })
+    .is_some_and(|status| status.eq_ignore_ascii_case("done"))
+}
+
+fn final_status_for_exit(run_dir: &Path, success: bool) -> &'static str {
+  if success || persisted_run_completed(run_dir) {
+    "done"
+  } else {
+    "failed"
+  }
+}
+
 fn kill_active_child(runtime: &OrchestratorRuntime) -> Result<(), String> {
   let mut guard = runtime.child.lock().expect("child lock");
   if let Some(mut child) = guard.take() {
@@ -578,11 +599,15 @@ pub fn watchdog_tick(runtime: &OrchestratorRuntime) -> Result<(), String> {
       .expect("run id lock")
       .clone()
       .unwrap_or_default();
-    let final_status = if status.success() {
-      "done"
-    } else {
-      "failed"
-    };
+    let run_dir = runtime
+      .manifest_path
+      .lock()
+      .expect("manifest lock")
+      .as_ref()
+      .and_then(|path| path.parent())
+      .map(Path::to_path_buf)
+      .unwrap_or_else(|| workbench_root_path().join("runs").join(&run_id));
+    let final_status = final_status_for_exit(&run_dir, status.success());
     if !run_id.is_empty() {
       write_orchestrator_status(&workbench_root_path(), &run_id, final_status)?;
     }
@@ -615,6 +640,17 @@ pub fn watchdog_tick(runtime: &OrchestratorRuntime) -> Result<(), String> {
     .map(Path::to_path_buf)
     .unwrap_or_else(|| workbench_root_path().join("runs").join(&run_id));
 
+  if persisted_run_completed(&run_dir) {
+    write_orchestrator_status(&workbench_root_path(), &run_id, "done")?;
+    let _ = child.kill();
+    let _ = child.wait();
+    *guard = None;
+    *runtime.active_run_id.lock().expect("run id lock") = None;
+    *runtime.started_at.lock().expect("started lock") = None;
+    *runtime.manifest_path.lock().expect("manifest lock") = None;
+    return Ok(());
+  }
+
   if heartbeat_stale(&run_dir, 300) {
     write_orchestrator_status(&workbench_root_path(), &run_id, "stall")?;
     let _ = child.kill();
@@ -638,4 +674,24 @@ pub fn watchdog_tick(runtime: &OrchestratorRuntime) -> Result<(), String> {
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{final_status_for_exit, persisted_run_completed};
+  use std::fs;
+
+  #[test]
+  fn persisted_completion_wins_over_nonzero_child_exit() {
+    let run_dir = std::env::temp_dir().join(format!("juno-run-status-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&run_dir);
+    fs::create_dir_all(&run_dir).expect("create run directory");
+    fs::write(run_dir.join("run-state.json"), r#"{"lastStatus":"done"}"#)
+      .expect("write run state");
+
+    assert!(persisted_run_completed(&run_dir));
+    assert_eq!(final_status_for_exit(&run_dir, false), "done");
+
+    fs::remove_dir_all(&run_dir).expect("clean run directory");
+  }
 }
